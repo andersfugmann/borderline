@@ -13,11 +13,10 @@ rule token = parse
   | "zone"         { ZONE }
   | "process"      { PROCESS }
   | "rule"         { RULE }
-  | "define"       { DEFINE } (* Define a rule *)
-  | "alias"        { ALIAS }  (* Create alias for ip numbers *)
+  | "define"       { DEFINE }
 
 (* zone definitions *)
-  | "ip"           { IPNUMBER }
+  | "ip"           { IP }
   | "netmask"      { NETMASK }
   | "interface"    { INTERFACE }
 
@@ -35,12 +34,16 @@ rule token = parse
   | "reject"       { REJECT }
 
 (* filters *)
-  | "not"          { NOT }
   | "source"       { SOURCE }
   | "destination"  { DESTINATION }
   | "port"         { PORT }
-  | "ip"           { IP }
   | "state"        { STATE }
+
+(* State types *)
+  | "new"          { STATE_NEW }
+  | "established"  { STATE_ESTABLISHED }
+  | "releated"     { STATE_RELATED }
+  | "invalid"      { STATE_INVALID }
 
 (* Data *)
   | ['0'-'9']+ as lxm { INT(int_of_string lxm) }
