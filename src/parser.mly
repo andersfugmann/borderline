@@ -1,8 +1,8 @@
+%{
 (* fcs - Firewall compiler suite
  * Copyright Anders Fugmann
  *)
 
-%{
 %}
 
 %token ZONE PROCESS RULE DEFINE ALIAS
@@ -22,7 +22,7 @@
 
 statements:
   | zone statements { $1 :: $2 }
-  | process  statements { $1 :: $2 }
+  | process statements { $1 :: $2 }
   | define statements { $1 :: $2 }
   | alias statements { $1 :: $2 }
   | END { [] }
@@ -35,9 +35,13 @@ zone_defs:
   | { [] }
 
 zone_def:
-  | IP ip_number { $1 :: $2 }
-  | NETMASK ip_number { $1 :: $2 }
-  | INTERFACE STRING { $1 :: $2 }
+  | IP ip_number { $2 }
+  | NETMASK ip_number { $2 }
+  | INTERFACE ID { $2 }
+
+process: { [] }
+define: { [] }
+alias: { [] }
 
 ip_number:
   | ip_int DOT ip_int DOT ip_int DOT ip_int { [( $1, $3, $5, $7 )] }

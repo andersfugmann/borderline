@@ -5,18 +5,18 @@ INCLUDES=                 # all relevant -I options here
 OCAMLFLAGS=$(INCLUDES)    # add other options for ocamlc here
 OCAMLOPTFLAGS=$(INCLUDES) # add other options for ocamlopt here
 
+.SUFFIXES: .ml .mli .cmo .cmi .cmx .mll .mly
 
--include .depend
+#-include .depend
+
 
 parser.mli:
 parser.ml: parser.mly lexer.ml
 	ocamlyacc parser.mly
 
-lexer.ml: parser.mli lexer.mll pt.ml
+lexer.ml: lexer.mll
 	ocamllex lexer.mll
 
-
-.SUFFIXES: .ml .mli .cmo .cmi .cmx
 %.cmp: %.ml
 	$(OCAMLC) $(OCAMLFLAGS) -c $<
 
@@ -31,10 +31,10 @@ SOURCES=$(wildcard *.mli *.ml *.mll *.mly)
 	$(OCAMLDEP) $(INCLUDES) *.mli *.ml > .depend
 
 clean:
-        rm -f *.cm[iox]
-        rm -f parser.ml
-        rm -f parser.mli
-        rm -f lexer.ml
-        rm -f *~
-        rm -f .depend
+	@rm -f *.cm[iox]
+	@rm -f parser.ml
+	@rm -f parser.mli
+	@rm -f lexer.ml
+	@rm -f *~
+	@rm -f .depend
 

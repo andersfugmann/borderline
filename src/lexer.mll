@@ -1,13 +1,12 @@
+{
 (* fcs - Firewall compiler suite
  * Copyright Anders Fugmann
  *)
 
-{
-open Parser        (* The type token is defined in parser.mli *)
+(* open Parser *)        (* The type token is defined in parser.mli *)
 open Scanf
 exception Lexer_error of int
-open Fcs
-
+}
 rule token = parse
     [' ' '\t']     { token lexbuf }     (* skip blanks *)
   | ['\n' ]        { lineno := 1+ !lineno; token lexbuf } (* skip eol *)
@@ -65,4 +64,3 @@ and line_comment = parse
   | eof            { }
   | _              { line_comment lexbuf }
 
-}
