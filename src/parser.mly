@@ -1,3 +1,6 @@
+/* FCS - Firewall compiler suite
+ * Copyright Anders Fugmann
+ */
 %{
 (* fcs - Firewall compiler suite
  * Copyright Anders Fugmann

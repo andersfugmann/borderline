@@ -1,5 +1,5 @@
 {
-(* fcs - Firewall compiler suite
+(* FCS - Firewall compiler suite
  * Copyright Anders Fugmann
  *)
 
@@ -57,9 +57,6 @@ rule token = parse
   | '/'            { SLASH }
   | "#"            { comment lexbuf; token lexbuf }
   | eof            { END }
-
-
-
   | _              { raise (Lexer_error !lineno) }
 
 and line_comment = parse

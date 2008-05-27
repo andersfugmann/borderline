@@ -1,3 +1,7 @@
+# FCS - Firewall compiler suite
+# Copyright Anders Fugmann
+#
+
 OCAMLC=ocamlc -g
 OCAMLOPT=ocamlopt
 OCAMLDEP=ocamldep
@@ -10,8 +14,7 @@ OCAMLOPTFLAGS=$(INCLUDES) # add other options for ocamlopt here
 #-include .depend
 
 
-parser.mli:
-parser.ml: parser.mly lexer.ml
+parser.mli parser.ml: parser.mly lexer.ml
 	ocamlyacc parser.mly
 
 lexer.ml: lexer.mll
