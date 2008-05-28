@@ -14,6 +14,7 @@ rule token = parse
   | "process"      { PROCESS }
   | "rule"         { RULE }
   | "define"       { DEFINE }
+  | "import"       { IMPORT }
 
 (* zone definitions *)
   | "ip"           { IP }
