@@ -23,21 +23,16 @@ type state_type = NEW
 		| INVALID
 
 type node_type = Zone of id * node_type list
-	       | Process of process_type * list
-	       | Definition of id * list
+	       | Process of process_type * node_type list
+	       | Definition of id * node_type list
 	       | Rule of node_type list
 	       | Ip of ip
 	       | Netmask of int
 	       | Interface of name
 	       | Policy of policy_type
-type rule_type = SOURCE of direction_type
-	       | DESTINATION of direction_type
-	       | STATE of state_type
-	       |
-
 
 type direction_type = PORT of int
-		    | IP of ip_mask list
+		    | IP of ip list
 
 type rule_type = SOURCE of direction_type
 	       | DESTINATION of direction_type
@@ -47,27 +42,32 @@ type zone_element = IP of ip
 		  | NETMASK of int
 		  | INTERFACE of name
 
-
-type node_type = Zone of id * zone_element list
-	       | Process of process_type * list
-	       | Definition of id * list
-
-
 type root = node_type list
 
 
-(* Create a tree and print it *)
+module Zone =
+struct
+  let i = 0
+  let tbl = Hashtbl.create 256
+  let exists zone =
+    try
+      let _ = Hashtbl.find tbl zone in
+	true
+    with Not_found -> false
+
+  let add zone = Hashtbl.add tbl zone 0
+end
 
 let rec pretty_print = function
-    Zone(id, _)       -> (printf "Zone %s\n" id)
-  | Process(id, _)    -> (printf "Process %s\n" id)
-  | Definition(id, _) -> (printf "Definition %s\n" id)
+    Zone(id, _)         -> printf "Zone %s\n" id; Zone.add id
+  | Process(_, _)       -> printf "Process\n"
+  | Definition(id, _)   -> printf "Definition %s\n" id
+  | _                   -> printf "Unknown\n"
 
-let tree = Zone("ext1", [])
+let tree = [ Zone("ext1", []) ; Definition("Wee", []) ]
+
 
 let _ =
-  pretty_print tree
-
-
-
-
+  let _ = List.map pretty_print tree in
+  let exists z = printf "Exists %s %b\n" z (Zone.exists z) in
+    exists "ext1"; exists "ext2";

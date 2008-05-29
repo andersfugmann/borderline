@@ -13,6 +13,8 @@ OCAMLOPTFLAGS=$(INCLUDES) # add other options for ocamlopt here
 
 #-include .depend
 
+types: types.cmo
+	$(OCAMLC) -o $@ $<
 
 parser.mli parser.ml: parser.mly lexer.ml
 	ocamlyacc parser.mly
@@ -20,7 +22,7 @@ parser.mli parser.ml: parser.mly lexer.ml
 lexer.ml: lexer.mll
 	ocamllex lexer.mll
 
-%.cmp: %.ml
+%.cmo: %.ml
 	$(OCAMLC) $(OCAMLFLAGS) -c $<
 
 %.cmi: %.mli

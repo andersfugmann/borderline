@@ -2,6 +2,17 @@
  * Copyright Anders Fugmann
  */
 %{
+module Zone =
+struct
+  let tbl = Hashtbl.create 256
+  let exists zone =
+    try
+      let _ = Hashtbl.find tbl zone in
+	true
+    with Not_found -> false
+
+  let add zone zonedefs = Hashtbl.add tbl zone zonedefs
+end
 %}
 
 %token ZONE PROCESS RULE DEFINE IMPORT
@@ -26,7 +37,7 @@ statements:
 ;;
 
 statement:
-  | ZONE ID LBRACE zone RBRACE { [] }
+  | ZONE ID LBRACE zone_defs RBRACE { Zone.add $2 $4 }
   | PROCESS process_type LBRACE rule_body RBRACE { [] }
   | define  { [] }
   | IMPORT filename { [] }
@@ -37,10 +48,10 @@ filename:
   | ID                { [] }
 ;;
 
-zone:
-  | zone IP ip { $1 :: [$3] }
-  | zone NETMASK ip { $1 :: [$3] }
-  | zone INTERFACE ID { $1 :: [$3] }
+zone_defs:
+  | zone_defs IP ip { $1 :: [$3] }
+  | zone_defs NETMASK ip { $1 :: [$3] }
+  | zone_defs INTERFACE ID { $1 :: [$3] }
   | { [] }
 ;;
 
