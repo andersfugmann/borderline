@@ -2,6 +2,7 @@
  * Copyright Anders Fugmann
  */
 %{
+  open Zone
 module Zone =
 struct
   let tbl = Hashtbl.create 256
@@ -19,7 +20,7 @@ end
 %token IP NETMASK INTERFACE
 %token MANGLE INPUT FORWARD OUTPUT NAT
 %token POLICY ALLOW DENY REJECT
-%token SOURCE DESTINATION PORT IP STATE
+%token SOURCE DESTINATION PORT IP STATE ZONE
 %token NEW ESTABLISHED RELATED INVALID
 
 %token <int> INT
@@ -92,6 +93,7 @@ filter_expr:
 filter_ip:
   | PORT port  { [] }
   | IP ip      { [] }
+  | ZONE ID    { if not Zone.exists $2 raise ("Zone not found" $2); [] }
 ;;
 
 state:

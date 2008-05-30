@@ -8,5 +8,5 @@ struct
 	true
     with Not_found -> false
 
-  let add zone = Hashtbl.add tbl zone 0
+  let add zone zonedefs = Hashtbl.add tbl zone zonedefs
 end

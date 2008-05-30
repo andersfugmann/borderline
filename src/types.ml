@@ -1,4 +1,5 @@
 open Printf
+
 (* Way too many type definitions... *)
 type id = string
 type name = string
@@ -7,10 +8,10 @@ type ip = int * int * int * int * int option
 type port = int
 
 type process_type = MANGLE
-		  | INPUT
-		  | FORWARD
-		  | OUTPUT
-		  | NAT
+                  | INPUT
+                  | FORWARD
+                  | OUTPUT
+                  | NAT
 
 type policy_type = POLICY
 		 | ALLOW
@@ -44,22 +45,19 @@ type zone_element = IP of ip
 
 type root = node_type list
 
-
 module Zone =
 struct
-  let i = 0
   let tbl = Hashtbl.create 256
   let exists zone =
     try
       let _ = Hashtbl.find tbl zone in
 	true
     with Not_found -> false
-
-  let add zone = Hashtbl.add tbl zone 0
+  let add zone defs  = Hashtbl.add tbl zone defs
 end
 
 let rec pretty_print = function
-    Zone(id, _)         -> printf "Zone %s\n" id; Zone.add id
+    Zone(id, _)         -> printf "Zone %s\n" id; Zone.add id 0
   | Process(_, _)       -> printf "Process\n"
   | Definition(id, _)   -> printf "Definition %s\n" id
   | _                   -> printf "Unknown\n"
@@ -68,6 +66,11 @@ let tree = [ Zone("ext1", []) ; Definition("Wee", []) ]
 
 
 let _ =
-  let _ = List.map pretty_print tree in
-  let exists z = printf "Exists %s %b\n" z (Zone.exists z) in
-    exists "ext1"; exists "ext2";
+  let _ = List.map pretty_print tree
+  in
+  let exists z =
+    let _val = Zone.exists z in
+      printf "Exists %s %b\n" z _val; _val
+  in
+    exists "ext1"; printf "done\n"
+

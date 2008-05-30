@@ -12,8 +12,12 @@ OCAMLOPTFLAGS=$(INCLUDES) # add other options for ocamlopt here
 .SUFFIXES: .ml .mli .cmo .cmi .cmx .mll .mly
 
 #-include .depend
+SOURCES=zone.ml lexer.ml parser.ml
 
 types: types.cmo
+	$(OCAMLC) -o $@ $<
+
+fcs: ${SOURCES:.ml=.cmo}
 	$(OCAMLC) -o $@ $<
 
 parser.mli parser.ml: parser.mly lexer.ml
