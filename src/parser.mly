@@ -11,7 +11,7 @@
 %token POLICY ALLOW DENY REJECT
 %token SOURCE DESTINATION PORT IP STATE
 %token NEW ESTABLISHED RELATED INVALID
-%token SET EQ
+%token SET EQ ENDL
 
 %token <int> INT
 %token <string> ID
@@ -49,8 +49,8 @@ zone_stms:
 ;
 
 zone_stm:
-  | IP ip           { $2 }
-  | INTERFACE ID    { Interface($2) }
+  | IP ip            { $2 }
+  | INTERFACE ID     { Interface($2) }
 ;
 
 process_type:

@@ -2,15 +2,17 @@
 (* FCS - Firewall compiler suite
  * Copyright Anders Fugmann
  *)
-
+open Parser
 open Irtypes
 open Scanf
+let lineno = ref 1
+
 
 exception Lexer_error of int
 }
 rule token = parse
     [' ' '\t']     { token lexbuf }     (* skip blanks *)
-  | '\n'           { lineno := 1+ !lineno; ENDL } 
+  | '\n'           { lineno := 1+ !lineno; token lexbuf } 
   | "zone"         { ZONE }
   | "process"      { PROCESS }
   | "rule"         { RULE }
@@ -23,29 +25,29 @@ rule token = parse
   | "interface"    { INTERFACE }
 
 (* process targets *)
-  | "mangle"       { MANGLE }
-  | "input"        { INPUT }
-  | "forward"      { FORWARD }
-  | "output"       { OUTPUT }
-  | "nat"          { NAT }
+  | "mangle"       { Parser.MANGLE }
+  | "input"        { Parser.INPUT }
+  | "forward"      { Parser.FORWARD }
+  | "output"       { Parser.OUTPUT }
+  | "nat"          { Parser.NAT }
 
 (* Policy *)
-  | "policy"       { POLICY }
-  | "allow"        { ALLOW }
-  | "deny"         { DENY }
-  | "reject"       { REJECT }
+  | "policy"       { Parser.POLICY }
+  | "allow"        { Parser.ALLOW }
+  | "deny"         { Parser.DENY }
+  | "reject"       { Parser.REJECT }
 
 (* filters *)
-  | "source"       { SOURCE }
-  | "destination"  { DESTINATION }
-  | "port"         { PORT }
-  | "state"        { STATE }
+  | "source"       { Parser.SOURCE }
+  | "destination"  { Parser.DESTINATION }
+  | "port"         { Parser.PORT }
+  | "state"        { Parser.STATE }
 
 (* State types *)
-  | "new"          { STATE_NEW }
-  | "established"  { STATE_ESTABLISHED }
-  | "releated"     { STATE_RELATED }
-  | "invalid"      { STATE_INVALID }
+  | "new"          { Parser.NEW }
+  | "established"  { Parser.ESTABLISHED }
+  | "releated"     { Parser.RELATED }
+  | "invalid"      { Parser.INVALID }
 
 (* Data *)
   | ['0'-'9']+ as lxm { INT(int_of_string lxm) }
@@ -58,13 +60,12 @@ rule token = parse
   | '.'            { DOT }
   | '/'            { SLASH }
   | '='            { EQ }
-  | '\n'           { ENDL }
   | "#"            { comment lexbuf; token lexbuf }
   | eof            { END }
   | _              { raise (Lexer_error !lineno) }
 
-and line_comment = parse
+and comment = parse
     '\n'           { lineno := !lineno + 1}
   | eof            { }
-  | _              { line_comment lexbuf }
+  | _              { comment lexbuf }
 
