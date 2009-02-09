@@ -3,13 +3,14 @@
  * Copyright Anders Fugmann
  *)
 
-(* open Parser *)        (* The type token is defined in parser.mli *)
+open Irtypes
 open Scanf
+
 exception Lexer_error of int
 }
 rule token = parse
     [' ' '\t']     { token lexbuf }     (* skip blanks *)
-  | ['\n' ]        { lineno := 1+ !lineno; token lexbuf } (* skip eol *)
+  | '\n'           { lineno := 1+ !lineno; ENDL } 
   | "zone"         { ZONE }
   | "process"      { PROCESS }
   | "rule"         { RULE }
@@ -56,6 +57,8 @@ rule token = parse
   | ','            { COMMA }
   | '.'            { DOT }
   | '/'            { SLASH }
+  | '='            { EQ }
+  | '\n'           { ENDL }
   | "#"            { comment lexbuf; token lexbuf }
   | eof            { END }
   | _              { raise (Lexer_error !lineno) }
