@@ -38,8 +38,8 @@ SOURCES=$(wildcard *.mli *.ml *.mll *.mly)
 .depend: parser.ml lexer.ml $(SOURCES)
 	$(OCAMLDEP) $(INCLUDES) *.mli *.ml > .depend
 
-%: %.cmo
-	$(OCAMLC) -o $@ $<
+main: lexer.cmo parser.cmo main.cmo
+	$(OCAMLC) -o $@ lexer.cmo parser.cmo main.cmo
 
 clean:
 	@rm -f *.cm[iox]
