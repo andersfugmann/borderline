@@ -39,9 +39,12 @@ statement:
 ;
 
 filename:
-  | ID SLASH filename { $1 :: $3 }
-  | ID                { [ $1 ] }
+  | path SLASH filename { $1 ^ $3 }
+  | path                { $1 }
 ;
+path:
+  | ID DOT path       { $1 ^ "." ^ $3 }
+  | ID                { $1 }
 
 zone_stms:
   | zone_stm           { [ $1 ] }

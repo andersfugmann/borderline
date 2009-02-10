@@ -5,8 +5,6 @@
 open Parser
 open Irtypes
 open Scanf
-let lineno = ref 1
-
 
 exception Lexer_error of int
 }

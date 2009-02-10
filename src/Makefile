@@ -7,46 +7,24 @@ OCAMLOPT=ocamlopt
 OCAMLLEX=ocamllex
 OCAMLDEP=ocamldep
 OCAMLYACC=ocamlyacc
-INCLUDES=                 # all relevant -I options here
 OCAMLFLAGS=$(INCLUDES)    # add other options for ocamlc here
 OCAMLOPTFLAGS=$(INCLUDES) # add other options for ocamlopt here
+OCAMLBUILD=ocamlbuild
 
-.SUFFIXES: .ml .mli .cmo .cmi .cmx .mll .mly
+.PHONY: main
+.PHONY: FORCE
 
--include .depend
-SOURCES=lexer.ml parser.ml irtypes.ml
+FORCE:
 
-fcs: ${SOURCES:.ml=.cmo}
-	$(OCAMLC) -o $@ $<
+%.byte: FORCE 
+	$(OCAMLBUILD) $@
 
-parser.mli parser.ml: parser.mly lexer.ml
-	$(OCAMLYACC) parser.mly
+main: main.byte
+	ln -fs main.byte main
 
-lexer.ml: lexer.mll
-	$(OCAMLLEX) lexer.mll
-
-%.cmo: %.ml
-	$(OCAMLC) $(OCAMLFLAGS) -c $<
-
-%.cmi: %.mli
-	$(OCAMLC) $(OCAMLFLAGS) -c $<
-
-%.cmx: %.ml
-	$(OCAMLOPT) $(OCAMLOPTFLAGS) -c $<
-
-SOURCES=$(wildcard *.mli *.ml *.mll *.mly)
-.depend: parser.ml lexer.ml $(SOURCES)
-	$(OCAMLDEP) $(INCLUDES) *.mli *.ml > .depend
-
-main: lexer.cmo parser.cmo main.cmo
-	$(OCAMLC) -o $@ lexer.cmo parser.cmo main.cmo
-
+.PHONY: clean
 clean:
-	@rm -f *.cm[iox]
-	@rm -f parser.ml
-	@rm -f parser.mli
-	@rm -f lexer.ml
-	@rm -f *~
-	@rm -f .depend
-	@rm -f main
+	@$(RM) -f main.native main
+	@$(RM) -fr _build
+
 
