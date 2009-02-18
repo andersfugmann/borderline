@@ -3,7 +3,7 @@
  * Copyright Anders Fugmann
  *)
 open Parser
-open Irtypes
+open Frontend
 open Scanf
 
 exception Lexer_error of int

@@ -1,6 +1,6 @@
 
 let lineno = ref 1
-open Irtypes
+open Frontend
 open Printf
 open Parser
 open Lexer

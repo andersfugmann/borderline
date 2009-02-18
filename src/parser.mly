@@ -2,7 +2,7 @@
  * Copyright Anders Fugmann
  */
 %{
-  open Irtypes
+  open Frontend
 %}
 
 %token ZONE PROCESS RULE DEFINE IMPORT
@@ -19,7 +19,7 @@
 %token LBRACE RBRACE COMMA DOT SLASH END
 
 %start main
-%type <Irtypes.node list> main
+%type <Frontend.node list> main
 %%
 
 main:
