@@ -34,26 +34,3 @@ let rec pretty_print = function
   | Policy(policy)    -> printf "policy ?\n"
   | Port(ports)       -> (printf "ports "; List.iter (printf "%d ") ports; printf "\n")
   | Ip(a,b,c,d,m)     -> printf "%d.%d.%d.%d/%d\n" a b c d m
-
-(* Tables to hold parsed structures *)
-
-module SS = Set.Make(String);;
-let include_files = SS.empty
-let parsed_files = SS.empty
-
-let parse_file filename =
-  SS.exists ( fun name -> name = filename ) parsed_files
-
-module SM = Map.Make(String);;
-
-let zones = SM.empty
-let defines = SM.empty
-let sets = SM.empty
-
-let add_zone zone = 
-  let name, _ = zone in
-    zones = SM.add name zone zones
-
-
-
-
