@@ -6,7 +6,7 @@
 %}
 
 %token ZONE PROCESS RULE DEFINE IMPORT
-%token IP NETMASK INTERFACE
+%token NETWORK INTERFACE
 %token MANGLE INPUT FORWARD OUTPUT NAT
 %token POLICY ALLOW DENY REJECT
 %token SOURCE DESTINATION PORT IP STATE
@@ -32,7 +32,7 @@ statements:
 ;
 
 statement:
-  | IMPORT filename                          { Import($2)     }
+  | IMPORT filename                          { Import($2)  }
   | ZONE ID LBRACE zone_stms RBRACE          { Zone($2, $4)   }
   | DEFINE ID LBRACE rule_stms RBRACE        { Define($2, $4) }
   | SET process_type LBRACE rule_stms RBRACE { Set($2, $4)    }
@@ -52,8 +52,8 @@ zone_stms:
 ;
 
 zone_stm:
-  | IP ip            { $2 }
-  | INTERFACE ID     { Interface($2) }
+  | NETWORK EQ ip       { $3 }
+  | INTERFACE EQ ID     { Interface($3) }
 ;
 
 process_type:

@@ -1,11 +1,6 @@
 import test1.bl
 
 zone test1 {
-     interface eth1
-     ip 10.0.0.254
-}
-
-zone test2 {
-     interface eth2
-     ip 10.0.1.254
+     interface = eth1
+     network = 10.0.0.254
 }

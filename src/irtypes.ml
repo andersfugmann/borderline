@@ -28,7 +28,7 @@ let rec pretty_print = function
   | Rule(nodes)       -> (printf "rule: "; List.iter pretty_print nodes)
 
 (* Simple constructs - Maybe these should be some other kind...*)
-  | Interface(id)     -> printf "interface %s \n" id
+  | Interface(id)     -> printf "interface = %s \n" id
   | Filter(dir, node) -> (printf "filter ?"; pretty_print node)
   | State(state)      -> printf "state ?\n"
   | Policy(policy)    -> printf "policy ?\n"

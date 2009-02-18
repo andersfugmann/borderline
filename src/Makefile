@@ -2,29 +2,26 @@
 # Copyright Anders Fugmann
 #
 
-OCAMLC=ocamlc -g
-OCAMLOPT=ocamlopt
-OCAMLLEX=ocamllex
-OCAMLDEP=ocamldep
-OCAMLYACC=ocamlyacc
-OCAMLFLAGS=$(INCLUDES)    # add other options for ocamlc here
-OCAMLOPTFLAGS=$(INCLUDES) # add other options for ocamlopt here
-OCAMLBUILD=ocamlbuild
+OCAMLBUILD=ocamlbuild -quiet
 
 .PHONY: main
-.PHONY: FORCE
+.PHONY: force
 
-FORCE:
+all: main
 
-%.byte: FORCE 
+force:
+
+%.byte: force 
 	$(OCAMLBUILD) $@
 
 main: main.byte
-	ln -fs main.byte main
+	@ln -fs main.byte main
 
 .PHONY: clean
 clean:
 	@$(RM) -f main.native main
 	@$(RM) -fr _build
+	@$(RM) -f *~
+
 
 

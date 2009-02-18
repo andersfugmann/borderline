@@ -1,0 +1,5 @@
+import test.bl
+zone test2 {
+     interface = eth2
+     network = 10.0.1.254
+}

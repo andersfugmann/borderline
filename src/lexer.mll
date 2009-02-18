@@ -18,8 +18,7 @@ rule token = parse
   | "import"       { IMPORT }
 
 (* zone definitions *)
-  | "ip"           { IP }
-  | "netmask"      { NETMASK }
+  | "network"      { NETWORK }
   | "interface"    { INTERFACE }
 
 (* process targets *)
