@@ -3,6 +3,8 @@
  */
 %{
   open Frontend
+  open Printf
+  open Scanf
 %}
 
 %token ZONE PROCESS RULE DEFINE IMPORT
@@ -16,7 +18,7 @@
 %token <int> INT
 %token <string> ID
 
-%token LBRACE RBRACE COMMA DOT SLASH END
+%token LBRACE RBRACE COMMA DOT COLON DCOLON SLASH END
 
 %start main
 %type <Frontend.node list> main
@@ -32,7 +34,7 @@ statements:
 ;
 
 statement:
-  | IMPORT filename                          { Import($2)  }
+  | IMPORT filename                          { Import($2) }
   | ZONE ID LBRACE zone_stms RBRACE          { Zone($2, $4)   }
   | DEFINE ID LBRACE rule_stms RBRACE        { Define($2, $4) }
   | SET process_type LBRACE rule_stms RBRACE { Set($2, $4)    }
@@ -52,7 +54,7 @@ zone_stms:
 ;
 
 zone_stm:
-  | NETWORK EQ ip       { $3 }
+  | NETWORK EQ ipv6     { $3 }
   | INTERFACE EQ ID     { Interface($3) }
 ;
 
@@ -98,7 +100,7 @@ filter_direction:
 
 filter_ip:
   | PORT EQ port  { $3 }
-  | IP EQ ip      { $3 }
+  | IP EQ ipv6    { $3 }
 ;
 
 state:
@@ -108,9 +110,22 @@ state:
   | INVALID      { INVALID }
 ;
 
-ip:
-  | INT DOT INT DOT INT DOT INT { Ip($1, $3, $5, $7, 32) }
-  | INT DOT INT DOT INT DOT INT SLASH INT { Ip($1, $3, $5, $7, $9) }
+hex: 
+  | ID           { sscanf $1 "%x" (fun i -> i) }
+  | INT ID       { let s = sprintf "%d%s" $1 $2 in
+                     sscanf s "%x" (fun i -> i) }
+  | INT          { let s = sprintf "%d" $1 in
+                     sscanf s "%x" (fun i -> i) }
+
+hex_list:
+  | hex                {  [ $1 ] }
+  | hex COLON hex_list {  $1 :: $3 }
+  
+ipv6:
+  | hex_list DCOLON hex_list SLASH INT { Ip($1, $3, $5) }
+  | hex_list SLASH INT                 { Ip($1, [], $3) }
+  | hex_list DCOLON hex_list           { Ip($1, $3, 128) }
+  | hex_list                           { Ip($1, [], 128) }
 ;
 
 port:

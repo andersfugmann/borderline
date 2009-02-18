@@ -1,5 +1,7 @@
 open Printf
 
+exception ImpossibleError
+
 let lineno = ref 1
 
 type filterdirection = SOURCE | DESTINATION
@@ -17,7 +19,7 @@ type node = Import of string
           | State of statetype
           | Policy of policytype
           | Port of int list
-          | Ip of int * int * int * int * int
+          | Ip of int list * int list * int
 
 
 let rec pretty_print = function
@@ -33,4 +35,4 @@ let rec pretty_print = function
   | State(state)      -> printf "state ?\n"
   | Policy(policy)    -> printf "policy ?\n"
   | Port(ports)       -> (printf "ports "; List.iter (printf "%d ") ports; printf "\n")
-  | Ip(a,b,c,d,m)     -> printf "%d.%d.%d.%d/%d\n" a b c d m
+  | Ip(a,b,m)       -> (List.iter (printf "%x:") a;List.iter (printf ":%x") b; printf "/%d\n" m)

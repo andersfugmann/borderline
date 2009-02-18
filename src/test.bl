@@ -2,5 +2,5 @@ import test1.bl
 
 zone test1 {
      interface = eth1
-     network = 10.0.0.254
+     network = fa:0a::45/56
 }

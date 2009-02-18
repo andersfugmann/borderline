@@ -55,6 +55,8 @@ rule token = parse
   | '}'            { RBRACE }
   | ','            { COMMA }
   | '.'            { DOT }
+  | ':'            { COLON }
+  | "::"           { DCOLON }
   | '/'            { SLASH }
   | '='            { EQ }
   | "#"            { comment lexbuf; token lexbuf }
