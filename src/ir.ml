@@ -21,27 +21,24 @@ type mask = int
 type protocol = TCP | UDP | ICMP
 
 type tcp_flags = SYN | ACK | FIN | RST | URG | PSH
+type direction = SOURCE | DESTINATION
 
-type tcp_cond = SourcePort of int list
-              | DestinaionPort of int list
+type tcp_cond = Port of direction * int list
               | Flags of tcp_flags list * tcp_flags list
 
+type udp_cond = Port of direction * int list
 
-type udp_cond = SourcePort of int list
-              | DestinaionPort of int list
+type icmp_packet = string
 
-type direction = SOURCE | DESTINATION
+type chain = string
 
 type condition = Interface of direction * string
                | Zone of direction * zone
                | State of state_type list
                | Port of direction * int list
                | Address of direction * ip
-               | Protocol of protocol * udp_cond list option
-
-type icmp_packet = string
-
-type chain = string
+               | TcpProtocol of tcp_cond list option
+               | UdpProtocol of udp_cond list option
 
 type action = Jump of chain
             | MarkSourceZone of zone
@@ -51,5 +48,10 @@ type action = Jump of chain
             | Return
             | Reject of icmp_packet
             | Notrack
-                
-type rule = (condition * bool option) list * action
+
+type op = AND | OR
+
+type cond_tree = Tree of op * cond_tree * cond_tree
+               | Leaf of condition * bool option
+
+type oper = cond_tree * action

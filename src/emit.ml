@@ -36,7 +36,7 @@ let emit (cond_list, action) =
   let target = emit_action action in
     String.concat " " ( conditions @ [ target ] )
 
-let emit_chain (table, chain, rules) =
+let emit_chain table chain rules =
   let ops = List.map emit rules in
   let lines = List.map ( sprintf "ip6tables -t %s -A %s %s" table chain ) ops in
     String.concat "\n" lines
