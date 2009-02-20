@@ -54,7 +54,7 @@ zone_stms:
 ;
 
 zone_stm:
-  | NETWORK EQ ipv6     { $3 }
+  | NETWORK EQ ipv6     { Network($3) }
   | INTERFACE EQ ID     { Interface($3) }
 ;
 
@@ -99,8 +99,8 @@ filter_direction:
 ;
 
 filter_ip:
-  | PORT EQ port  { $3 }
-  | IP EQ ipv6    { $3 }
+  | PORT EQ int_list  { Port($3) }
+  | IP EQ ipv6        { Ip($3) }
 ;
 
 state:
@@ -122,14 +122,10 @@ hex_list:
   | hex COLON hex_list {  $1 :: $3 }
   
 ipv6:
-  | hex_list DCOLON hex_list SLASH INT { Ip($1, $3, $5) }
-  | hex_list SLASH INT                 { Ip($1, [], $3) }
-  | hex_list DCOLON hex_list           { Ip($1, $3, 128) }
-  | hex_list                           { Ip($1, [], 128) }
-;
-
-port:
-  int_list { Port($1) }
+  | hex_list DCOLON hex_list SLASH INT { ($1, $3, $5) }
+  | hex_list SLASH INT                 { ($1, [], $3) }
+  | hex_list DCOLON hex_list           { ($1, $3, 128) }
+  | hex_list                           { ($1, [], 128) }
 ;
 
 int_list:

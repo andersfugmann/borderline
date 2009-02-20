@@ -13,10 +13,17 @@ let ip_to_string (a, b, m) =
 let map_not = function
     true -> "!"
   | _ -> ""
+
+(* val choose_dir : direction * string * string -> string *)
+let choose_dir dir a b = match dir with
+    SOURCE      -> a 
+  | DESTINATION -> b
+  
+let dir_interface = function SOURCE -> "--in-interface" | DESTINATION -> "--out_interface"
   
 let emit_condition = function
-    SourceAddress(ip) -> "--source " ^ (ip_to_string ip)
-  | SourceInterface(name) -> "--in-interface " ^ name
+    Address(direction, ip) -> sprintf "--%s %s" (choose_dir direction "source" "destination") (ip_to_string ip)
+  | Interface(direction, name) -> sprintf "--%s-interface %s" (choose_dir direction "in" "out") name
   | _ -> "<unsupported>"
 
 

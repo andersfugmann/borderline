@@ -1,22 +1,15 @@
 open Frontend
-open Ir
 
 module Zone = struct
   let rec as_source = function
-      Interface(name) -> SourceInterface(name)
-    | Ip(a, b, m) as ip -> SourceAddress(ip_to_ip ip)
-    | _ -> raise ImpossibleError
-
-  let rec as_destination = function
-      Interface(name) -> DestinationInterface(name)
-    | Ip(a, b, m) as ip -> DestinationAddress(ip_to_ip ip)
-    | _ -> raise ImpossibleError
+      Interface(name) -> Ir.Interface(Ir.SOURCE, name)
+    | Network(a, b, m) -> Ir.Address(Ir.SOURCE, (a, b, m))
 
         
   let process_zone zone : (Ir.condition * bool) list * Ir.action = match zone with
       Zone(name, nodes) -> let source_conditions = 
         List.map ( fun node -> (as_source node, false) ) nodes in
-        (source_conditions, MarkSourceZone(name))
+        (source_conditions, Ir.MarkSourceZone(name))
     | _ -> raise ImpossibleError
 end          
   

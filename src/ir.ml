@@ -30,15 +30,13 @@ type tcp_cond = SourcePort of int list
 type udp_cond = SourcePort of int list
               | DestinaionPort of int list
 
-type condition = SourceInterface of string
-               | DestinationInterface of string
-               | SourceZone of zone
-               | DestinationZone of zone
+type direction = SOURCE | DESTINATION
+
+type condition = Interface of direction * string
+               | Zone of direction * zone
                | State of state_type list
-               | SourcePort of int list
-               | DestinaionPort of int list
-               | SourceAddress of ip
-               | DestinationAddress of ip
+               | Port of direction * int list
+               | Address of direction * ip
                | Protocol of protocol * udp_cond list option
 
 type icmp_packet = string
