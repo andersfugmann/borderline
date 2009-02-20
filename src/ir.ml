@@ -54,4 +54,13 @@ type op = AND | OR
 type cond_tree = Tree of op * cond_tree * cond_tree
                | Leaf of condition * bool option
 
-type oper = cond_tree * action
+type oper = cond_tree option * action
+
+(* Utility to or / and a list of conditions *)
+let rec build_cond_tree conditions op = match conditions with
+    (x,o) :: [] -> Leaf(x, o)
+  | (x,o) :: xs -> Tree(op, Leaf(x, o), (build_cond_tree xs op))
+  | _ -> raise ImpossibleError
+      
+  
+
