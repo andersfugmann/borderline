@@ -18,18 +18,18 @@ define aax {
 };
 
 zone ext1 {
-     rule {
+   rule {
      insert aax;
      src.zone = ext1;
      src.ip = 1.2.3.4 / 233.244.245.233;
      dst.zone = ext2;
-
      src.port = 3443;
      protocol = TCP;
-
      policy = allow;
-}
+  }
 };
+
+
 
 # Predifined rules must be inserted into any context.
 # Name sequence of rules....
@@ -51,12 +51,13 @@ set forward {
    rule {
       state = new;
       rule {
-	  source.zone = ext;
+	  source zone = ext;
+          source ip = ..
 	  ext_forward; // All these rules are applied only if filters matches.
 	  policy drop;
       }
       rule {
-	  source.zone = int;
+	  source zone = int;
 	  int_forward;
 	  policy drop;
       }
@@ -111,5 +112,8 @@ stm = <zone> | <set>
 
 
 
+
+
+Let the machine have a "local" zone. No zones then need input/output rules. Marvolous!
 
 
