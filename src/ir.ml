@@ -57,9 +57,9 @@ type cond_tree = Tree of op * cond_tree * cond_tree
 type oper = cond_tree option * action
 
 (* Utility to or / and a list of conditions *)
-let rec build_cond_tree conditions op = match conditions with
+let rec build_cond_tree op = function
     (x,o) :: [] -> Leaf(x, o)
-  | (x,o) :: xs -> Tree(op, Leaf(x, o), (build_cond_tree xs op))
+  | (x,o) :: xs -> Tree(op, Leaf(x, o), (build_cond_tree op xs))
   | _ -> raise ImpossibleError
       
   

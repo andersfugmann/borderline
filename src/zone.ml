@@ -8,8 +8,8 @@ let rec gen_zone_oper zone direction = match zone with
 (* let process_zone zone : (Ir.condition * bool) list * Ir.action = match zone with *)
 let process_zone = function
     Zone(name, nodes) -> let source_conditions = 
-      List.map ( fun node -> ((gen_zone_oper node Ir.SOURCE), false) ) nodes in
-      (source_conditions, Ir.MarkSourceZone(name))
+      List.map ( fun node -> ((gen_zone_oper node Ir.SOURCE), None) ) nodes in
+      (Some(Ir.build_cond_tree Ir.AND source_conditions), Ir.MarkSourceZone(name))
   | _ -> raise ImpossibleError
 
   
