@@ -3,7 +3,27 @@
 
 open Ir
 open Printf
+open Str
 open String
+open Chain
+
+module StringMap = Map.Make(String)
+let zone_id = ref 1
+let zone_map = ref StringMap.empty
+
+let get_zone_id zone =
+  try 
+    StringMap.find zone !zone_map
+  with Not_found ->
+    let id = !zone_id in
+    let _ = zone_id := !zone_id + 1 in
+    let _ = zone_map := StringMap.add zone id !zone_map in
+      id
+
+let get_zone_id_mask zone = function
+    SOURCE -> (get_zone_id zone, 0x00ff)
+  | DESTINATION -> ((get_zone_id zone) * 0x100, 0xff00)
+  
 
 let ip_to_string (a, b, m) = 
   let pre = String.concat ":" (List.map string_of_int a) in
@@ -38,7 +58,9 @@ let rec gen_conditions = function
   | Leaf(cond, neg)   -> (gen_condition cond neg)
 
 let gen_action = function
-    MarkSourceZone(zone) -> "-j MARK --set-mark " ^ zone ^ "/0x00FFFF"
+    MarkZone(direction, zone) -> 
+      let id, mask = get_zone_id_mask zone direction in
+        sprintf "-j MARK --set-mark %X/%X" id mask
   | _ -> "# Unsupported action"
 
 let emit (cond_tree, action) = 
@@ -49,9 +71,13 @@ let emit (cond_tree, action) =
   let 
       target = gen_action action 
   in
-    cond_str ^ target 
+    cond_str ^ " " ^ target 
       
-let emit_chain table chain rules =
-  let ops = List.map emit rules in
-  let lines = List.map ( sprintf "ip6tables -t %s -A %s %s" table chain ) ops in
-    String.concat "\n" lines
+let get_chain_name chain =
+    sprintf "chn%d_%s" chain.id chain.comment
+
+let emit_chain chain =
+  let chain_name = get_chain_name chain in
+  let ops = List.map emit chain.rules in
+  let lines = List.map ( sprintf "ip6tables -A %s %s" chain_name ) ops in
+    (sprintf "ip6tables -C %s\n" chain_name) :: lines

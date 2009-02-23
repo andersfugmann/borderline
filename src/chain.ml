@@ -1,22 +1,14 @@
-(* Handle chanis, and hold all packet operations *)
-module Chain :
-sig 
-  type chain = { id : int }
-  val create_chain : unit -> chain
-
-end = 
-struct
-  type chain = Chain { name: string, table: string }
-  let next_id = ref 0
-    let id = !next_id in
-    let _ = next_id := !next_id + 1 in
-      id
-    
-  let create_chain = 
-    let id = !next_id in
-    let _ = next_id := !next_id + 1 in
-      chain { id }
-
-       
-    
-end
+(* Handle chains, and hold all packet operations *)
+type chain = { id : int; rules : Ir.oper list; comment: string; }
+let next_id = ref 0
+let chains = ref []
+  
+let get_next_id =
+  let id = !next_id in
+  let _ = next_id := !next_id + 1 in
+    id
+      
+let create _rules _comment = 
+  let chn = { id = get_next_id; rules = _rules; comment = _comment } in
+  let _ = chains := chn :: !chains in
+    chn

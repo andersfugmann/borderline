@@ -41,8 +41,7 @@ type condition = Interface of direction * string
                | UdpProtocol of udp_cond list option
 
 type action = Jump of chain
-            | MarkSourceZone of zone
-            | MarkDestinationZone of zone
+            | MarkZone of direction * zone
             | Accept
             | Drop
             | Return
