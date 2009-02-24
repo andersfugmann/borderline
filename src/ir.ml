@@ -18,6 +18,10 @@ type state_type = NEW | ESTABLISHED | RELATED | INVALID
 type zone = string
 type mask = int
 
+type chain_type = INPUT | OUTPUT | FORWARD
+type chain_id = Temporary of int
+              | Builtin of chain_type 
+ 
 type protocol = TCP | UDP | ICMP
 
 type tcp_flags = SYN | ACK | FIN | RST | URG | PSH
@@ -30,8 +34,6 @@ type udp_cond = Port of direction * int list
 
 type icmp_packet = string
 
-type chain = string
-
 type condition = Interface of direction * string
                | Zone of direction * zone
                | State of state_type list
@@ -40,7 +42,7 @@ type condition = Interface of direction * string
                | TcpProtocol of tcp_cond list option
                | UdpProtocol of udp_cond list option
 
-type action = Jump of chain
+type action = Jump of chain_id
             | MarkZone of direction * zone
             | Accept
             | Drop
@@ -50,16 +52,6 @@ type action = Jump of chain
 
 type op = AND | OR
 
-type cond_tree = Tree of op * cond_tree * cond_tree
-               | Leaf of condition * bool option
+type cond_option = condition * bool option
 
-type oper = cond_tree option * action
-
-(* Utility to or / and a list of conditions *)
-let rec build_cond_tree op = function
-    (x,o) :: [] -> Leaf(x, o)
-  | (x,o) :: xs -> Tree(op, Leaf(x, o), (build_cond_tree op xs))
-  | _ -> raise ImpossibleError
-      
-  
-
+type oper = cond_option list option * action

@@ -39,45 +39,41 @@ let choose_dir a b = function
     SOURCE      -> a 
   | DESTINATION -> b
   
-let gen_condition cond neg = 
-  let 
-      cond_str = match cond with
-          Address(direction, ip) -> sprintf "--%s %s" 
-            (choose_dir "source" "destination" direction) 
-            (ip_to_string ip)
-        | Interface(direction, name) -> sprintf "--%s-interface %s"
-            (choose_dir "in" "out" direction) name
-        | _ -> "<unsupported>"
-  in
-    (gen_not neg) ^ " " ^ cond_str
+let gen_condition = function
+    Address(direction, ip) -> sprintf "--%s %s" 
+      (choose_dir "source" "destination" direction) 
+      (ip_to_string ip)
+  | Interface(direction, name) -> sprintf "--%s-interface %s"
+      (choose_dir "in" "out" direction) name
+  | _ -> "<unsupported>"
 
+let gen_condition_option (cond, neg) = 
+  let condition = gen_condition cond in
+    match neg with
+        Some(true) -> "! " ^ condition
+      | _ -> condition
 
 let rec gen_conditions = function
-    Tree(AND, left, right) -> (gen_conditions left) ^ " " ^ (gen_conditions right)
-  | Tree(OR, left, right)  -> "Need to change the tree into chains"
-  | Leaf(cond, neg)   -> (gen_condition cond neg)
+    Some(conditions) -> String.concat " " (List.map gen_condition_option conditions)
+  | _ -> ""
 
 let gen_action = function
     MarkZone(direction, zone) -> 
       let id, mask = get_zone_id_mask zone direction in
-        sprintf "-j MARK --set-mark %X/%X" id mask
+        sprintf "-j MARK --set-mark 0x%04x/0x%04x" id mask
+  | Jump(chain_id) -> "-j " ^ (Chain.get_chain_name chain_id)
   | _ -> "# Unsupported action"
 
-let emit (cond_tree, action) = 
-  let cond_str = match cond_tree with
-      Some(conds) -> gen_conditions conds
-    | None -> ""
-  in
-  let 
-      target = gen_action action 
-  in
-    cond_str ^ " " ^ target 
-      
-let get_chain_name chain =
-    sprintf "chn%d_%s" chain.id chain.comment
+let emit (cond_list, action) : string = 
+  let conditions = gen_conditions cond_list in
+  let target = gen_action action in
+    conditions ^ " " ^ target 
 
 let emit_chain chain =
-  let chain_name = get_chain_name chain in
+  let chain_name = Chain.get_chain_name chain.id in
   let ops = List.map emit chain.rules in
   let lines = List.map ( sprintf "ip6tables -A %s %s" chain_name ) ops in
-    (sprintf "ip6tables -C %s\n" chain_name) :: lines
+    match chain.id with 
+        Builtin(_) -> lines
+      | _          -> sprintf "ip6tables -N %s #%s" chain_name chain.comment :: lines
+            
