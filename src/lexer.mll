@@ -23,9 +23,7 @@ rule token = parse
 
 (* process targets *)
   | "mangle"       { Parser.MANGLE }
-  | "input"        { Parser.INPUT }
-  | "forward"      { Parser.FORWARD }
-  | "output"       { Parser.OUTPUT }
+  | "filter"       { Parser.FILTER }
   | "nat"          { Parser.NAT }
 
 (* Policy *)
@@ -59,6 +57,7 @@ rule token = parse
   | "::"           { DCOLON }
   | '/'            { SLASH }
   | '='            { EQ }
+  | ';'            { SEMI }
   | "#"            { comment lexbuf; token lexbuf }
   | eof            { END }
   | _              { raise (Lexer_error !lineno) }

@@ -1,6 +1,8 @@
-import test1.bl
-
 zone test1 {
-     interface = eth1
-     network = fa:0a::45/56
+     interface = eth1;
+     network = fa:0a::45/56;
+}
+
+process filter policy deny {
+        state = new;
 }
