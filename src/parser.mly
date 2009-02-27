@@ -17,6 +17,7 @@
 
 %token <int> INT
 %token <string> ID
+%token <string> IPv4
 
 %token LBRACE RBRACE COMMA DOT COLON DCOLON SLASH END
 
