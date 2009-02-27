@@ -17,7 +17,7 @@
 
 %token <int> INT
 %token <string> ID
-%token <string> IPv4
+%token <int list * int list * int> IPv6
 
 %token LBRACE RBRACE COMMA DOT COLON DCOLON SLASH END
 
@@ -51,7 +51,7 @@ path:
   | ID                { $1 }
 
 zone_stm:
-  | NETWORK EQ ipv6   { Network($3) }
+  | NETWORK EQ IPv6   { Network($3) }
   | INTERFACE EQ ID   { Interface($3) }
 ;
 
@@ -95,7 +95,7 @@ filter_direction:
 
 filter_ip:
   | PORT EQ int_list  { Port($3) }
-  | IP EQ ipv6        { Ip($3) }
+  | IP EQ IPv6        { Ip($3) }
 ;
 
 state:
@@ -116,13 +116,6 @@ hex_list:
   | hex                {  [ $1 ] }
   | hex COLON hex_list {  $1 :: $3 }
   
-ipv6:
-  | hex_list DCOLON hex_list SLASH INT { ($1, $3, $5) }
-  | hex_list SLASH INT                 { ($1, [], $3) }
-  | hex_list DCOLON hex_list           { ($1, $3, 128) }
-  | hex_list                           { ($1, [], 128) }
-;
-
 int_list:
   | INT { [ $1 ] }
   | INT COMMA int_list { $1 :: $3 }

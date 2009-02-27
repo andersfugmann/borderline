@@ -5,14 +5,9 @@
 
 (* There is no guard for conditions that only apply on tcp/udp or ICMP *)
 
+open Common
 open Frontend
 
-type ip = int list * int list * int
-
-let rec ip_to_ip = function
-    Ip(a, b, m) -> (a, b, m)
-  | _ -> raise ImpossibleError
-      
 type state_type = NEW | ESTABLISHED | RELATED | INVALID 
 
 type zone = string

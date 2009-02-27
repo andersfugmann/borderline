@@ -1,6 +1,7 @@
 (* Emit iptables commands. Currently we have no interface to the iptables library, 
    so we use a shell script as an intermediate step. *)
 
+open Common
 open Ir
 open Printf
 open Str
@@ -24,12 +25,6 @@ let get_zone_id_mask zone = function
     SOURCE -> (get_zone_id zone, 0x00ff)
   | DESTINATION -> ((get_zone_id zone) * 0x100, 0xff00)
   
-
-let ip_to_string (a, b, m) = 
-  let pre = String.concat ":" (List.map string_of_int a) in
-  let post = String.concat ":" (List.map string_of_int b) in
-    sprintf "%s::%s/%d" pre post m
-
 let gen_not = function
     Some(true) -> "!"
   | _ -> ""

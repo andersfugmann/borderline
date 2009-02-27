@@ -1,6 +1,5 @@
+open Common
 open Printf
-
-exception ImpossibleError
 
 let lineno = ref 1
 
@@ -8,8 +7,6 @@ type filterdirection = SOURCE | DESTINATION
 type processtype = MANGLE | FILTER | NAT
 type statetype = NEW | RELATED | ESTABLISHED | INVALID
 type policytype = ALLOW | DENY | REJECT
-
-type ip = int list * int list * int
 
 type action_stm =  Policy of policytype
 
@@ -37,7 +34,7 @@ let dir_to_string = function
   | DESTINATION -> "destination"
 
 let filter_to_string = function
-    Ip(ip)      -> "ip: " ^ ( ip_to_string ip )
+    Ip(ip)      -> "ip: " ^ (ip_to_string ip)
   | Port(ports) -> "port:" ^ String.concat ", " ( List.map string_of_int ports ) 
 
 let policy_to_string = function

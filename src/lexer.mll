@@ -46,7 +46,7 @@ rule token = parse
   | "invalid"      { Parser.INVALID }
 
 (* Data *)
-  | ['0'-'9''a'-'f''A'-'F'':']+(['/']['0'-'9']+)? as lxm { IPv4(lxm) }
+  | ['0'-'9''a'-'f''A'-'F'':']+(['/']['0'-'9']+)? { IPv6([4;6], [233;234], 47) }
   | ['0'-'9']+ as lxm { INT(int_of_string lxm) }
   | ['a'-'z''A'-'Z''_']?['a'-'z''A'-'Z''0'-'9''_']+ as lxm { ID(lxm) }
 
