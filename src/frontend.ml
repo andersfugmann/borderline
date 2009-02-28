@@ -26,9 +26,6 @@ type node = Import of string
           | Define of string * rule_stm list
           | Process of processtype * policytype * rule_stm list
 
-let ip_to_string (a, b, m) = 
-  String.concat "" (List.map (sprintf "%x:") a @ List.map (sprintf ":%x") b @ [ sprintf "/%d" m ])
-
 let dir_to_string = function
     SOURCE      -> "source"
   | DESTINATION -> "destination"

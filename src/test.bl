@@ -1,8 +1,9 @@
 zone test1 {
      interface = eth1;
-     network = fa:0a::45/56;
+     network = 2001:16d8:dd2d:0:2e0:4cff:fe69:103d/56;
 }
 
-process filter policy deny {
+process filter {
+        
         state = new;
-}
+} policy deny

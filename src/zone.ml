@@ -9,7 +9,7 @@ let gen_oper target op_func cond =
 
 let rec gen_zone_oper direction = function
     Interface(name) -> Ir.Interface(direction, name)
-  | Network(a, b, m) -> Ir.Address(direction, (a, b, m))
+  | Network(a, m) -> Ir.Address(direction, (a, m))
       
 (* Return a chain that will mark the zone based on direction *)
 let create_zone_chain direction = function

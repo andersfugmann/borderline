@@ -17,7 +17,7 @@
 
 %token <int> INT
 %token <string> ID
-%token <int list * int list * int> IPv6
+%token <int list * int> IPv6
 
 %token LBRACE RBRACE COMMA DOT COLON DCOLON SLASH END
 
@@ -38,8 +38,8 @@ statement:
   | IMPORT filename                               { Import($2)     }
   | ZONE ID LBRACE zone_stms RBRACE               { Zone($2, $4)   }
   | DEFINE ID rule_stms                           { Define($2, $3) }
-  | PROCESS process_type POLICY policy LBRACE rule_stms RBRACE    { Process($2, $4, $6) } 
-  | PROCESS process_type POLICY policy LBRACE RBRACE    { Process($2, $4, []) } 
+  | PROCESS process_type LBRACE rule_stms RBRACE POLICY policy    { Process($2, $7, $4) } 
+  | PROCESS process_type LBRACE RBRACE POLICY policy              { Process($2, $6, []) } 
 ;
 
 filename:
@@ -51,8 +51,8 @@ path:
   | ID                { $1 }
 
 zone_stm:
-  | NETWORK EQ IPv6   { Network($3) }
-  | INTERFACE EQ ID   { Interface($3) }
+  | NETWORK EQ IPv6     { Network($3) }
+  | INTERFACE EQ ID     { Interface($3) }
 ;
 
 zone_stms:
@@ -104,17 +104,7 @@ state:
   | RELATED      { RELATED }
   | INVALID      { INVALID }
 ;
-
-hex: 
-  | ID           { sscanf $1 "%x" (fun i -> i) }
-  | INT ID       { let s = sprintf "%d%s" $1 $2 in
-                     sscanf s "%x" (fun i -> i) }
-  | INT          { let s = sprintf "%d" $1 in
-                     sscanf s "%x" (fun i -> i) }
-
-hex_list:
-  | hex                {  [ $1 ] }
-  | hex COLON hex_list {  $1 :: $3 }
+  
   
 int_list:
   | INT { [ $1 ] }

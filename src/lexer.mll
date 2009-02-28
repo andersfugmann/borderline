@@ -7,6 +7,13 @@ open Frontend
 open Scanf
 
 exception Lexer_error of int
+
+let hex_of_string h : int = 
+  sscanf h "%x" (fun i -> i)
+
+let int_of_string i : int =
+  sscanf i "%d" (fun i -> i)
+
 }
 
 rule token = parse
@@ -46,7 +53,22 @@ rule token = parse
   | "invalid"      { Parser.INVALID }
 
 (* Data *)
-  | ['0'-'9''a'-'f''A'-'F'':']+(['/']['0'-'9']+)? { IPv6([4;6], [233;234], 47) }
+  | (['0'-'9''a'-'f''A'-'F']+ as x1) ':'
+    (['0'-'9''a'-'f''A'-'F']+ as x2) ':'
+    (['0'-'9''a'-'f''A'-'F']+ as x3) ':'
+    (['0'-'9''a'-'f''A'-'F']+ as x4) ':'
+    (['0'-'9''a'-'f''A'-'F']+ as x5) ':'
+    (['0'-'9''a'-'f''A'-'F']+ as x6) ':'
+    (['0'-'9''a'-'f''A'-'F']+ as x7) ':'
+    (['0'-'9''a'-'f''A'-'F']+ as x8) ('/' ((['0'-'9']+) as mask))?
+    { let addrs = List.map hex_of_string [x1; x2; x3; x4; x5; x6; x7; x8] in        
+      let mask = match mask with
+          Some(mask) -> int_of_string mask
+        | _ -> 128 
+      in          
+        IPv6(addrs, mask) 
+      
+    } 
   | ['0'-'9']+ as lxm { INT(int_of_string lxm) }
   | ['a'-'z''A'-'Z''_']?['a'-'z''A'-'Z''0'-'9''_']+ as lxm { ID(lxm) }
 
