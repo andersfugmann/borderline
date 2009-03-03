@@ -38,8 +38,8 @@ statement:
   | IMPORT filename                               { Import($2)     }
   | ZONE ID LBRACE zone_stms RBRACE               { Zone($2, $4)   }
   | DEFINE ID rule_stms                           { Define($2, $3) }
-  | PROCESS process_type LBRACE rule_stms RBRACE POLICY policy    { Process($2, $7, $4) } 
-  | PROCESS process_type LBRACE RBRACE POLICY policy              { Process($2, $6, []) } 
+  | PROCESS process_type LBRACE rule_stms RBRACE POLICY policy    { Process($2, $4, $7) }
+  | PROCESS process_type LBRACE RBRACE POLICY policy              { Process($2, [], $6) }
 ;
 
 filename:
@@ -56,7 +56,7 @@ zone_stm:
 ;
 
 zone_stms:
-  | zone_stm SEMI            { [ $1 ] }
+  | zone_stm                 { [ $1 ] }
   | zone_stm SEMI zone_stms  { $1 :: $3 }
 ;
 
@@ -64,19 +64,19 @@ zone_stms:
 process_type:
   | MANGLE          { MANGLE }
   | FILTER          { FILTER }
-  | NAT             { NAT } 
+  | NAT             { NAT }
 ;
 
 rule_stm:
   | RULE LBRACE rule_stms RBRACE action { Rule($3, $5) }
   | RULE LBRACE RBRACE action           { Rule([], $4) }
   | filter_direction filter_ip          { Filter($1, $2) }
-  | STATE EQ state                      { State($3) }
+  | STATE EQ state_list                 { State($3) }
 ;
 
 rule_stms:
-  | rule_stm SEMI       { [ $1 ] }
-  | rule_stm rule_stms  { $1 :: $2 }
+  | rule_stm                 { [ $1 ] }
+  | rule_stm SEMI rule_stms  { $1 :: $3 }
 ;
 
 action:
@@ -89,8 +89,8 @@ policy:
 ;
 
 filter_direction:
-  | SOURCE       { SOURCE }
-  | DESTINATION  { DESTINATION }
+  | SOURCE       { Ir.SOURCE }
+  | DESTINATION  { Ir.DESTINATION }
 ;
 
 filter_ip:
@@ -98,15 +98,19 @@ filter_ip:
   | IP EQ IPv6        { Ip($3) }
 ;
 
+state_list:
+  | state                  { [ $1 ] }
+  | state COMMA state_list { $1 :: $3 }
+
 state:
-  | NEW          { NEW }
-  | ESTABLISHED  { ESTABLISHED }
-  | RELATED      { RELATED }
-  | INVALID      { INVALID }
+  | NEW          { Ir.NEW }
+  | ESTABLISHED  { Ir.ESTABLISHED }
+  | RELATED      { Ir.RELATED }
+  | INVALID      { Ir.INVALID }
 ;
-  
-  
+
+
 int_list:
-  | INT { [ $1 ] }
+  | INT                { [ $1 ] }
   | INT COMMA int_list { $1 :: $3 }
 ;

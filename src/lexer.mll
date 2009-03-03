@@ -49,7 +49,7 @@ rule token = parse
 (* State types *)
   | "new"          { Parser.NEW }
   | "established"  { Parser.ESTABLISHED }
-  | "releated"     { Parser.RELATED }
+  | "related"      { Parser.RELATED }
   | "invalid"      { Parser.INVALID }
 
 (* Data *)
