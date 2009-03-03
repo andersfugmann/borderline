@@ -1,8 +1,17 @@
-zone test1 {
-     interface = eth1;
-     network = 2001:16d8:dd2d:0:2e0:4cff:fe69:103d/56
+zone int {
+     interface = int;
+     network = 2001:16d8:dd2d:0:0:0:0:0/64
+}
+
+zone stue {
+     interface = stue;
+     network = 2001:16d8:dd2d:1:0:0:0:0/64
 }
 
 process filter {
-        rule { state = related,established } policy allow
+        rule { state = related,established } policy allow;
+        rule { state = new;
+               rule { source zone = int  } policy allow;
+               rule { source zone = stue } policy allow
+        } policy deny
 } policy deny

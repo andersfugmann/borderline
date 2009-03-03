@@ -21,6 +21,10 @@ let get_zone_id zone =
     let _ = zone_map := StringMap.add zone id !zone_map in
       id
 
+let gen_neg = function
+    true -> "! "
+  | _ -> ""
+
 let get_zone_id_mask zone = function
     SOURCE -> (get_zone_id zone, 0x00ff)
   | DESTINATION -> ((get_zone_id zone) * 0x100, 0xff00)
@@ -30,29 +34,38 @@ let choose_dir a b = function
     SOURCE      -> a
   | DESTINATION -> b
 
-let gen_condition = function
-    Address(direction, ip) -> sprintf "--%s %s"
-      (choose_dir "source" "destination" direction)
-      (ip_to_string ip)
-  | Interface(direction, name) -> sprintf "--%s-interface %s"
-      (choose_dir "in" "out" direction) name
-  | _ -> "<unsupported>"
+let get_state_name = function
+    NEW -> "new"
+  | ESTABLISHED -> "established"
+  | RELATED -> "related"
+  | INVALID -> "invalid"
 
-let gen_condition_option (cond, neg) =
-  let condition = gen_condition cond in
-    match neg with
-        true -> "! " ^ condition
-      | _ -> condition
+(* Return a prefix and condition, between which a negation can be inserted *)
+let gen_condition = function
+    Address(direction, ip) -> "", ((choose_dir "--source " "--destination " direction) ^ (ip_to_string ip))
+  | Interface(direction, name) -> ("", (choose_dir "--in-interface " "--out-interface " direction) ^ name)
+  | State(states) -> "-m conntrack ", ("--ctstate " ^ ( String.concat "," (List.map get_state_name states)))
+  | Zone(direction, zone) -> let id, mask = get_zone_id_mask zone direction in
+      "-m conmark ", ( sprintf "--mark 0x%04x/0x%04x" id mask )
+  | _ -> "", "<unsupported>"
 
 let rec gen_conditions conditions =
-    String.concat " " (List.map gen_condition_option conditions)
+  (* tuple to a string *)
+  let gen_cond (cond, neg) =
+    let pref, postf = gen_condition cond in
+      pref ^ (gen_neg neg) ^ postf
+  in
+    String.concat " " (List.map gen_cond conditions)
 
 let gen_action = function
     MarkZone(direction, zone) ->
       let id, mask = get_zone_id_mask zone direction in
         sprintf "-j MARK --set-mark 0x%04x/0x%04x" id mask
   | Jump(chain_id) -> "-j " ^ (Chain.get_chain_name chain_id)
-  | _ -> "# Unsupported action"
+  | Return -> "-j RETURN"
+  | Accept -> "-j ACCEPT"
+  | Drop   -> "-j DROP"
+  | _ -> "#### Unsupported action"
 
 let emit (cond_list, action) : string =
   let conditions = gen_conditions cond_list in

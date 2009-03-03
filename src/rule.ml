@@ -13,6 +13,7 @@ let gen_action = function
 let gen_filter dir = function
     Ip(ip) -> Ir.Address(dir, ip)
   | Port(ports) -> Ir.Port(dir, ports)
+  | FZone(id) -> Ir.Zone(dir, id)
 
 let rec process_rule table (rules, target) =
   let gen_op table target = function

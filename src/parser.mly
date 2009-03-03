@@ -70,7 +70,7 @@ process_type:
 rule_stm:
   | RULE LBRACE rule_stms RBRACE action { Rule($3, $5) }
   | RULE LBRACE RBRACE action           { Rule([], $4) }
-  | filter_direction filter_ip          { Filter($1, $2) }
+  | filter_direction filter_stm         { Filter($1, $2) }
   | STATE EQ state_list                 { State($3) }
 ;
 
@@ -93,9 +93,10 @@ filter_direction:
   | DESTINATION  { Ir.DESTINATION }
 ;
 
-filter_ip:
+filter_stm:
   | PORT EQ int_list  { Port($3) }
   | IP EQ IPv6        { Ip($3) }
+  | ZONE EQ ID        { FZone($3) }
 ;
 
 state_list:

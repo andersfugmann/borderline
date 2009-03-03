@@ -13,7 +13,7 @@ type zone_stm = Interface of string
 
 type filter_stm = Ip of ip
                 | Port of int list
-
+                | FZone of string
 
 type rule_stm = Filter of Ir.direction * filter_stm
               | State of Ir.statetype list
