@@ -47,6 +47,8 @@ let gen_condition = function
   | State(states) -> "-m conntrack ", ("--ctstate " ^ ( String.concat "," (List.map get_state_name states)))
   | Zone(direction, zone) -> let id, mask = get_zone_id_mask zone direction in
       "-m conmark ", ( sprintf "--mark 0x%04x/0x%04x" id mask )
+  | Port(direction, ports) -> "-m multiport ", ( "--" ^ (choose_dir "source" "destination" direction) ^
+                                                 "-ports " ^ (String.concat "," (List.map string_of_int ports)) )
   | _ -> "", "<unsupported>"
 
 let rec gen_conditions conditions =

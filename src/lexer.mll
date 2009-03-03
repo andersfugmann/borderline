@@ -8,17 +8,14 @@ open Scanf
 
 exception Lexer_error of int
 
-let hex_of_string h : int = 
+let hex_of_string h : int =
   sscanf h "%x" (fun i -> i)
-
-let int_of_string i : int =
-  sscanf i "%d" (fun i -> i)
 
 }
 
 rule token = parse
     [' ' '\t']     { token lexbuf }     (* skip blanks *)
-  | '\n'           { lineno := 1+ !lineno; token lexbuf } 
+  | '\n'           { lineno := 1+ !lineno; token lexbuf }
   | "zone"         { ZONE }
   | "process"      { PROCESS }
   | "rule"         { RULE }
@@ -61,14 +58,14 @@ rule token = parse
     (['0'-'9''a'-'f''A'-'F']+ as x6) ':'
     (['0'-'9''a'-'f''A'-'F']+ as x7) ':'
     (['0'-'9''a'-'f''A'-'F']+ as x8) ('/' ((['0'-'9']+) as mask))?
-    { let addrs = List.map hex_of_string [x1; x2; x3; x4; x5; x6; x7; x8] in        
+    { let addrs = List.map hex_of_string [x1; x2; x3; x4; x5; x6; x7; x8] in
       let mask = match mask with
           Some(mask) -> int_of_string mask
-        | _ -> 128 
-      in          
-        IPv6(addrs, mask) 
-      
-    } 
+        | _ -> 128
+      in
+        IPv6(addrs, mask)
+
+    }
   | ['0'-'9']+ as lxm { INT(int_of_string lxm) }
   | ['a'-'z''A'-'Z''_']?['a'-'z''A'-'Z''0'-'9''_']+ as lxm { ID(lxm) }
 
