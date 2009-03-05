@@ -37,8 +37,7 @@ type condition = Interface of direction * string
                | State of statetype list
                | Port of direction * int list
                | Address of direction * ip
-               | TcpProtocol of tcp_cond list option
-               | UdpProtocol of udp_cond list option
+               | Protocol of protocol
 
 type action = Jump of chain_id
             | MarkZone of direction * zone

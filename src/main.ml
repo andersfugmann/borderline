@@ -16,7 +16,6 @@ let _ =
   (* Only one filter set - please *)
   (* let sets = List.filter ( function node -> match node with Set(FILTER,_) -> true | _ -> false ) nodes in *)
   (* let chains = List.map Rule.process_set sets in *)
-  let _ = List.map pretty_print zones in
   let input_opers, output_opers, forward_opers = Zone.emit_zones zones in
   let process_list =  List.filter (node_type 2) nodes in
   let filter_chains = List.map Rule.process process_list in

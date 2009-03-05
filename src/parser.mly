@@ -13,7 +13,8 @@
 %token POLICY ALLOW DENY REJECT
 %token SOURCE DESTINATION PORT IP STATE
 %token NEW ESTABLISHED RELATED INVALID
-%token START EQ ENDL SEMI
+%token START EQ ENDL SEMI PROTOCOL
+%token TCP UDP ICMP
 
 %token <int> INT
 %token <string> ID
@@ -72,10 +73,11 @@ rule_stm:
   | RULE LBRACE RBRACE action           { Rule([], $4) }
   | filter_direction filter_stm         { Filter($1, $2) }
   | STATE EQ state_list                 { State($3) }
+  | PROTOCOL EQ protocol                { Protocol($3) }
 ;
 
 rule_stms:
-  | rule_stm                 { [ $1 ] }
+  | rule_stm SEMI            { [ $1 ] }
   | rule_stm SEMI rule_stms  { $1 :: $3 }
 ;
 
@@ -87,6 +89,10 @@ policy:
   | DENY    { DENY }
   | REJECT  { REJECT }
 ;
+
+protocol:
+  | TCP     { Ir.TCP }
+  | UDP     { Ir.UDP }
 
 filter_direction:
   | SOURCE       { Ir.SOURCE }

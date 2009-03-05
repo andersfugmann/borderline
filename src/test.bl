@@ -9,13 +9,14 @@ zone stue {
 }
 
 process filter {
-        rule { source zone = self } policy allow;
-        rule { destination zone = self } policy allow;
+        rule { source zone = self; } policy allow;
+        rule { destination zone = self; } policy allow;
 
-        rule { state = related,established } policy allow;
+        rule { state = related,established; } policy allow;
         rule { state = new;
-               rule { source zone = int  } policy allow;
-               rule { source zone = stue } policy allow;
-               rule { destination port = 22,80,443,993,53 } policy allow
-        } policy deny
+               rule { source zone = int;  } policy allow;
+               rule { source zone = stue; } policy allow;
+               rule { protocol = tcp; destination port = 22,25,80,443,993,53; } policy allow;
+               rule { protocol = udp; destination port = 53; } policy allow;
+        } policy deny;
 } policy deny

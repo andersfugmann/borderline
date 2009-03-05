@@ -49,6 +49,12 @@ rule token = parse
   | "related"      { Parser.RELATED }
   | "invalid"      { Parser.INVALID }
 
+(* Protocols *)
+  | "protocol"     { Parser.PROTOCOL }
+  | "tcp"          { Parser.TCP }
+  | "udp"          { Parser.UDP }
+  | "icmp"         { Parser.ICMP }
+
 (* Data *)
   | (['0'-'9''a'-'f''A'-'F']+ as x1) ':'
     (['0'-'9''a'-'f''A'-'F']+ as x2) ':'
