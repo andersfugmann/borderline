@@ -11,11 +11,17 @@ exception Lexer_error of int
 let hex_of_string h : int =
   sscanf h "%x" (fun i -> i)
 
+let incr_linenum lexbuf =
+  let pos = lexbuf.Lexing.lex_curr_p in
+    lexbuf.Lexing.lex_curr_p <- { pos with
+      Lexing.pos_lnum = pos.Lexing.pos_lnum + 1;
+      Lexing.pos_bol = pos.Lexing.pos_cnum;
+    }
 }
 
 rule token = parse
     [' ' '\t']     { token lexbuf }     (* skip blanks *)
-  | '\n'           { lineno := 1+ !lineno; token lexbuf }
+  | '\n'           { incr_linenum lexbuf; token lexbuf }
   | "zone"         { ZONE }
   | "process"      { PROCESS }
   | "rule"         { RULE }
@@ -90,7 +96,7 @@ rule token = parse
   | _              { raise (Lexer_error !lineno) }
 
 and comment = parse
-    '\n'           { lineno := !lineno + 1}
+    '\n'           { incr_linenum lexbuf }
   | eof            { }
   | _              { comment lexbuf }
 

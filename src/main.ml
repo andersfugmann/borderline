@@ -10,6 +10,11 @@ let node_type id = function
   | Process(_,_,_) -> 2 = id
   | _ -> false
 
+(*
+   Move all frontend parsing to parer.mly.
+   All id's must contain a line number, to report unknown id at line n.
+*)
+
 let _ =
   let nodes = parse "test.bl" in
   let zones = List.filter (node_type 1) nodes in
@@ -21,7 +26,7 @@ let _ =
   let filter_chains = List.map Rule.process process_list in
   let filter_ops = List.map ( fun chn -> ([], Ir.Jump(chn)) )  filter_chains in
     Chain.set { id = Ir.Builtin Ir.INPUT ; rules = input_opers @ filter_ops; comment = "Builtin" };
-    Chain.set { id = Ir.Builtin Ir.OUTPUT ; rules = output_opers; comment = "Builtin" };
-    Chain.set { id = Ir.Builtin Ir.FORWARD ; rules = forward_opers; comment = "Builtin" };
+    Chain.set { id = Ir.Builtin Ir.OUTPUT ; rules = output_opers @ filter_ops; comment = "Builtin" };
+    Chain.set { id = Ir.Builtin Ir.FORWARD ; rules = forward_opers @ filter_ops; comment = "Builtin" };
     List.iter (Printf.printf "%s\n") (Chain.emit Iptables.emit_chain)
 

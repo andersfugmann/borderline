@@ -5,6 +5,15 @@
   open Frontend
   open Printf
   open Scanf
+  open Lexing
+
+  let parse_error s =
+    let start_pos = Parsing.symbol_start_pos () in
+    let end_pos = Parsing.symbol_end_pos () in
+      printf "%d.%d-%d.%d: %s\n"
+		      start_pos.pos_lnum (start_pos.pos_cnum - start_pos.pos_bol)
+		      end_pos.pos_lnum (end_pos.pos_cnum - end_pos.pos_bol) s
+
 %}
 
 %token ZONE PROCESS RULE DEFINE IMPORT
