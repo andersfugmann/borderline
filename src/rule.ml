@@ -12,22 +12,18 @@ let gen_action = function
 
 let gen_filter dir = function
     Ip(ip) -> Ir.Address(dir, ip)
-  | Port(ports) -> Ir.Port(dir, ports)
+  | TcpPort(ports) -> Ir.TcpPort(dir, ports)
+  | UdpPort(ports) -> Ir.UdpPort(dir, ports)
   | FZone(id) -> Ir.Zone(dir, id)
 
+(* Change the system to use more chains. Chains are easier to inline. *)
 let rec process_rule table (rules, target) =
   let gen_op table target = function
       State(states) -> [( [(Ir.State(states), true)], target)]
-    | Filter(dir, Port(ports)) ->
-        let pf = gen_filter dir (Port(ports)) in
-          [ ([ (Ir.Protocol(Ir.TCP), false); (pf, true) ], target);
-            ([ (Ir.Protocol(Ir.UDP), false); (pf, true) ], target) ]
-
     | Filter(dir, stm) -> [( [(gen_filter dir stm, true)], target )]
     | Rule(rls, tg)  -> let chain = process_rule table (rls, tg) in
         [([], Ir.Jump(chain))]
-
-    | Protocol(protocol) -> [ ([(Ir.Protocol(protocol), true)], target) ]
+    | Protocol proto -> [( [(Ir.Protocol(proto), true)], target)]
 
   in
   let action = gen_action target in

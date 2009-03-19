@@ -35,7 +35,8 @@ type icmp_packet = ICMP_NET_UNREACHABLE | ICMP_HOST_UNREACHABLE
 type condition = Interface of direction * string
                | Zone of direction * zone
                | State of statetype list
-               | Port of direction * int list
+               | TcpPort of direction * int list
+               | UdpPort of direction * int list
                | Address of direction * ip
                | Protocol of protocol
 

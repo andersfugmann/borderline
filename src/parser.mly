@@ -8,12 +8,10 @@
   open Lexing
 
   let parse_error s =
-    let start_pos = Parsing.symbol_start_pos () in
-    let end_pos = Parsing.symbol_end_pos () in
-      printf "%d.%d-%d.%d: %s\n"
-		      start_pos.pos_lnum (start_pos.pos_cnum - start_pos.pos_bol)
-		      end_pos.pos_lnum (end_pos.pos_cnum - end_pos.pos_bol) s
-
+    let pos = Parsing.symbol_end_pos () in
+    let file = "test.bl" in
+      printf "File \"%s\", line %d, character %d:\n" file pos.pos_lnum (pos.pos_cnum - pos.pos_bol + 1);
+      printf "Unexpected token\n"
 %}
 
 %token ZONE PROCESS RULE DEFINE IMPORT
@@ -36,97 +34,102 @@
 %%
 
 main:
-  | statements END                           { $1 }
+  | statements END                                                { $1 }
 ;
 
 statements:
-  | statement                                { [ $1 ] }
-  | statement statements                     { $1 :: $2 }
+  | statement                                                     { [ $1 ] }
+  | statement statements                                          { $1 :: $2 }
 ;
 
 statement:
-  | IMPORT filename                               { Import($2)     }
-  | ZONE ID LBRACE zone_stms RBRACE               { Zone($2, $4)   }
-  | DEFINE ID rule_stms                           { Define($2, $3) }
+  | IMPORT filename                                               { Import($2)     }
+  | ZONE ID LBRACE zone_stms RBRACE                               { Zone($2, $4)   }
+  | DEFINE ID rule_stms                                           { Define($2, $3) }
   | PROCESS process_type LBRACE rule_stms RBRACE POLICY policy    { Process($2, $4, $7) }
-  | PROCESS process_type LBRACE RBRACE POLICY policy              { Process($2, [], $6) }
 ;
 
 filename:
-  | path SLASH filename { $1 ^ $3 }
-  | path                { $1 }
+  | path SLASH filename                                           { $1 ^ $3 }
+  | path                                                          { $1 }
 ;
 path:
-  | ID DOT path       { $1 ^ "." ^ $3 }
-  | ID                { $1 }
+  | ID DOT path                                                   { $1 ^ "." ^ $3 }
+  | ID                                                            { $1 }
 
 zone_stm:
-  | NETWORK EQ IPv6     { Network($3) }
-  | INTERFACE EQ ID     { Interface($3) }
+  | NETWORK EQ IPv6                                               { Network($3) }
+  | INTERFACE EQ ID                                               { Interface($3) }
 ;
 
 zone_stms:
-  | zone_stm                 { [ $1 ] }
-  | zone_stm SEMI zone_stms  { $1 :: $3 }
+  | zone_stm semi_opt                                             { [ $1 ] }
+  | zone_stm SEMI zone_stms                                       { $1 :: $3 }
+  |                                                               { [] }
 ;
 
-
 process_type:
-  | MANGLE          { MANGLE }
-  | FILTER          { FILTER }
-  | NAT             { NAT }
+  | MANGLE                                                        { MANGLE }
+  | FILTER                                                        { FILTER }
+  | NAT                                                           { NAT }
 ;
 
 rule_stm:
-  | RULE LBRACE rule_stms RBRACE action { Rule($3, $5) }
-  | RULE LBRACE RBRACE action           { Rule([], $4) }
-  | filter_direction filter_stm         { Filter($1, $2) }
-  | STATE EQ state_list                 { State($3) }
-  | PROTOCOL EQ protocol                { Protocol($3) }
+  | RULE LBRACE rule_stms RBRACE action                           { Rule($3, $5) }
+  | filter_direction filter_stm                                   { Filter($1, $2) }
+  | STATE EQ state_list                                           { State($3) }
+  | PROTOCOL EQ protocol                                          { Protocol($3) }
 ;
 
 rule_stms:
-  | rule_stm SEMI            { [ $1 ] }
-  | rule_stm SEMI rule_stms  { $1 :: $3 }
+  | rule_stm semi_opt                                             { [ $1 ] }
+  | rule_stm SEMI rule_stms                                       { $1 :: $3 }
 ;
 
 action:
-  | POLICY policy                   { Policy($2) }
+  | POLICY policy                                                 { Policy($2) }
 
 policy:
-  | ALLOW   { ALLOW }
-  | DENY    { DENY }
-  | REJECT  { REJECT }
+  | ALLOW                                                         { ALLOW }
+  | DENY                                                          { DENY }
+  | REJECT                                                        { REJECT }
 ;
 
 protocol:
-  | TCP     { Ir.TCP }
-  | UDP     { Ir.UDP }
+  | TCP                                                           { Ir.TCP }
+  | UDP                                                           { Ir.UDP }
 
 filter_direction:
-  | SOURCE       { Ir.SOURCE }
-  | DESTINATION  { Ir.DESTINATION }
+  | SOURCE                                                        { Ir.SOURCE }
+  | DESTINATION                                                   { Ir.DESTINATION }
 ;
 
 filter_stm:
-  | PORT EQ int_list  { Port($3) }
-  | IP EQ IPv6        { Ip($3) }
-  | ZONE EQ ID        { FZone($3) }
+  | TCP PORT EQ int_list                                          { TcpPort($4) }
+  | UDP PORT EQ int_list                                          { UdpPort($4) }
+  | IP EQ IPv6                                                    { Ip($3) }
+  | ZONE EQ ID                                                    { FZone($3) }
 ;
 
 state_list:
-  | state                  { [ $1 ] }
-  | state COMMA state_list { $1 :: $3 }
+  | state                                                         { [ $1 ] }
+  | state COMMA state_list                                        { $1 :: $3 }
 
 state:
-  | NEW          { Ir.NEW }
-  | ESTABLISHED  { Ir.ESTABLISHED }
-  | RELATED      { Ir.RELATED }
-  | INVALID      { Ir.INVALID }
+  | NEW                                                           { Ir.NEW }
+  | ESTABLISHED                                                   { Ir.ESTABLISHED }
+  | RELATED                                                       { Ir.RELATED }
+  | INVALID                                                       { Ir.INVALID }
 ;
 
 
 int_list:
-  | INT                { [ $1 ] }
-  | INT COMMA int_list { $1 :: $3 }
+  | INT                                                           { [ $1 ] }
+  | INT COMMA int_list                                            { $1 :: $3 }
 ;
+
+semi_opt:
+  | SEMI                                                          { }
+  |                                                               { }
+
+

@@ -15,7 +15,7 @@ process filter {
         rule { state = new;
                rule { source zone = int; } policy allow;
                rule { source zone = stue; } policy allow;
-               rule { protocol = tcp; destination port = 22,25,80,443,993,53; } policy allow;
-               rule { protocol = udp; destination port = 53; } policy allow;
+               rule { destination tcp port = 22,25,80,443,993,53; } policy allow;
+               rule { destination udp port = 53; source ip = 2001:16d8:dd2d:0:2e0:4cff:fe69:103d; } policy allow;
         } policy deny;
 } policy deny

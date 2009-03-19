@@ -52,10 +52,12 @@ let gen_condition = function
   | State(states) -> "-m conntrack ", ("--ctstate " ^ ( String.concat "," (List.map get_state_name states)))
   | Zone(direction, zone) -> let id, mask = get_zone_id_mask zone direction in
       "-m conmark ", ( sprintf "--mark 0x%04x/0x%04x" id mask )
-  | Port(direction, ports) -> " -m multiport ",
+  | TcpPort(direction, ports) -> " -p tcp -m multiport ",
       ( "--" ^ (choose_dir "source" "destination" direction) ^ "-ports " ^ (String.concat "," (List.map string_of_int ports)) )
-  | Protocol(protocol) -> ("", "-m " ^ (get_protocol_name protocol))
-  | _ -> "", "<unsupported>"
+  | UdpPort(direction, ports) -> " -p udp -m multiport ",
+      ( "--" ^ (choose_dir "source" "destination" direction) ^ "-ports " ^ (String.concat "," (List.map string_of_int ports)) )
+
+  | Protocol(protocol) -> ("", "-p " ^ (get_protocol_name protocol))
 
 let rec gen_conditions conditions =
   (* tuple to a string *)

@@ -25,8 +25,10 @@ let _ =
   let process_list =  List.filter (node_type 2) nodes in
   let filter_chains = List.map Rule.process process_list in
   let filter_ops = List.map ( fun chn -> ([], Ir.Jump(chn)) )  filter_chains in
-    Chain.set { id = Ir.Builtin Ir.INPUT ; rules = input_opers @ filter_ops; comment = "Builtin" };
-    Chain.set { id = Ir.Builtin Ir.OUTPUT ; rules = output_opers @ filter_ops; comment = "Builtin" };
-    Chain.set { id = Ir.Builtin Ir.FORWARD ; rules = forward_opers @ filter_ops; comment = "Builtin" };
+  let _ = Chain.set { id = Ir.Builtin Ir.INPUT ; rules = input_opers @ filter_ops; comment = "Builtin" } in
+  let _ = Chain.set { id = Ir.Builtin Ir.OUTPUT ; rules = output_opers @ filter_ops; comment = "Builtin" } in
+  let _ = Chain.set { id = Ir.Builtin Ir.FORWARD ; rules = forward_opers @ filter_ops; comment = "Builtin" } in
+
+  let _ = Optimize.optimize () in
     List.iter (Printf.printf "%s\n") (Chain.emit Iptables.emit_chain)
 

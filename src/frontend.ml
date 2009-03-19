@@ -12,13 +12,14 @@ type zone_stm = Interface of string
                 | Network of ip
 
 type filter_stm = Ip of ip
-                | Port of int list
+                | TcpPort of int list
+                | UdpPort of int list
                 | FZone of string
 
 type rule_stm = Filter of Ir.direction * filter_stm
               | State of Ir.statetype list
-              | Protocol of Ir.protocol
               | Rule of rule_stm list * action_stm
+              | Protocol of Ir.protocol
 
 type node = Import of string
           | Zone of string * zone_stm list

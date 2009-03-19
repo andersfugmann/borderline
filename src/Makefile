@@ -7,11 +7,14 @@ OCAMLBUILD=ocamlbuild -quiet
 .PHONY: main
 .PHONY: force
 
+test_run: main
+	./main
+
 all: main
 
 force:
 
-%.byte: force 
+%.byte: force
 	$(OCAMLBUILD) $@
 
 main: main.byte
