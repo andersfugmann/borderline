@@ -23,6 +23,9 @@ let reduce rules =
   let rules = back_merge (List.rev rules) in
     List.rev rules
       
+let has_target target rules = 
+  List.exists (fun (c, t) -> t = target) rules
+
 (* inline a list of rules in the given chain *)
 let rec inline_chain chain = function
     (conds, target) :: xs when target = Jump(chain.id) ->
@@ -36,38 +39,35 @@ let rec inline_chain chain = function
       end
   | x :: xs -> x :: inline_chain chain xs
   | [] -> []
+
+let rec find_inlineable_chain = function
+    (* Inline until no works is to be done. *)
+    chain :: xs when List.length chain.rules <= 2 -> 
+      begin
+        match has_target Return chain.rules with
+            false -> Some(chain) (* No return statements present *)
+          | true -> find_inlineable_chain xs
+      end
+        (* Other inline candidates are single referenced chains, that
+           does NOT contain a return. We must be very carefull not to
+           emit returns, or we must find a way to unfold return
+           statements:
+           a -> return; b -> target; c -> target ==> !a ^ b -> target; !a ^ c -> target 
+        *)
+  | x :: xs -> find_inlineable_chain xs
+  | [] -> None
       
-let rec inline chains = 
-  let rec chain_to_inline = function
-      (* Inline until no works is to be done. *)
-      chain :: xs when List.length chain.rules <= 2 -> 
-        begin
-          match List.filter (fun (c, t) -> t = Return) chain.rules with
-              [] -> Some(chain) (* No return statements present *)
-            | _ -> chain_to_inline xs
-        end
-          (* Other inline candidates are single referenced chains, that
-             does NOT contain a return. We must be very carefull not to
-             emit returns, or we must find a way to unfold return
-             statements:
-             a -> return; b -> target; c -> target ==> !a ^ b -> target; !a ^ c -> target 
-           *)
-    | x :: xs -> chain_to_inline xs
-    | [] -> None
-  in
-    match chain_to_inline chains with
-        Some(chain) ->
-          printf "I";
-          let filtered_chains = List.filter (fun chn -> chn.id != chain.id) chains in
-          let mapped = map_chain_rules (inline_chain chain) filtered_chains in
-            inline mapped
-              
-      | None -> chains (* No chains to inline -> Done *)
+let rec inline chains : Chain.chain list = 
+  match find_inlineable_chain chains with
+      Some(chain) ->
+        printf "I";
+        let filtered_chains = List.filter (fun chn -> chn.id != chain.id) chains in
+          inline (map_chain_rules (inline_chain chain) filtered_chains)
+  
+    | None -> chains (* No chains to inline -> Done *)
           
           
-let optimize chains =
-  let chains = map_chain_rules reduce chains in
-  let chains = inline chains in
+let optimize chains : Chain.chain list =
   let chains = map_chain_rules reduce chains in
   let chains = inline chains in
     printf "\nOptimization done\n"; chains
