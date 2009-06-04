@@ -38,10 +38,8 @@ let get chain_id =
 let emit emitter =
   List.flatten ( List.map emitter !chains )
 
-let optimize optimizer =
-  let optim chn = { id = chn.id; rules = optimizer chn.rules; comment = chn.comment }
-  in
-    chains := List.map optim !chains
+let optimize opt  =
+  chains := opt !chains
 
 let fold func acc =
   List.fold_left func acc !chains
