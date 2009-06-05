@@ -18,6 +18,11 @@ let get_chain_name = function
       | OUTPUT  -> "OUTPUT"
       | FORWARD -> "FORWARD"
 
+let is_builtin = function
+    Builtin(_) -> true
+  | _ -> false
+
+
 let create rules comment =
   let id = !next_id in
   let _ = next_id := id + 1 in
