@@ -5,12 +5,16 @@ zone int {
 
 zone stue {
      interface = stue;
+     network = 2001:16d8:dd2d:2:0:0:0:0/64
+}
+
+zone wlan {
+     interface = wlan0;
      network = 2001:16d8:dd2d:1:0:0:0:0/64
 }
 
 zone local {
      interface = lo;
-#     network = 0:0:0:0:0:0:0:1/128
 }
 
 process filter {
@@ -18,9 +22,16 @@ process filter {
         rule { destination zone = local; } policy allow;
         rule { state = related,established; } policy allow;
         rule { state = new;
-               rule { source zone = int; } policy allow;
-               rule { source zone = stue; } policy allow;
                rule { destination tcp port = 22,25,80,443,993,53; } policy allow;
-               rule { destination udp port = 53; source ip = 2001:16d8:dd2d:0:2e0:4cff:fe69:103d; } policy allow;
+               rule { destination udp port = 53; } policy allow;
+               rule { source zone = int; } policy allow;
+               rule { destination zone = int; } policy deny;
+               rule { source zone = stue; } policy allow;
+               rule { source zone = stue; } policy allow; # Dublicate.
+               rule { destination zone = stue; } policy deny;
+               rule { source zone = wlan; 
+                      rule { destination tcp port = 4321; } policy allow;
+               } policy deny;
+               rule { destination zone = wlan; } policy deny;
         } policy deny;
 } policy deny
