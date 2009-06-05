@@ -8,9 +8,14 @@ zone stue {
      network = 2001:16d8:dd2d:1:0:0:0:0/64
 }
 
+zone local {
+     interface = lo;
+#     network = 0:0:0:0:0:0:0:1/128
+}
+
 process filter {
-        rule { source zone = self; } policy allow;
-        rule { destination zone = self; } policy allow;
+        rule { source zone = local; } policy allow;
+        rule { destination zone = local; } policy allow;
         rule { state = related,established; } policy allow;
         rule { state = new;
                rule { source zone = int; } policy allow;

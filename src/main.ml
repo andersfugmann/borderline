@@ -28,7 +28,6 @@ let _ =
   let _ = Chain.set { id = Ir.Builtin Ir.INPUT ; rules = input_opers @ filter_ops; comment = "Builtin" } in
   let _ = Chain.set { id = Ir.Builtin Ir.OUTPUT ; rules = output_opers @ filter_ops; comment = "Builtin" } in
   let _ = Chain.set { id = Ir.Builtin Ir.FORWARD ; rules = forward_opers @ filter_ops; comment = "Builtin" } in
-
   let _ = Chain.optimize Optimize.optimize in
     List.iter (Printf.printf "%s\n") (Chain.emit Iptables.emit_chain)
 
