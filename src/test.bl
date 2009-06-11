@@ -13,6 +13,8 @@ zone wlan {
      network = 2001:16d8:dd2d:1:0:0:0:0/64
 }
 
+# Need a 'self' zone declaration. 
+
 zone local {
      interface = lo;
 }
