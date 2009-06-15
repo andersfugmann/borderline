@@ -16,7 +16,6 @@ let gen_filter dir = function
   | UdpPort(ports) -> Ir.UdpPort(dir, ports)
   | FZone(id) -> Ir.Zone(dir, id)
 
-(* Change the system to use more chains. Chains are easier to inline. *)
 let rec process_rule table (rules, target) =
   let gen_op table target = function
       State(states) -> [( [(Ir.State(states), true)], target)]
@@ -24,6 +23,7 @@ let rec process_rule table (rules, target) =
     | Rule(rls, tg)  -> let chain = process_rule table (rls, tg) in
         [([], Ir.Jump(chain))]
     | Protocol proto -> [( [(Ir.Protocol(proto), true)], target)]
+    | Reference id -> [ ([], Ir.Jump(get_named_chain(id))) ]
 
   in
   let action = gen_action target in
@@ -32,9 +32,9 @@ let rec process_rule table (rules, target) =
     chain.id
 
 let process = function
-    Process(table, rules, policy) -> process_rule table (rules, Policy(policy))
+    Process (table, rules, policy) -> process_rule table (rules, Policy(policy))
+  | Define (id, rules, policy) -> 
+      let chn = process_rule Frontend.FILTER (rules, Policy(policy)) in
+      let chn' = Chain.create_named_chain id [([], Ir.Jump(chn))] id in
+        chn'.id
   | _ -> raise InternalError
-
-
-
-(* Create a chain, and all must match - So If one does not match, do a return (negation) *)

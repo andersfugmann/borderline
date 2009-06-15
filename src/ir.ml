@@ -13,8 +13,10 @@ type zone = string
 type mask = int
 
 type chain_type = INPUT | OUTPUT | FORWARD
+
 type chain_id = Temporary of int
               | Builtin of chain_type
+              | Named of string
 
 type protocol = TCP | UDP | ICMP
 

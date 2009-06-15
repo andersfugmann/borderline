@@ -13,17 +13,15 @@ zone wlan {
      network = 2001:16d8:dd2d:1:0:0:0:0/64
 }
 
-# Need a 'self' zone declaration. 
-
-zone local {
-     interface = lo;
-}
+define web = rule { destination tcp port = 80,443; } policy allow
 
 process filter {
-        rule { source zone = local; } policy allow;
-        rule { destination zone = local; } policy allow;
+        rule { source zone = self; } policy allow;
+        rule { destination zone = self; } policy allow;
+        rule { destination zone = self; } policy allow;
         rule { state = related,established; } policy allow;
         rule { state = new;
+               rule web;
                rule { destination tcp port = 22,25,80,443,993,53; } policy allow;
                rule { destination udp port = 53; } policy allow;
                rule { source zone = int; } policy allow;

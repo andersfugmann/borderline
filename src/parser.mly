@@ -45,7 +45,7 @@ statements:
 statement:
   | IMPORT filename                                               { Import($2)     }
   | ZONE ID LBRACE zone_stms RBRACE                               { Zone($2, $4)   }
-  | DEFINE ID rule_stms                                           { Define($2, $3) }
+  | DEFINE ID EQ RULE LBRACE rule_stms RBRACE POLICY policy       { Define($2, $6, $9) }
   | PROCESS process_type LBRACE rule_stms RBRACE POLICY policy    { Process($2, $4, $7) }
 ;
 
@@ -76,6 +76,7 @@ process_type:
 
 rule_stm:
   | RULE LBRACE rule_stms RBRACE action                           { Rule($3, $5) }
+  | RULE ID                                                       { Reference($2) }
   | filter_direction filter_stm                                   { Filter($1, $2) }
   | STATE EQ state_list                                           { State($3) }
   | PROTOCOL EQ protocol                                          { Protocol($3) }

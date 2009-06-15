@@ -20,8 +20,9 @@ type rule_stm = Filter of Ir.direction * filter_stm
               | State of Ir.statetype list
               | Rule of rule_stm list * action_stm
               | Protocol of Ir.protocol
+              | Reference of string
 
 type node = Import of string
           | Zone of string * zone_stm list
-          | Define of string * rule_stm list
+          | Define of string * rule_stm list * policytype
           | Process of processtype * rule_stm list * policytype

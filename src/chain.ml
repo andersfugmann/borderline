@@ -9,10 +9,12 @@ let chains = ref []
 let cmp_chain_id = function
     Temporary(a), Temporary(b) -> a = b
   | Builtin(a), Builtin(b)     -> a = b
+  | Named(a), Named(b)         -> a = b
   | _, _                       -> false
 
 let get_chain_name = function
     Temporary(id) -> Printf.sprintf "temp_%d" id
+  | Named(id) -> Printf.sprintf "%s" id
   | Builtin(tpe) -> match tpe with
         INPUT   -> "INPUT"
       | OUTPUT  -> "OUTPUT"
@@ -29,6 +31,13 @@ let create rules comment =
   let chn = { id = Temporary(id); rules = rules; comment = comment } in
   let _ = chains := chn :: !chains in
     chn
+
+let create_named_chain id rules comment =
+  let chn = { id = Named(id); rules = rules; comment = comment } in
+  let _ = chains := chn :: !chains in
+    chn
+
+let get_named_chain id = Named(id) (* Should verify that the chain is available *)
 
 let set chain =
 (*  let c = List.filter ( fun chn -> cmp_chain_id (chain.id, chn.id)) !chains in *)

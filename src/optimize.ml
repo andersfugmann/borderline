@@ -47,7 +47,7 @@ let map_chain_rules func chains : Chain.chain list =
 let reduce rules = 
   let rec reduce_rev = function
       (cl1, tg1) as r :: (cl2, tg2) :: xs when tg1 = tg2 && is_subset cl1 cl2 -> 
-              printf "*"; r :: reduce_rev xs              
+        printf "*"; r :: reduce_rev xs              
     | r :: xs -> r :: reduce_rev xs
     | [] -> []
   in
@@ -77,32 +77,35 @@ let rec fold_return_statements chains =
     | [] -> []
 
 (* Move drops to the bottom. This allows improvement to dead code elimination, and helps reduce *)
-type oper = (condition * bool) list * action
 
-let has_common_rule rule1 rule2 =
-  let has_common_match a b = 
-    if cond_type_identical a b then 
-      match (a, b) with
-          Interface (d1, i1), Interface (d2, i2) -> d1 = d2 && i1 = i2 
-        | Zone (d1, z1), Zone (d2, z2) -> d1 = d2 && z1 = z2 
-        | State s1, State s2 -> has_intersection s1 s2
-        | TcpPort (d1, p1), TcpPort (d2, p2) when d1 = d2 -> has_intersection p1 p2
-        | UdpPort (d1, p1), UdpPort (d2, p2) when d1 = d2 -> has_intersection p1 p2
-        | Address (d1, a1), Address (d2, a2) -> false (* We dont has ip intersection yet *)
-        | Protocol p1, Protocol p2 -> p1 = p2
-        | _ -> raise ImpossibleState
-    else 
-      false
-  in    
-    match (rule1, rule2) with
-        ((cond1, neg1), (cond2, neg2)) when neg1 = neg2 -> has_common_match cond1 cond2
-      | _ -> false
+let rec reorder rules =
+  (* From two lists, create pairs that of the same id *)
+  let rec find_intersection cond_list = function
+      (cond, neg) :: xs -> 
+        begin
+          try 
+            let (cond', neg') = List.find (fun (cond', _) -> cond_type_identical cond cond') cond_list in
+              ((cond, neg), (cond', neg')) :: find_intersection cond_list xs
+          with not_found -> find_intersection cond_list xs
+        end
+    | [] -> []
 
-let rec reorder rules = 
-  let has_intersection cl1 cl2 = 
-    let exists cond cond_list = List.exists (fun cond' -> has_common_rule cond cond') cond_list in
-      List.exists (fun cond -> exists cond cl2) cl1
   in
+  let exclusive = function
+      (cond, neg), (cond', neg') when neg != neg' -> cond = cond' 
+    | (Interface (dir, i), _), (Interface (dir', i'), _) when dir = dir' -> i != i'
+    | (State s1, _), (State s2, _) -> not (has_intersection s1 s2)
+    | (TcpPort (dir, ports), _), (TcpPort (dir', ports'), _) when dir = dir' -> not (has_intersection ports ports')
+    | (UdpPort (dir, ports), _), (UdpPort (dir', ports'), _) when dir = dir' -> not (has_intersection ports ports')
+    | (Address (dir, addr), _), (Address (dir', addr'), _) when dir = dir' -> false (* We dont has ip intersection yet *)
+    | (Protocol proto, _), (Protocol proto', _) -> proto != proto'
+    | _ -> false
+  in
+  let can_reorder cl1 cl2 = 
+    let intersection = find_intersection cl1 cl2 in
+      List.exists exclusive intersection
+  in
+    
   let order = function
       Notrack -> 1
     | Return -> 2
@@ -113,7 +116,7 @@ let rec reorder rules =
     | Drop -> 7
   in
   let should_reorder_rules (cl1, act1) (cl2, act2) = 
-    order act1 > order act2 && not (has_intersection cl1 cl2)
+    order act1 > order act2 && can_reorder cl1 cl2
   in
   let rec reorder_rules = function
       rule1 :: rule2 :: xs when should_reorder_rules rule1 rule2 -> 
@@ -179,24 +182,16 @@ let rec count_rules = function
     chain :: xs -> List.length chain.rules + count_rules xs
   | [] -> 0
 
-(*
-      ( 
-        (List.length chain.rules <= 2) || (chain_reference_count chain.id chains = 1)
-      )
-*)
-        
-let optimize_pass chains: Chain.chain list = 
-  let _ = printf "Rules: %d -" (count_rules chains) in
+let optimize_pass chains: Chain.chain list =   let _ = printf "Rules: %d " (count_rules chains) in
   let chains' = chains in
   let chains' = fold_return_statements chains' in
-  let chains' = inline (fun _ c -> List.length c.rules <= 2) chains' in
-  let chains' = map_chain_rules reduce chains' in
-  let chains' = map_chain_rules reorder chains' in
-  (* let chains' = map_chain_rules merge_rules chains' in *)
   let chains' = map_chain_rules eliminate_dead_rules chains' in
   let chains' = map_chain_rules eliminate_dublicate_rules chains' in
+  let chains' = inline (fun _ c -> List.length c.rules <= 2) chains' in
   let chains' = inline (fun cs c -> chain_reference_count c.id cs = 1 && List.length c.rules < 3) chains' in
-  let _ = printf "- %d\n" (count_rules chains') in
+  let chains' = map_chain_rules reorder chains' in
+  let chains' = map_chain_rules reduce chains' in
+  let _ = printf " %d\n" (count_rules chains') in
     chains'
   
 let rec optimize chains : Chain.chain list =
