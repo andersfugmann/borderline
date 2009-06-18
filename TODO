@@ -1,0 +1,8 @@
+All ID's needs file and line.
+Better error description if syntax error
+Automatic call to zone chains (require a define eq the zone name). Also call a local chain (packets entering the firewall itself.)
+Create a special construct 'all zones' which expands to ([], Jump (Named(zone_name))),...
+
+
+
+
