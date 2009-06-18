@@ -1,3 +1,5 @@
+import "./test"
+
 zone int {
      interface = int;
      network = 2001:16d8:dd2d:0:0:0:0:0/64
@@ -12,8 +14,6 @@ zone wlan {
      interface = wlan0;
      network = 2001:16d8:dd2d:1:0:0:0:0/64
 }
-
-define web = rule { destination tcp port = 80,443; } policy allow
 
 process filter {
         rule { source zone = self; } policy allow;

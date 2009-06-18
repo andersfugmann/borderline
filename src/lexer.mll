@@ -83,6 +83,7 @@ rule token = parse
     }
   | ['0'-'9']+ as lxm { INT(int_of_string lxm) }
   | ['a'-'z''A'-'Z''_']?['a'-'z''A'-'Z''0'-'9''_']+ as lxm { ID(lxm) }
+  | ['"'](['0'-'9''a'-'z''.''/']+ as str)['"'] { STRING(str) }
 
 (* Simple tokens *)
   | '{'            { LBRACE }
@@ -94,7 +95,7 @@ rule token = parse
   | '/'            { SLASH }
   | '='            { EQ }
   | ';'            { SEMI }
-  | "#"            { comment lexbuf; token lexbuf }
+  | '#'            { comment lexbuf; token lexbuf }
   | eof            { END }
   | _              { raise (Lexer_error !lineno) }
 
@@ -102,4 +103,3 @@ and comment = parse
     '\n'           { new_line lexbuf }
   | eof            { }
   | _              { comment lexbuf }
-

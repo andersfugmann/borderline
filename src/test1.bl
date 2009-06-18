@@ -1,5 +1,0 @@
-import test.bl
-zone test2 {
-     interface = eth2
-     network = fa:10af::46/56
-}

@@ -26,6 +26,7 @@
 %token <int> INT
 %token <string> ID
 %token <int list * int> IPv6
+%token <string> STRING
 
 %token LBRACE RBRACE COMMA DOT COLON DCOLON SLASH END
 
@@ -43,19 +44,11 @@ statements:
 ;
 
 statement:
-  | IMPORT filename                                               { Import($2)     }
+  | IMPORT STRING                                                 { Import($2) }
   | ZONE ID LBRACE zone_stms RBRACE                               { Zone($2, $4)   }
   | DEFINE ID EQ RULE LBRACE rule_stms RBRACE POLICY policy       { Define($2, $6, $9) }
   | PROCESS process_type LBRACE rule_stms RBRACE POLICY policy    { Process($2, $4, $7) }
 ;
-
-filename:
-  | path SLASH filename                                           { $1 ^ $3 }
-  | path                                                          { $1 }
-;
-path:
-  | ID DOT path                                                   { $1 ^ "." ^ $3 }
-  | ID                                                            { $1 }
 
 zone_stm:
   | NETWORK EQ IPv6                                               { Network($3) }
@@ -63,9 +56,9 @@ zone_stm:
 ;
 
 zone_stms:
-  | zone_stm semi_opt                                             { [ $1 ] }
   | zone_stm SEMI zone_stms                                       { $1 :: $3 }
-  |                                                               { [] }
+  | zone_stm SEMI                                                 { [ $1 ] }
+  | zone_stm                                                      { [ $1 ] }
 ;
 
 process_type:
@@ -83,8 +76,9 @@ rule_stm:
 ;
 
 rule_stms:
-  | rule_stm semi_opt                                             { [ $1 ] }
   | rule_stm SEMI rule_stms                                       { $1 :: $3 }
+  | rule_stm SEMI                                                 { [ $1 ] }
+  | rule_stm                                                      { [ $1 ] }
 ;
 
 action:
@@ -128,9 +122,5 @@ int_list:
   | INT                                                           { [ $1 ] }
   | INT COMMA int_list                                            { $1 :: $3 }
 ;
-
-semi_opt:
-  | SEMI                                                          { }
-  |                                                               { }
 
 
