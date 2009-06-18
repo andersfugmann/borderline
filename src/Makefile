@@ -2,7 +2,7 @@
 # Copyright Anders Fugmann
 #
 
-OCAMLBUILD=ocamlbuild -quiet -lflag unix.cma -lflag str.cma
+OCAMLBUILD=ocamlbuild -cflags -g -quiet -lflag unix.cma -lflag str.cma
 
 .PHONY: main
 .PHONY: force

@@ -76,8 +76,39 @@ let rec fold_return_statements chains =
           { id = chn.id; rules = rules; comment = chn.comment } :: fold_return_statements (chn' @ xs)
     | [] -> []
 
-(* Move drops to the bottom. This allows improvement to dead code elimination, and helps reduce *)
+module Chain_set = Set.Make (struct
+                               type t = Ir.chain_id
+                               let compare = Chain.compare
+                             end)
 
+let remove_unreferenced_chains chains =
+(* This function visits all reachable chains, and removed all unvisited chains. *)
+
+  let rec get_chain_references = function 
+      (_, Jump chn_id) :: xs -> chn_id :: get_chain_references xs
+    | x :: xs -> get_chain_references xs
+    | [] -> []
+  in
+  let find_chain_opers id = 
+    try
+      let chn = List.find (fun chn -> chn.id = id) chains in
+        chn.rules
+    with Not_found -> []
+  in
+  let rec visit visited = function
+      chn_id :: xs when not (Chain_set.mem chn_id visited) -> 
+        let visited = visit (Chain_set.add chn_id visited) (get_chain_references (find_chain_opers chn_id)) in
+          visit visited xs
+    | x :: xs -> visit visited xs
+    | [] -> visited
+  in
+  let build_in_chains = List.map (fun chn -> chn.id) (List.filter (fun chn -> Chain.is_builtin chn.id) chains) in
+  let referenced_chains = visit Chain_set.empty build_in_chains in
+
+    List.filter (fun chn -> Chain_set.mem chn.id referenced_chains) chains  
+
+
+(* Move drops to the bottom. This allows improvement to dead code elimination, and helps reduce *)
 let rec reorder rules =
   (* From two lists, create pairs that of the same id *)
   let rec find_intersection cond_list = function
@@ -191,6 +222,7 @@ let optimize_pass chains: Chain.chain list =   let _ = printf "Rules: %d " (coun
   let chains' = inline (fun cs c -> chain_reference_count c.id cs = 1 && List.length c.rules < 3) chains' in
   let chains' = map_chain_rules reorder chains' in
   let chains' = map_chain_rules reduce chains' in
+  let chains' = remove_unreferenced_chains chains' in
   let _ = printf " %d\n" (count_rules chains') in
     chains'
   

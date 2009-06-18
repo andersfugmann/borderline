@@ -2,7 +2,8 @@ open Common
 open Frontend
 open Chain
 
-let self = "Self"
+let self = "self"
+let all_zones = "zones"
 
 let gen_oper target op_func cond =
   ([(op_func cond, false)], target)
@@ -32,6 +33,7 @@ let emit_zones zone_list =
   let dst_chains = List.map (create_zone_chain Ir.DESTINATION) zone_list in
   let src_chain = Chain.create (List.map (fun chn -> ([], Ir.Jump chn.id)) src_chains) "Mark source zones" in
   let dst_chain = Chain.create (List.map (fun chn -> ([], Ir.Jump chn.id)) dst_chains) "Mark destination zones" in
+  let _ = Chain.create_named_chain all_zones (List.map (fun z -> let Zone(id,_) = z in ([(Ir.Zone(Ir.DESTINATION, id), false)], Ir.Jump (get_named_chain id)) ) zone_list) "automatic chain" in
 
   let input_opers = [ [], Ir.MarkZone (Ir.DESTINATION, self); [], Ir.Jump src_chain.id  ] in
   let output_opers = [ [], Ir.MarkZone (Ir.SOURCE, self); [], Ir.Jump dst_chain.id ] in

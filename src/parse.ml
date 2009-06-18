@@ -12,6 +12,11 @@ let exlude_regex = [ regexp "^.*[~]$"; regexp "^[.].*$" ]
 
 let imported = ref []
 
+let parse file = 
+  let lexbuf = Lexing.from_channel (open_in file) in
+    lexbuf.Lexing.lex_curr_p <- { lexbuf.Lexing.lex_curr_p with Lexing.pos_fname = file; };
+    Parser.main Lexer.token lexbuf
+
 let exclude_file file = 
   List.exists (fun regex -> string_match regex file 0) exlude_regex
   
@@ -21,7 +26,7 @@ let rec parse_file file =
       true -> [ ]
     | false    ->
         imported := full_path :: !imported;
-        expand (Parser.main Lexer.token (Lexing.from_channel (open_in full_path)))
+        expand (parse full_path)
 
 and include_path dir_handle =
   try 

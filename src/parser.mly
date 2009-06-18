@@ -1,4 +1,4 @@
-/* FCS - Firewall compiler suite
+/* Borderline firewall
  * Copyright Anders Fugmann
  */
 %{
@@ -8,17 +8,19 @@
   open Lexing
 
   let parse_error s =
-    let pos = Parsing.symbol_end_pos () in
-    let file = "test.bl" in
-      printf "File \"%s\", line %d, character %d:\n" file pos.pos_lnum (pos.pos_cnum - pos.pos_bol + 1);
-      printf "Unexpected token\n"
+    let pos_end = Parsing.symbol_end_pos () in
+    let pos_start = Parsing.symbol_start_pos () in
+    let c_end = pos_end.pos_cnum - pos_end.pos_bol + 1 in
+    let c_start = pos_start.pos_cnum - pos_start.pos_bol + 1 in
+      printf "File \"%s\", line %d, character %d-%d:\n" pos_end.pos_fname pos_end.pos_lnum c_start c_end;
+      printf "%s\n" s        
 %}
 
 %token ZONE PROCESS RULE DEFINE IMPORT
 %token NETWORK INTERFACE
 %token MANGLE FILTER NAT
 %token POLICY ALLOW DENY REJECT
-%token SOURCE DESTINATION PORT IP STATE
+%token SOURCE DESTINATION PORT IP STATE CALL
 %token NEW ESTABLISHED RELATED INVALID
 %token START EQ ENDL SEMI PROTOCOL
 %token TCP UDP ICMP
@@ -69,7 +71,7 @@ process_type:
 
 rule_stm:
   | RULE LBRACE rule_stms RBRACE action                           { Rule($3, $5) }
-  | RULE ID                                                       { Reference($2) }
+  | CALL ID                                                       { Reference($2) }
   | filter_direction filter_stm                                   { Filter($1, $2) }
   | STATE EQ state_list                                           { State($3) }
   | PROTOCOL EQ protocol                                          { Protocol($3) }

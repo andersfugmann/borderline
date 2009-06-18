@@ -1,37 +1,8 @@
 import "./test"
 
-zone int {
-     interface = int;
-     network = 2001:16d8:dd2d:0:0:0:0:0/64
-}
-
-zone stue {
-     interface = stue;
-     network = 2001:16d8:dd2d:2:0:0:0:0/64
-}
-
-zone wlan {
-     interface = wlan0;
-     network = 2001:16d8:dd2d:1:0:0:0:0/64
-}
+define self = rule { rule { source zone = self; } policy allow } policy deny
 
 process filter {
-        rule { source zone = self; } policy allow;
-        rule { destination zone = self; } policy allow;
-        rule { destination zone = self; } policy allow;
-        rule { state = related,established; } policy allow;
-        rule { state = new;
-               rule web;
-               rule { destination tcp port = 22,25,80,443,993,53; } policy allow;
-               rule { destination udp port = 53; } policy allow;
-               rule { source zone = int; } policy allow;
-               rule { destination zone = int; } policy deny;
-               rule { source zone = stue; } policy allow;
-               rule { source zone = stue; } policy allow; # Dublicate.
-               rule { destination zone = stue; } policy deny;
-               rule { source zone = wlan; 
-                      rule { destination tcp port = 4321; } policy allow;
-               } policy deny;
-               rule { destination zone = wlan; } policy deny;
-        } policy deny;
+        rule { state = related, established; } policy allow;
+        rule { state = new; call zones; } policy deny;
 } policy deny

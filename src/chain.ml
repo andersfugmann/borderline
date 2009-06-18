@@ -24,6 +24,8 @@ let is_builtin = function
     Builtin(_) -> true
   | _ -> false
 
+let compare a b =
+  String.compare (get_chain_name a) (get_chain_name b)
 
 let create rules comment =
   let id = !next_id in

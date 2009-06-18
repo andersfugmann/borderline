@@ -51,6 +51,7 @@ rule token = parse
   | "port"         { Parser.PORT }
   | "state"        { Parser.STATE }
   | "ip"           { Parser.IP }
+  | "call"         { Parser.CALL }
 
 (* State types *)
   | "new"          { Parser.NEW }
