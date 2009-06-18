@@ -1,0 +1,22 @@
+zone int {
+     interface = int;
+     network = 2001:16d8:dd2d:0:0:0:0:0/64
+}
+# Move this to the zone definition.
+define web = rule { destination tcp port = 80,443; } policy allow
+
+define int = rule {
+                 rule { destination tcp port = 22,25,80,443,993,53; } policy allow;
+                 rule { destination udp port = 53; } policy allow;
+                 rule { source zone = stue; } policy allow;
+                 rule { source zone = stue; } policy allow; # Dublicate.
+                 rule { destination zone = stue; } policy deny;
+                 rule { source zone = wlan; 
+                      rule { destination tcp port = 4321; } policy allow;
+                 } policy deny
+             } policy deny
+
+
+
+
+
