@@ -31,7 +31,7 @@ let cond_type_identical cond1 cond2 =
     | Protocol _  -> 7
   in 
     enumerate_condition cond1 = enumerate_condition cond2
-      
+
 let rec chain_reference_count id chains = 
   let filter id = function (_, Jump chn_id) when chn_id = id -> true | _ -> false in
     match chains with
@@ -40,7 +40,7 @@ let rec chain_reference_count id chains =
       | [] -> 0
 
 (* Optimize rules in each chain. No chain insertion or removal is possible *)
-let map_chain_rules func chains : Chain.chain list =
+let map_chain_rules func chains : Ir.chain list =
   List.map (fun chn -> { id = chn.id; rules = func chn.rules; comment = chn.comment } ) chains
 
 (* Merge two rules that points to the same target is rule a is a subset of rule b. *)
@@ -163,7 +163,7 @@ let rec reorder rules =
     else reorder rules'
       
 (* Inline chains for which expr evaluates true *)
-let rec inline expr chains : Chain.chain list =
+let rec inline expr chains : Ir.chain list =
   let has_target target rules =
     List.exists (fun (c, t) -> t = target) rules
   in
@@ -213,20 +213,20 @@ let rec count_rules = function
     chain :: xs -> List.length chain.rules + count_rules xs
   | [] -> 0
 
-let optimize_pass chains: Chain.chain list =   let _ = printf "Rules: %d " (count_rules chains) in
+let optimize_pass chains: Ir.chain list =   let _ = printf "Rules: %d " (count_rules chains) in
   let chains' = chains in
   let chains' = fold_return_statements chains' in
   let chains' = map_chain_rules eliminate_dead_rules chains' in
   let chains' = map_chain_rules eliminate_dublicate_rules chains' in
   let chains' = inline (fun _ c -> List.length c.rules <= 2) chains' in
   let chains' = inline (fun cs c -> chain_reference_count c.id cs = 1 && List.length c.rules < 3) chains' in
-  let chains' = map_chain_rules reorder chains' in
-  let chains' = map_chain_rules reduce chains' in
-  let chains' = remove_unreferenced_chains chains' in
+  (* let chains' = map_chain_rules reorder chains' in *)
+  (* let chains' = map_chain_rules reduce chains' in *)
+  (* let chains' = remove_unreferenced_chains chains' in *) 
   let _ = printf " %d\n" (count_rules chains') in
     chains'
   
-let rec optimize chains : Chain.chain list =
+let rec optimize chains : Ir.chain list =
   let chains' = optimize_pass chains in
     if count_rules chains' != count_rules chains then optimize chains'
     else (

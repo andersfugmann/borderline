@@ -1,9 +1,8 @@
 (* Handle chains, and hold all packet operations *)
+open Common
 open Ir
 
-type chain = { id: chain_id; rules : oper list; comment: string; }
 let next_id = ref 0
-
 let chains = ref []
 
 let cmp_chain_id = function
@@ -14,7 +13,7 @@ let cmp_chain_id = function
 
 let get_chain_name = function
     Temporary(id) -> Printf.sprintf "temp_%d" id
-  | Named(id) -> Printf.sprintf "%s" id
+  | Named(name) -> Printf.sprintf "%s" name
   | Builtin(tpe) -> match tpe with
         INPUT   -> "INPUT"
       | OUTPUT  -> "OUTPUT"
@@ -27,23 +26,21 @@ let is_builtin = function
 let compare a b =
   String.compare (get_chain_name a) (get_chain_name b)
 
+let set chain =
+(*  let c = List.filter ( fun chn -> cmp_chain_id (chain.id, chn.id)) !chains in *)
+  chains := chain :: !chains; chain
+
 let create rules comment =
   let id = !next_id in
   let _ = next_id := id + 1 in
-  let chn = { id = Temporary(id); rules = rules; comment = comment } in
-  let _ = chains := chn :: !chains in
-    chn
+  set { Ir.id = Temporary(id); rules = rules; comment = comment } 
+
+let get_named_chain (id, _) = Named(id)
 
 let create_named_chain id rules comment =
-  let chn = { id = Named(id); rules = rules; comment = comment } in
-  let _ = chains := chn :: !chains in
-    chn
-
-let get_named_chain id = Named(id) (* Should verify that the chain is available *)
-
-let set chain =
-(*  let c = List.filter ( fun chn -> cmp_chain_id (chain.id, chn.id)) !chains in *)
-    chains := chain :: !chains
+  let chain_id = get_named_chain id in
+  (* if List.exists (fun chn -> chn.id = chain_id) !chains then raise (ParseError ("Dublicate id's defined", id)); *)
+    set { id = chain_id; rules = rules; comment = comment }
 
 let delete chain_id =
   chains := List.filter (fun chain -> chain.id != chain_id) !chains

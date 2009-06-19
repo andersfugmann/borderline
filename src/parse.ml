@@ -12,7 +12,8 @@ let exlude_regex = [ regexp "^.*[~]$"; regexp "^[.].*$" ]
 
 let imported = ref []
 
-let parse file = 
+let parse file =
+  Printf.printf "Parse: %s\n" file;
   let lexbuf = Lexing.from_channel (open_in file) in
     lexbuf.Lexing.lex_curr_p <- { lexbuf.Lexing.lex_curr_p with Lexing.pos_fname = file; };
     Parser.main Lexer.token lexbuf
@@ -36,19 +37,14 @@ and include_path dir_handle =
   with End_of_file -> []
         
 and expand = function
-    Import(path) :: xs when is_dir path ->
+    Import(path, _) :: xs when is_dir path ->
       let dir = Unix.opendir path in
       let prev_dir = Unix.getcwd () in
       let _ = Unix.chdir path in
       let res = include_path dir in
       let _ = Unix.chdir prev_dir in
         res @ expand xs
-  | Import(file) :: xs when not (is_dir file) ->
+  | Import(file, _) :: xs when not (is_dir file) ->
       parse_file file @ expand xs
   | x :: xs -> x :: expand xs
   | [ ] -> [ ]
-
-let parse file = 
-  let res = parse_file file in
-    List.iter (fun f -> Printf.printf "included: %s\n" f) !imported;
-    res

@@ -20,21 +20,21 @@ let rec process_rule table (rules, target) =
   let gen_op table target = function
       State(states) -> [( [(Ir.State(states), true)], target)]
     | Filter(dir, stm) -> [( [(gen_filter dir stm, true)], target )]
-    | Rule(rls, tg)  -> let chain = process_rule table (rls, tg) in
-        [([], Ir.Jump(chain))]
+    | Rule(rls, tg)  -> let chain = process_rule table (rls, tg) in [([], Ir.Jump(chain))]
     | Protocol proto -> [( [(Ir.Protocol(proto), true)], target)]
-    | Reference id -> [ ([], Ir.Jump(get_named_chain(id))) ]
+    | Reference id -> [ ([], Ir.Jump(get_named_chain id)) ]
 
   in
   let action = gen_action target in
   let opers = List.flatten (List.map ( gen_op table Ir.Return) rules) in
   let chain = Chain.create (opers @ [ ([], action) ]) "Rule" in
-    chain.id
+    chain.Ir.id
 
 let process = function
     Process (table, rules, policy) -> process_rule table (rules, Policy(policy))
   | Define (id, rules, policy) -> 
+      Printf.printf "Got define: %s\n" (id2str id);
       let chn = process_rule Frontend.FILTER (rules, Policy(policy)) in
-      let chn' = Chain.create_named_chain id [([], Ir.Jump(chn))] id in
-        chn'.id
+      let chn' = Chain.create_named_chain id [([], Ir.Jump(chn))] (id2str id) in
+        chn'.Ir.id
   | _ -> raise InternalError

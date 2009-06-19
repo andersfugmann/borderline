@@ -48,9 +48,9 @@ let get_protocol_name = function
 (* Return a prefix and condition, between which a negation can be inserted *)
 let gen_condition = function
     Address(direction, ip) -> "", ((choose_dir "--source " "--destination " direction) ^ (ip_to_string ip))
-  | Interface(direction, name) -> ("", (choose_dir "--in-interface " "--out-interface " direction) ^ name)
+  | Interface(direction, name) -> ("", (choose_dir "--in-interface " "--out-interface " direction) ^ (id2str name))
   | State(states) -> "-m conntrack ", ("--ctstate " ^ ( String.concat "," (List.map get_state_name states)))
-  | Zone(direction, zone) -> let id, mask = get_zone_id_mask zone direction in
+  | Zone(direction, zone) -> let id, mask = get_zone_id_mask (id2str zone) direction in
       "-m conmark ", ( sprintf "--mark 0x%04x/0x%04x" id mask )
   | TcpPort(direction, ports) -> " -p tcp -m multiport ",
       ( "--" ^ (choose_dir "source" "destination" direction) ^ "-ports " ^ (String.concat "," (List.map string_of_int ports)) )
@@ -69,7 +69,7 @@ let rec gen_conditions conditions =
 
 let gen_action = function
     MarkZone(direction, zone) ->
-      let id, mask = get_zone_id_mask zone direction in
+      let id, mask = get_zone_id_mask (id2str zone) direction in
         sprintf "-j MARK --set-mark 0x%04x/0x%04x" id mask
   | Jump(chain_id) -> "-j " ^ (Chain.get_chain_name chain_id)
   | Return -> "-j RETURN"

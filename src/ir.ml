@@ -9,7 +9,7 @@ open Common
 
 type statetype = NEW | ESTABLISHED | RELATED | INVALID
 
-type zone = string
+type zone = id
 type mask = int
 
 type chain_type = INPUT | OUTPUT | FORWARD
@@ -34,7 +34,7 @@ type icmp_packet = ICMP_NET_UNREACHABLE | ICMP_HOST_UNREACHABLE
                    | ICMP_ADMIN_PROHIBITED | TCP_RESET
 
 
-type condition = Interface of direction * string
+type condition = Interface of direction * id
                | Zone of direction * zone
                | State of statetype list
                | TcpPort of direction * int list
@@ -53,3 +53,6 @@ type action = Jump of chain_id
 type op = AND | OR
 
 type oper = (condition * bool) list * action
+
+type chain = { id: chain_id; rules : oper list; comment: string; }
+

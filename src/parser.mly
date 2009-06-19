@@ -26,9 +26,9 @@
 %token TCP UDP ICMP
 
 %token <int> INT
-%token <string> ID
+%token <string * Lexing.position> ID
 %token <int list * int> IPv6
-%token <string> STRING
+%token <string * Lexing.position> STRING
 
 %token LBRACE RBRACE COMMA DOT COLON DCOLON SLASH END
 
