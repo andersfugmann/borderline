@@ -1,5 +1,3 @@
-All ID's needs file and line.
-Better error description when an syntax error is encountered. 
 Test for cyclic references 
 Test all id's for validity (does the zones and chains exist?).
 Require one rule for each zone definition.
