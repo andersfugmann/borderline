@@ -48,7 +48,7 @@ statements:
 statement:
   | IMPORT STRING                                                 { Import($2) }
   | ZONE ID LBRACE zone_stms RBRACE                               { Zone($2, $4)   }
-  | DEFINE ID EQ RULE LBRACE rule_stms RBRACE POLICY policy       { Define($2, $6, $9) }
+  | DEFINE ID EQ rule_stms                                        { Define($2, $4) }
   | PROCESS process_type LBRACE rule_stms RBRACE POLICY policy    { Process($2, $4, $7) }
 ;
 
@@ -79,13 +79,12 @@ rule_stm:
 
 rule_stms:
   | rule_stm SEMI rule_stms                                       { $1 :: $3 }
-  | rule_stm SEMI                                                 { [ $1 ] }
   | rule_stm                                                      { [ $1 ] }
+  |                                                               { [] }
 ;
 
 action:
   | POLICY policy                                                 { Policy($2) }
-
 policy:
   | ALLOW                                                         { ALLOW }
   | DENY                                                          { DENY }
@@ -124,5 +123,3 @@ int_list:
   | INT                                                           { [ $1 ] }
   | INT COMMA int_list                                            { $1 :: $3 }
 ;
-
-

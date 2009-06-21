@@ -2,13 +2,13 @@
 # Copyright Anders Fugmann
 #
 
-OCAMLBUILD=ocamlbuild -cflags -g -quiet -lflag unix.cma -lflag str.cma
+OCAMLBUILD=ocamlbuild -cflags -g -lflag -g -quiet -lflag unix.cma -lflag str.cma
 
 .PHONY: main
 .PHONY: force
 
 test_run: main
-	./main
+	OCAMLRUNPARAM=b ./main
 
 all: main
 

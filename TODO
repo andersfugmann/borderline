@@ -1,6 +1,7 @@
-Test for cyclic references 
-Test all id's for validity (does the zones and chains exist?).
+Optimize identical chains. 
 Require one rule for each zone definition.
+Move implementation to .ml and types to .mli
+
 
 
 

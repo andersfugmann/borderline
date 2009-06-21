@@ -3,6 +3,6 @@ zone stue {
      network = 2001:16d8:dd2d:2:0:0:0:0/64
 }
 
-#define stue = rule { } policy allow
+define stue = rule { } policy allow
 
 

@@ -42,9 +42,6 @@ let create_named_chain id rules comment =
   (* if List.exists (fun chn -> chn.id = chain_id) !chains then raise (ParseError ("Dublicate id's defined", id)); *)
     set { id = chain_id; rules = rules; comment = comment }
 
-let delete chain_id =
-  chains := List.filter (fun chain -> chain.id != chain_id) !chains
-
 let get chain_id =
   List.find ( fun chn -> cmp_chain_id (chain_id, chn.id) ) !chains
 

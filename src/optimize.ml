@@ -18,7 +18,7 @@ let is_subset a b =
   intersection a b = a
  
 let has_intersection a b =
-  intersection a b != []
+  not (intersection a b = [])
 
 let cond_type_identical cond1 cond2 = 
   let enumerate_condition = function
@@ -123,13 +123,13 @@ let rec reorder rules =
 
   in
   let exclusive = function
-      (cond, neg), (cond', neg') when neg != neg' -> cond = cond' 
-    | (Interface (dir, i), _), (Interface (dir', i'), _) when dir = dir' -> i != i'
+      (cond, neg), (cond', neg') when not (neg = neg') -> cond = cond' 
+    | (Interface (dir, i), _), (Interface (dir', i'), _) when dir = dir' -> not (i = i')
     | (State s1, _), (State s2, _) -> not (has_intersection s1 s2)
     | (TcpPort (dir, ports), _), (TcpPort (dir', ports'), _) when dir = dir' -> not (has_intersection ports ports')
     | (UdpPort (dir, ports), _), (UdpPort (dir', ports'), _) when dir = dir' -> not (has_intersection ports ports')
     | (Address (dir, addr), _), (Address (dir', addr'), _) when dir = dir' -> false (* We dont has ip intersection yet *)
-    | (Protocol proto, _), (Protocol proto', _) -> proto != proto'
+    | (Protocol proto, _), (Protocol proto', _) -> not (proto = proto')
     | _ -> false
   in
   let can_reorder cl1 cl2 = 
@@ -220,15 +220,15 @@ let optimize_pass chains: Ir.chain list =   let _ = printf "Rules: %d " (count_r
   let chains' = map_chain_rules eliminate_dublicate_rules chains' in
   let chains' = inline (fun _ c -> List.length c.rules <= 2) chains' in
   let chains' = inline (fun cs c -> chain_reference_count c.id cs = 1 && List.length c.rules < 3) chains' in
-  (* let chains' = map_chain_rules reorder chains' in *)
-  (* let chains' = map_chain_rules reduce chains' in *)
-  (* let chains' = remove_unreferenced_chains chains' in *) 
+  let chains' = map_chain_rules reorder chains' in
+  let chains' = map_chain_rules reduce chains' in
+  let chains' = remove_unreferenced_chains chains' in 
   let _ = printf " %d\n" (count_rules chains') in
     chains'
   
 let rec optimize chains : Ir.chain list =
   let chains' = optimize_pass chains in
-    if count_rules chains' != count_rules chains then optimize chains'
+    if not (count_rules chains' = count_rules chains) then optimize chains'
     else (
       printf "\nOptimization done\n"; 
       chains')

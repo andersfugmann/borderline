@@ -5,6 +5,9 @@ open Chain
 let self = ("self", Lexing.dummy_pos)
 let all_zones = ("zones", Lexing.dummy_pos)
 let loopback = ("lo", Lexing.dummy_pos)
+
+let self_zone = Zone (self, [Interface loopback])
+
 let gen_oper target op_func cond =
   ([(op_func cond, false)], target)
 
@@ -35,7 +38,7 @@ let rec filter = function
   | [] -> []
 
 let emit zones =
-  let zones = (self, [ Interface(loopback) ]) :: zones in
+  let zones = zones in
   let src_chains = List.map (create_zone_chain Ir.SOURCE) zones in
   let dst_chains = List.map (create_zone_chain Ir.DESTINATION) zones in
   let src_chain = Chain.create (List.map (fun chn -> ([], Ir.Jump chn.Ir.id)) src_chains) "Mark source zones" in
