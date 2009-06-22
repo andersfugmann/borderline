@@ -38,7 +38,7 @@ let node_type id = function
   | Define _ -> 3 = id
   | _ -> false
       
-let rules_fold_left func acc nodes = 
+let rules_fold func nodes acc = 
   let rec traverse_rules acc = function 
     | Rule (rules, _) :: xs -> traverse_rules acc ( rules @ xs)
     | x :: xs -> traverse_rules (func acc x) xs 
@@ -54,7 +54,7 @@ let rules_fold_left func acc nodes =
 let map_rules func nodes = 
   let rec traverse_rules = function 
     | Rule (rules, p) :: xs -> Rule ((traverse_rules rules), p) :: (traverse_rules xs)
-    | x :: xs -> (func x) :: traverse_rules xs
+    | x :: xs -> (func x) @ traverse_rules xs
     | [] -> []
   in
   let rec traverse_nodes = function

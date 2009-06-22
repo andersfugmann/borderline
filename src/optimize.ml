@@ -213,7 +213,7 @@ let rec count_rules = function
     chain :: xs -> List.length chain.rules + count_rules xs
   | [] -> 0
 
-let optimize_pass chains: Ir.chain list =   let _ = printf "Rules: %d " (count_rules chains) in
+let optimize_pass chains: Ir.chain list =   let _ = printf "Optim: %d " (count_rules chains) in
   let chains' = chains in
   let chains' = fold_return_statements chains' in
   let chains' = map_chain_rules eliminate_dead_rules chains' in

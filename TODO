@@ -1,6 +1,11 @@
 Optimize identical chains. 
 Require one rule for each zone definition.
 Move implementation to .ml and types to .mli
+Allow ip definitions (Series that will be or'ed)
+Refactor main.ml
+Use fold_rules and map_rules in optimize.ml. See if more tools like this is nessesary.
+
+
 
 
 

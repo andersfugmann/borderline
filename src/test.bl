@@ -1,6 +1,11 @@
 import "./test"
 
-define self = rule { rule { source zone = self; } policy allow } policy deny
+zone self {
+     interface = lo;
+}
+
+define self = rule { rule { source zone = self } policy allow } policy deny
+
 
 process filter {
         rule { state = related, established; } policy allow;
