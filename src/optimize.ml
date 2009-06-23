@@ -1,3 +1,4 @@
+open Common
 open Ir
 open Printf
 open Chain
@@ -107,6 +108,23 @@ let remove_unreferenced_chains chains =
 
     List.filter (fun chn -> Chain_set.mem chn.id referenced_chains) chains  
 
+(* Remove dublicate chains *)
+let remove_dublicate_chains chains = 
+  let replace_chain_ids ids id chains = 
+    let replace = function 
+        (conds, Jump id') when List.mem id' ids -> (conds, Jump id)          
+      | x -> x
+    in
+      map_chain_rules (List.map replace) chains
+  in
+  let is_sibling a b = (a.rules = b.rules) && not (a.id = b.id) in
+    try
+      let chain = List.find (fun chn -> List.exists (is_sibling chn) chains) chains in
+      let (rem_chains, new_chains) = List.partition (is_sibling chain) chains in
+      let ids = List.map (fun chn -> chn.id) rem_chains in
+        printf "D";
+        replace_chain_ids ids chain.id new_chains
+    with Not_found -> chains
 
 (* Move drops to the bottom. This allows improvement to dead code elimination, and helps reduce *)
 let rec reorder rules =
@@ -215,6 +233,7 @@ let rec count_rules = function
 
 let optimize_pass chains: Ir.chain list =   let _ = printf "Optim: %d " (count_rules chains) in
   let chains' = chains in
+  let chains' = remove_dublicate_chains chains' in
   let chains' = fold_return_statements chains' in
   let chains' = map_chain_rules eliminate_dead_rules chains' in
   let chains' = map_chain_rules eliminate_dublicate_rules chains' in
