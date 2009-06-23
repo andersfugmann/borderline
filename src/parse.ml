@@ -1,3 +1,4 @@
+open Common
 open Frontend
 open Parser
 open Lexer
@@ -48,3 +49,18 @@ and expand = function
       parse_file file @ expand xs
   | x :: xs -> x :: expand xs
   | [ ] -> [ ]
+
+let rec inline_defines defines nodes = 
+  let rec expand_define = function 
+      Reference id -> expand_rules expand_define (Id_map.find id defines) 
+    | rle -> [rle]
+  in
+    Frontend.expand expand_define nodes 
+
+let process_file file = 
+  let nodes = parse_file "test.bl" in
+  let zones = Zone.filter nodes in
+  let nodes' = (Zone.emit_nodes zones) @ nodes in 
+    Validate.validate nodes';
+    (zones, inline_defines (create_define_map nodes') (Rule.filter_process nodes'))
+

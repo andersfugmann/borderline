@@ -34,6 +34,15 @@ let rec filter = function
   | x :: xs -> filter xs
   | [] -> []
 
+(* Create auto_defines based on zones *)
+let emit_nodes zones =
+  let rec gen_rule_stems (zone_id, _) =  
+    Rule([Filter(Ir.DESTINATION, FZone(zone_id)); Reference zone_id], Policy DENY)
+  in
+  let id = ("zones", Lexing.dummy_pos) in 
+    [ Define(id, List.map gen_rule_stems zones) ]
+
+
 let emit zones =
   let src_chains = List.map (create_zone_chain Ir.SOURCE) zones in
   let dst_chains = List.map (create_zone_chain Ir.DESTINATION) zones in
