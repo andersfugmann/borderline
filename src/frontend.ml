@@ -27,10 +27,11 @@ type node = Import of id
           | Define of id * rule_stm list
           | Process of processtype * rule_stm list * policytype
 
-let rec create_define_map acc = function
-    Define (id, stms) :: xs -> create_define_map (Id_map.add id stms acc) xs
-  | _ :: xs -> create_define_map acc xs
+let rec create_define_map_rec acc = function
+    Define (id, stms) :: xs -> create_define_map_rec (Id_map.add id stms acc) xs
+  | _ :: xs -> create_define_map_rec acc xs
   | [] -> acc
+let create_define_map = create_define_map_rec Id_map.empty
 
 let node_type id = function
     Zone _ -> 1 = id

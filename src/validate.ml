@@ -11,12 +11,6 @@ let rec get_zone_ids acc = function
   | _ :: xs -> get_zone_ids acc xs
   | [] -> acc
 
-let rec get_referenced_zones nodes =
-  let rec get_id acc = function
-      Filter (_, FZone id) -> Id_set.add id acc
-    | _ -> acc
-  in 
-    rules_fold get_id nodes Id_set.empty 
 
 let rec get_referenced_ids nodes =
   let rec get_id acc = function
@@ -25,9 +19,12 @@ let rec get_referenced_ids nodes =
   in 
     rules_fold get_id nodes Id_set.empty
 
-let ids2string ids acc = 
-    Id_set.fold ( fun (id, _) acc -> acc ^ ", " ^ id ) ids acc
-
+let rec get_referenced_zones nodes =
+  let rec get_id acc = function
+      Filter (_, FZone id) -> Id_set.add id acc
+    | _ -> acc
+  in 
+    rules_fold get_id nodes Id_set.empty 
     
 (* Need to be able to terminate compilation. We should really just raise an error *) 
 let test_cyclic_references defines start =
@@ -44,14 +41,13 @@ let test_cyclic_references defines start =
     test_define Id_set.empty start
 
 let test_unresolved_zone_references nodes = 
-  let print_error id = prerr_endline (error2string ("Unresolved zone reference", id)) in
   let zone_ids = get_zone_ids Id_set.empty nodes in
   let zone_refs = get_referenced_zones nodes in
     try raise (ParseError ("Unresolved zone reference", Id_set.choose (Id_set.diff zone_refs zone_ids)))
     with Not_found -> () 
 
 let validate nodes =
-  let defines = create_define_map Id_map.empty nodes in
+  let defines = create_define_map nodes in
   let entries = Rule.filter_process nodes in
     List.iter (test_cyclic_references defines) entries; 
     test_unresolved_zone_references nodes 

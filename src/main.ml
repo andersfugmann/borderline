@@ -10,15 +10,15 @@ open Chain
 *)
 
 let rec inline_defines nodes = 
-  let defines = create_define_map Id_map.empty nodes in 
+  let defines = create_define_map nodes in 
   let substitute = function 
       Reference id -> Id_map.find id defines 
     | rle -> [rle]
   in
-  let nodes = map_rules substitute nodes in
-    match Id_set.is_empty (Validate.get_referenced_ids nodes) with
-        true -> nodes
-      | false -> inline_defines nodes    
+  let nodes' = map_rules substitute nodes in
+    match Id_set.is_empty (Validate.get_referenced_ids nodes') with
+        true -> nodes'
+      | false -> inline_defines nodes'   
 
 let _ =
   try
