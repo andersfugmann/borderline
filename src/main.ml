@@ -15,7 +15,7 @@ let rec inline_defines nodes =
       Reference id -> Id_map.find id defines 
     | rle -> [rle]
   in
-  let nodes' = map_rules substitute nodes in
+  let nodes' = expand substitute nodes in
     match Id_set.is_empty (Validate.get_referenced_ids nodes') with
         true -> nodes'
       | false -> inline_defines nodes'   

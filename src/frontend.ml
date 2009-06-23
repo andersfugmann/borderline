@@ -39,29 +39,37 @@ let node_type id = function
   | Define _ -> 3 = id
   | _ -> false
       
-let rules_fold func nodes acc = 
-  let rec traverse_rules acc = function 
-    | Rule (rules, _) :: xs -> traverse_rules acc ( rules @ xs)
-    | x :: xs -> traverse_rules (func acc x) xs 
+let rec fold_rules func rules acc = 
+  match rules with
+    | Rule (rules, _) :: xs -> fold_rules func xs (fold_rules func rules acc)
+    | x :: xs -> fold_rules func xs (func acc x) 
     | [] -> acc
-  in      
-  let rec traverse_nodes acc = function
-      Define (_, rules) :: xs -> traverse_nodes (traverse_rules acc rules) xs
-    | Process (_, rules, _) :: xs -> traverse_nodes (traverse_rules acc rules) xs
-    | _ :: xs -> traverse_nodes acc xs
-    | [] -> acc      
-  in traverse_nodes acc nodes
 
-let map_rules func nodes = 
-  let rec traverse_rules = function 
-    | Rule (rules, p) :: xs -> Rule ((traverse_rules rules), p) :: (traverse_rules xs)
-    | x :: xs -> (func x) @ traverse_rules xs
-    | [] -> []
-  in
-  let rec traverse_nodes = function
-      Define (id, rules) :: xs -> Define (id, traverse_rules rules) :: traverse_nodes xs
-    | Process (t, rules, p) :: xs -> Process (t, traverse_rules rules, p) :: traverse_nodes xs
-    | x :: xs -> x :: traverse_nodes xs
-    | [] -> []
+let fold_nodes func nodes acc = 
+  List.fold_left func acc nodes
+
+let rec fold func nodes acc =
+  let node_func acc = function
+      Define (_, rules)  -> fold_rules func rules acc 
+    | Process (_, rules, _) -> fold_rules func rules acc 
+    | _ -> acc
   in 
-    traverse_nodes nodes
+    fold_nodes node_func nodes acc
+
+let rec expand_rules func = function 
+  | Rule (rules, p) :: xs -> Rule ((expand_rules func rules), p) :: expand_rules func xs 
+  | x :: xs -> (func x) @ expand_rules func xs
+  | [] -> []
+
+let rec expand_nodes func = function
+    x :: xs -> (func x) @ (expand_nodes func xs)
+  | [] -> []
+
+let expand func nodes = 
+  let node_map = function
+      Define (id, rules) -> [ Define (id, expand_rules func rules) ] 
+    | Process (t, rules, p) -> [ Process (t, expand_rules func rules, p) ]
+    | x -> [ x ]
+  in
+    expand_nodes node_map nodes 
+    

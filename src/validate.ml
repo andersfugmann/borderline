@@ -17,16 +17,15 @@ let rec get_referenced_ids nodes =
       Reference id -> Id_set.add id acc
     | _ -> acc
   in 
-    rules_fold get_id nodes Id_set.empty
+    fold get_id nodes Id_set.empty
 
 let rec get_referenced_zones nodes =
   let rec get_id acc = function
       Filter (_, FZone id) -> Id_set.add id acc
     | _ -> acc
   in 
-    rules_fold get_id nodes Id_set.empty 
+    fold get_id nodes Id_set.empty 
     
-(* Need to be able to terminate compilation. We should really just raise an error *) 
 let test_cyclic_references defines start =
   let rec test_define acc define = 
     let test id = 
@@ -36,7 +35,9 @@ let test_cyclic_references defines start =
     let references = get_referenced_ids [define] in
 
     let cyclic_references = Id_set.inter acc references in
-      if not (Id_set.is_empty cyclic_references) then raise (ParseError ("Cyclic reference", Id_set.choose cyclic_references)); Id_set.iter test references
+      if not (Id_set.is_empty cyclic_references) then 
+        raise (ParseError ("Cyclic reference", Id_set.choose cyclic_references)) (* Should add more info here *); 
+      Id_set.iter test references
   in
     test_define Id_set.empty start
 
