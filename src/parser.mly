@@ -53,7 +53,7 @@ statement:
 ;
 
 zone_stm:
-  | NETWORK EQ IPv6                                               { Network($3) }
+  | NETWORK EQ IPv6                                               { let i, p = $3 in Network(Ipv6.to_number i, p) }
   | INTERFACE EQ ID                                               { Interface($3) }
 ;
 
@@ -103,7 +103,7 @@ filter_direction:
 filter_stm:
   | TCP PORT EQ int_list                                          { TcpPort($4) }
   | UDP PORT EQ int_list                                          { UdpPort($4) }
-  | IP EQ IPv6                                                    { Ip($3) }
+  | IP EQ IPv6                                                    { let i, p = $3 in Ip(Ipv6.to_number i, p) }
   | ZONE EQ ID                                                    { FZone($3) }
 ;
 

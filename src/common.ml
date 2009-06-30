@@ -9,11 +9,6 @@ exception ParseError of string * id
 let error2string (err, (id, pos)) =
     sprintf "File \"%s\", line %d: Error. %s '%s'" pos.Lexing.pos_fname pos.Lexing.pos_lnum err id 
 
-type ip = int list * int
-
-let ip_to_string (a, m) = 
-  (String.concat ":" (List.map (sprintf "%x") a)) ^ (sprintf "/%d" m) 
-
 module Id_set = Set.Make (struct
   type t = id
   let compare = fun (a, _) (b, _) -> String.compare a b

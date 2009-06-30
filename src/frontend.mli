@@ -1,4 +1,6 @@
 open Common 
+open Ipv6
+
 type processtype = MANGLE | FILTER | NAT
 type policytype = ALLOW | DENY | REJECT
 

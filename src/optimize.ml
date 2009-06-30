@@ -28,7 +28,7 @@ let cond_type_identical cond1 cond2 =
     | State _     -> 3
     | TcpPort _   -> 4
     | UdpPort _   -> 5
-    | Address _   -> 6
+    | IpRange _   -> 6
     | Protocol _  -> 7
   in 
     enumerate_condition cond1 = enumerate_condition cond2
@@ -54,7 +54,8 @@ let reduce rules =
   in
   let rec reduce_inner rules = 
     let rules' = reduce_rev rules in
-      if rules = rules' then rules else reduce_inner rules'
+      if Ir.eq_rules rules rules' then rules 
+      else reduce_inner rules'
   in
     List.rev (reduce_inner (List.rev rules))
 
@@ -117,7 +118,7 @@ let remove_dublicate_chains chains =
     in
       map_chain_rules (List.map replace) chains
   in
-  let is_sibling a b = (a.rules = b.rules) && not (a.id = b.id) in
+  let is_sibling a b = (Ir.eq_rules a.rules b.rules) && not (a.id = b.id) in
     try
       let chain = List.find (fun chn -> List.exists (is_sibling chn) chains) chains in
       let (rem_chains, new_chains) = List.partition (is_sibling chain) chains in
@@ -140,13 +141,17 @@ let rec reorder rules =
     | [] -> []
 
   in
+    (* This function should be repaced with an "intersection" function *)
+    (* The intersection function should not be placed within this file. 
+       Its some Ir thing. *)
+
   let exclusive = function
       (cond, neg), (cond', neg') when not (neg = neg') -> cond = cond' 
     | (Interface (dir, i), _), (Interface (dir', i'), _) when dir = dir' -> not (i = i')
     | (State s1, _), (State s2, _) -> not (has_intersection s1 s2)
     | (TcpPort (dir, ports), _), (TcpPort (dir', ports'), _) when dir = dir' -> not (has_intersection ports ports')
     | (UdpPort (dir, ports), _), (UdpPort (dir', ports'), _) when dir = dir' -> not (has_intersection ports ports')
-    | (Address (dir, addr), _), (Address (dir', addr'), _) when dir = dir' -> false (* We dont has ip intersection yet *)
+    | (IpRange (dir, src, dst), _), (IpRange (dir', src', dst'), _) when dir = dir' -> false (* We dont have ip intersection yet *)
     | (Protocol proto, _), (Protocol proto', _) -> not (proto = proto')
     | _ -> false
   in
@@ -177,7 +182,7 @@ let rec reorder rules =
   
   in
   let rules' = reorder_rules rules in
-    if rules = rules' then rules'
+    if Ir.eq_rules rules rules' then rules' 
     else reorder rules'
       
 (* Inline chains for which expr evaluates true *)
@@ -227,6 +232,72 @@ let rec eliminate_dublicate_rules = function
   | rle :: xs -> rle :: eliminate_dublicate_rules xs
   | [] -> []
 
+(*
+
+(* This function merges identical rule types for a chain. *)
+
+exception CondImpossible
+
+let optimize_conditions rules =
+  let difference a b = 
+    List.filter (fun x -> not (List.mem x b)) a
+  in
+  let test = function
+      (x :: xs, _) as res -> res 
+    | ([], _) as res -> raise CondImpossible
+  in
+  let merge_list (s, neg) (s', neg') =   
+    match neg, neg' with
+        (true, true) | (false, false) -> test (intersection s s', neg)
+      | (false, true) -> test (difference s s', false)
+      | (true, false) -> test (difference s' s, false)
+  in
+  let merge_elem (i, neg) (i', neg') =        
+    let (i'', neg'') = merge_list ([i], neg) ([i'], neg') in
+      (List.hd i'', neg'')
+  in 
+  let merge = function
+      (Interface (dir, i), neg), (Interface (dir', i'), neg') when dir = dir' -> 
+        let (i'', neg'') = merge_elem (i, neg) (i', neg') in (Interface (dir, i''), neg'')
+    | (State s, neg), (State s', neg') -> 
+        let (s'', neg'') = merge_list (s, neg) (s', neg') in (State s'', neg'')           
+    | (TcpPort (dir, ports), neg), (TcpPort (dir', ports'), neg') when dir = dir' ->
+        let (ports'', neg'') = merge_list (ports, neg) (ports', neg') in (TcpPort (dir, ports''), neg'')
+    | (UdpPort (dir, ports), neg), (UdpPort (dir', ports'), neg') when dir = dir' -> 
+        let (ports'', neg'') = merge_list (ports, neg) (ports', neg') in (UdpPort (dir, ports''), neg'')
+    | (Protocol proto, neg), (Protocol proto', neg') -> 
+        let (proto'', neg'') = merge_elem (proto, neg) (proto', neg') in (Protocol (proto''), neg'')
+    | (IpRange (dir, , neg), ((IpRange dir', low', high'), neg' when dir = dir' and neg = neg' -> 
+        let (low'', high'') = Ipv6.intersection (low, high) (low', high') in
+          (IpRange (dir, low''', high'''), neg)
+  in
+  let rec merge_conditions rules = 
+    let (siblings, tail) = List.partition (siblings (List.hd rules)) rules in
+      merge
+  (* Merge conditions. Returns a list of rules (Zero or more rules with the same target) *)
+  in     
+  let merge_conds (conds, target) =
+    (* Group the conditions.  *)
+    ()
+  in
+    ()
+
+(* Group pratice.  Draw something 
+
+a U b = c:
+  a ^ b => c
+  a ^ !b => a / b
+  !a ^ !b => !c
+
+Algo: 
+
+Take the first condition.
+Partition the rest of the list,
+Merge all siblings. 
+call rec. on the rest of the list.
+*)
+
+*)
 let rec count_rules = function
     chain :: xs -> List.length chain.rules + count_rules xs
   | [] -> 0

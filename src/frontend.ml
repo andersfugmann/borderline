@@ -1,5 +1,5 @@
 open Common
-open Printf
+open Ipv6
 
 let lineno = ref 1
 

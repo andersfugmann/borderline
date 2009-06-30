@@ -25,10 +25,6 @@ let gen_neg = function
     true -> "! "
   | _ -> ""
 
-let get_zone_id_mask zone = function
-    SOURCE -> (get_zone_id zone, 0x00ff)
-  | DESTINATION -> ((get_zone_id zone) * 0x100, 0xff00)
-
 (* val choose_dir : direction * string * string -> string *)
 let choose_dir a b = function
     SOURCE      -> a
@@ -45,13 +41,28 @@ let get_protocol_name = function
   | UDP -> "udp"
   | ICMP -> "icmpv6"
 
+let gen_zone_mask (src, dst) = 
+  let (src_id, src_mask) = match src with 
+      Some(zone) -> (get_zone_id (id2str zone), 0x00ff)
+    | None -> (0x0, 0x0)
+  in
+  let (dst_id, dst_mask) = match dst with 
+      Some(zone) -> ((get_zone_id (id2str zone)) * 0x100, 0xff00)
+    | None -> (0x0, 0x0)
+  in
+    sprintf "0x%04x/0x%04x" (src_id + dst_id) (src_mask + dst_mask)
+
 (* Return a prefix and condition, between which a negation can be inserted *)
 let gen_condition = function
-    Address(direction, ip) -> "", ((choose_dir "--source " "--destination " direction) ^ (ip_to_string ip))
+    IpRange(direction, low, high) -> 
+      begin
+        match Ipv6.range2mask (low, high) with
+            Some(ip, mask) -> "", sprintf "--%s %s/%d" (choose_dir "src" "dst" direction) (Ipv6.to_string low) mask
+          | None -> "-m iprange ", sprintf "--%s-range %s-%s" (choose_dir "src" "dst" direction) (Ipv6.to_string low) (Ipv6.to_string high) 
+      end
   | Interface(direction, name) -> ("", (choose_dir "--in-interface " "--out-interface " direction) ^ (id2str name))
   | State(states) -> "-m conntrack ", ("--ctstate " ^ ( String.concat "," (List.map get_state_name states)))
-  | Zone(direction, zone) -> let id, mask = get_zone_id_mask (id2str zone) direction in
-      "-m conmark ", ( sprintf "--mark 0x%04x/0x%04x" id mask )
+  | Zone(a,b) -> "-m conmark ", "--mark " ^ (gen_zone_mask (a,b))
   | TcpPort(direction, ports) -> " -p tcp -m multiport ",
       ( "--" ^ (choose_dir "source" "destination" direction) ^ "-ports " ^ (String.concat "," (List.map string_of_int ports)) )
   | UdpPort(direction, ports) -> " -p udp -m multiport ",
@@ -59,28 +70,25 @@ let gen_condition = function
 
   | Protocol(protocol) -> ("", "-p " ^ (get_protocol_name protocol))
 
-let rec gen_conditions conditions =
-  (* tuple to a string *)
-  let gen_cond (cond, neg) =
-    let pref, postf = gen_condition cond in
-      pref ^ (gen_neg neg) ^ postf
-  in
-    String.concat " " (List.map gen_cond conditions)
+let rec gen_conditions acc = function
+    (cond, neg) :: xs -> 
+      let pref, postf = gen_condition cond in 
+        gen_conditions (pref ^ (gen_neg neg) ^ postf ^ " " ^ acc) xs
+  | [] -> acc
 
 let gen_action = function
-    MarkZone(direction, zone) ->
-      let id, mask = get_zone_id_mask (id2str zone) direction in
-        sprintf "-j MARK --set-mark 0x%04x/0x%04x" id mask
-  | Jump(chain_id) -> "-j " ^ (Chain.get_chain_name chain_id)
-  | Return -> "-j RETURN"
-  | Accept -> "-j ACCEPT"
-  | Drop   -> "-j DROP"
+    MarkZone(a,b) -> "MARK --set-mark " ^ (gen_zone_mask (a, b)) 
+  | Jump(chain_id) -> (Chain.get_chain_name chain_id)
+  | Return -> "RETURN"
+  | Accept -> "ACCEPT"
+  | Drop   -> "DROP"
   | _ -> "#### Unsupported action"
 
 let emit (cond_list, action) : string =
-  let conditions = gen_conditions cond_list in
+  let conditions = gen_conditions "" cond_list in
   let target = gen_action action in
-    conditions ^ " " ^ target
+    conditions ^ "-j " ^ target
+
 
 let emit_chain chain =
   let chain_name = Chain.get_chain_name chain.id in
@@ -88,5 +96,5 @@ let emit_chain chain =
   let lines = List.map ( sprintf "ip6tables -A %s %s" chain_name ) ops in
     match chain.id with
         Builtin(_) -> lines
-      | _          -> sprintf "ip6tables -N %s #%s" chain_name chain.comment :: lines
+      | _          -> (sprintf "ip6tables -N %s #%s" chain_name chain.comment) :: lines
 

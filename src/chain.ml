@@ -32,8 +32,7 @@ let set chain =
 
 let create rules comment =
   let id = !next_id in
-  let _ = next_id := id + 1 in
-  set { Ir.id = Temporary(id); rules = rules; comment = comment } 
+  incr next_id; set { Ir.id = Temporary(id); rules = rules; comment = comment } 
 
 let get_named_chain (id, _) = Named(id)
 
@@ -53,7 +52,6 @@ let optimize opt  =
 
 let fold func acc =
   List.fold_left func acc !chains
-
 
 
 

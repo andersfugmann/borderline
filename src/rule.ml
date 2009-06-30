@@ -1,6 +1,7 @@
 open Common
 open Frontend
 open Chain
+open Big_int
 
 let gen_policy = function
     ALLOW -> Ir.Accept
@@ -11,10 +12,14 @@ let gen_action = function
     Policy(p_type) -> gen_policy p_type
 
 let gen_filter dir = function
-    Ip(ip) -> Ir.Address(dir, ip)
+    Ip(ip) -> let low, high = Ipv6.to_range ip in Ir.IpRange(dir, low, high)
   | TcpPort(ports) -> Ir.TcpPort(dir, ports)
   | UdpPort(ports) -> Ir.UdpPort(dir, ports)
-  | FZone(id) -> Ir.Zone(dir, id)
+  | FZone(id) -> begin 
+      match dir with 
+          Ir.SOURCE -> Ir.Zone(Some(id), None)
+        | Ir.DESTINATION -> Ir.Zone(None, Some(id))
+    end
 
 let rec process_rule table (rules, target) =
   let gen_op table target = function
@@ -38,3 +43,11 @@ let rec filter_process = function
     Process _ as p :: xs -> p :: filter_process xs
   | _ :: xs -> filter_process xs
   | [] -> []
+
+
+
+
+
+
+
+

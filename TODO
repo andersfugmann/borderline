@@ -1,9 +1,15 @@
-Optimize identical chains. 
-Require one rule for each zone definition.
-Move implementation to .ml and types to .mli
-Allow ip definitions (Series that will be or'ed)
-Refactor main.ml
-Use fold_rules and map_rules in optimize.ml. See if more tools like this is nessesary.
+* Setup wiki page for blorderline.
+* Extend ip address notation to include '::'
+* Require one rule for each zone definition. (add a rule stm to the zone struct)
+* Move implementation to .ml and types to .mli
+* Allow ip and port definitions (Series that will be or'ed)
+
+
+Work in progress:
+* Merge source and dest zone specification when emitting rules.
+
+
+
 
 
 
