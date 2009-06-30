@@ -232,8 +232,6 @@ let rec eliminate_dublicate_rules = function
   | rle :: xs -> rle :: eliminate_dublicate_rules xs
   | [] -> []
 
-(*
-
 (* This function merges identical rule types for a chain. *)
 
 exception CondImpossible
@@ -244,7 +242,7 @@ let optimize_conditions rules =
   in
   let test = function
       (x :: xs, _) as res -> res 
-    | ([], _) as res -> raise CondImpossible
+    | ([], _) -> raise CondImpossible
   in
   let merge_list (s, neg) (s', neg') =   
     match neg, neg' with
@@ -267,10 +265,14 @@ let optimize_conditions rules =
         let (ports'', neg'') = merge_list (ports, neg) (ports', neg') in (UdpPort (dir, ports''), neg'')
     | (Protocol proto, neg), (Protocol proto', neg') -> 
         let (proto'', neg'') = merge_elem (proto, neg) (proto', neg') in (Protocol (proto''), neg'')
-    | (IpRange (dir, , neg), ((IpRange dir', low', high'), neg' when dir = dir' and neg = neg' -> 
-        let (low'', high'') = Ipv6.intersection (low, high) (low', high') in
-          (IpRange (dir, low''', high'''), neg)
+    | (IpRange (dir, low, high), neg), (IpRange (dir', low', high'), neg') 
+        when dir = dir' && neg = neg' -> begin
+          match Ipv6.intersection (low, high) (low', high') with
+              Some(low'', high'') -> (IpRange (dir, low'', high''), neg)
+            | None -> raise CondImpossible
+        end
   in
+  let siblings a b = false in
   let rec merge_conditions rules = 
     let (siblings, tail) = List.partition (siblings (List.hd rules)) rules in
       merge
@@ -282,22 +284,7 @@ let optimize_conditions rules =
   in
     ()
 
-(* Group pratice.  Draw something 
 
-a U b = c:
-  a ^ b => c
-  a ^ !b => a / b
-  !a ^ !b => !c
-
-Algo: 
-
-Take the first condition.
-Partition the rest of the list,
-Merge all siblings. 
-call rec. on the rest of the list.
-*)
-
-*)
 let rec count_rules = function
     chain :: xs -> List.length chain.rules + count_rules xs
   | [] -> 0
