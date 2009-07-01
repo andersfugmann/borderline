@@ -60,9 +60,9 @@ let gen_condition = function
   | Interface(direction, name) -> ("", (choose_dir "--in-interface " "--out-interface " direction) ^ (id2str name))
   | State(states) -> "-m conntrack ", ("--ctstate " ^ ( String.concat "," (List.map get_state_name states)))
   | Zone(dir, id) -> "-m conmark ", "--mark " ^ (gen_zone_mask dir id)
-  | TcpPort(direction, ports) -> " -p tcp -m multiport ",
+  | TcpPort(direction, ports) -> "-p tcp -m multiport ",
       ( "--" ^ (choose_dir "source" "destination" direction) ^ "-ports " ^ (String.concat "," (List.map string_of_int ports)) )
-  | UdpPort(direction, ports) -> " -p udp -m multiport ",
+  | UdpPort(direction, ports) -> "-p udp -m multiport ",
       ( "--" ^ (choose_dir "source" "destination" direction) ^ "-ports " ^ (String.concat "," (List.map string_of_int ports)) )
 
   | Protocol(protocol) -> ("", "-p " ^ (get_protocol_name protocol))
