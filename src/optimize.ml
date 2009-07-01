@@ -6,9 +6,6 @@ open Chain
 exception MergeImpossible
 exception ImpossibleState
 
-(* Reorder rules. This is done if the system can see if two rules are independant of each other.
-*)
-
 let combinations acc conds : 'a list = 
   List.flatten (List.map (fun acc -> List.map (fun cl -> acc @ [cl]) conds) acc)
   
@@ -48,7 +45,7 @@ let rec chain_reference_count id chains =
 let map_chain_rules func chains : Ir.chain list =
   List.map (fun chn -> { id = chn.id; rules = func chn.rules; comment = chn.comment } ) chains
 
-(* Merge two rules that points to the same target is rule a is a subset of rule b. *)
+(* Merge two rules that points to the same target when rule a is a subset of rule b. *)
 let reduce rules = 
   let rec reduce_rev = function
       (cl1, tg1) as r :: (cl2, tg2) :: xs when tg1 = tg2 && is_subset cl1 cl2 -> 
@@ -145,18 +142,15 @@ let rec reorder rules =
     | [] -> []
 
   in
-    (* This function should be repaced with an "intersection" function *)
-    (* The intersection function should not be placed within this file. 
-       Its some Ir thing. *)
-
   let exclusive = function
-      (cond, neg), (cond', neg') when not (neg = neg') -> cond = cond' 
-    | (Interface (dir, i), _), (Interface (dir', i'), _) when dir = dir' -> not (i = i')
+      (cond, neg), (cond', neg') when not (neg = neg') -> Ir.eq_cond cond cond' 
+    | (Interface (dir, i), _), (Interface (dir', i'), _) when dir = dir' -> not (eq_id i i')
     | (State s1, _), (State s2, _) -> not (has_intersection s1 s2)
     | (TcpPort (dir, ports), _), (TcpPort (dir', ports'), _) when dir = dir' -> not (has_intersection ports ports')
     | (UdpPort (dir, ports), _), (UdpPort (dir', ports'), _) when dir = dir' -> not (has_intersection ports ports')
     | (IpRange (dir, src, dst), _), (IpRange (dir', src', dst'), _) when dir = dir' -> false (* We dont have ip intersection yet *)
     | (Protocol proto, _), (Protocol proto', _) -> not (proto = proto')
+    | (Zone (dir, zone), _), (Zone (dir', zone'), _) when dir = dir' -> not (eq_id zone zone') 
     | _ -> false
   in
   let can_reorder cl1 cl2 = 
@@ -230,9 +224,12 @@ let rec eliminate_dead_rules = function
   | [] -> []
 
 let rec eliminate_dublicate_rules = function
-    rle1 :: rle2 :: xs when rle1 = rle2 ->
+    rle1 :: rle2 :: xs when Ir.eq_oper rle1 rle2 ->
       printf "d";
       rle1 :: eliminate_dublicate_rules xs
+  | (([(Zone(Ir.SOURCE, id), false)], Ir.Accept) as x) :: (([(Zone(Ir.SOURCE, id'), false)], Ir.Accept) as y) :: xs -> 
+      printf "IDS: %s, %s\n" (id2str id) (id2str id'); if x = y then printf "Wah" else printf "What";
+eliminate_dublicate_rules xs      
   | rle :: xs -> rle :: eliminate_dublicate_rules xs
   | [] -> []
 

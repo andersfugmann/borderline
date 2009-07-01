@@ -20,7 +20,7 @@
 %token NETWORK INTERFACE
 %token MANGLE FILTER NAT
 %token POLICY ALLOW DENY REJECT
-%token SOURCE DESTINATION PORT IP STATE CALL
+%token SOURCE DESTINATION PORT ADDRESS STATE CALL
 %token NEW ESTABLISHED RELATED INVALID
 %token START EQ ENDL SEMI PROTOCOL
 %token TCP UDP ICMP
@@ -103,7 +103,7 @@ filter_direction:
 filter_stm:
   | TCP PORT EQ int_list                                          { TcpPort($4) }
   | UDP PORT EQ int_list                                          { UdpPort($4) }
-  | IP EQ IPv6                                                    { let i, p = $3 in Ip(Ipv6.to_number i, p) }
+  | ADDRESS EQ IPv6                                                    { let i, p = $3 in Ip(Ipv6.to_number i, p) }
   | ZONE EQ ID                                                    { FZone($3) }
 ;
 

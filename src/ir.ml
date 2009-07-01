@@ -60,14 +60,14 @@ type chain = { id: chain_id; rules : oper list; comment: string; }
 let eq_cond x y = 
   match x, y with
       IpRange (d, x, y), IpRange (d', x', y') -> d = d' && Ipv6.eq x x' && Ipv6.eq y y'
+    | Zone(dir, id), Zone (dir', id') -> dir = dir' && (eq_id id id')
+    | Interface(dir, id), Interface(dir', id') -> dir = dir' && (eq_id id id')
     | x, y -> x = y
 
 let eq_oper (conds, action) (conds', action') =
-  try List.for_all2 (fun (cond, neg) (cond', neg') -> neg = neg' && eq_cond cond cond') conds conds' && action = action'
+  try action = action' && (List.for_all2 (fun (cond, neg) (cond', neg') -> neg = neg' && eq_cond cond cond') conds conds')
   with Invalid_argument _ -> false
 
 let eq_rules a b = 
   try List.for_all2 eq_oper a b 
   with Invalid_argument _ -> false
-
-

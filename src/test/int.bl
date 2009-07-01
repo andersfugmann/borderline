@@ -10,6 +10,9 @@ define int = rule {
                  rule { destination udp port = 53; } policy allow;
                  rule { source zone = stue; } policy allow;
                  rule { source zone = stue; } policy allow; # Dublicate.
+                 rule { source address = 2001:16d8:dd2d:0:2e0:4cff:fe69:103d/64; 
+                        rule { source address = 2001:16d8:dd2d:0:2e0:4cff:fe69:103d/128 } policy allow;
+                 } policy deny;
                  rule { destination zone = stue; } policy deny;
                  rule { source zone = wlan; 
                       rule { destination tcp port = 4321; } policy allow;

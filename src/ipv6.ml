@@ -35,7 +35,7 @@ let difference (low_a, high_a) (low_b, high_b) =
         true, true -> []
       | true, false -> [(succ_big_int high_b, high_a)]
       | false, true -> [(low_a, pred_big_int low_b)]
-      | true, true -> [(succ_big_int high_b, high_a); (low_a, pred_big_int low_b)]
+      | false, false -> [(succ_big_int high_b, high_a); (low_a, pred_big_int low_b)]
           
 (* Functions related to IPv6 addresses *)
 let intersection (low_a, high_a) (low_b, high_b) =
@@ -46,11 +46,11 @@ let intersection (low_a, high_a) (low_b, high_b) =
     else None
 
 let clear_bits ip bits =
-  let mask = power_int_positive_int 2 bits in
+  let mask = power_int_positive_int 2 (128-bits) in
     mult_big_int (div_big_int ip mask) mask
 
 let set_bits ip bits = 
-  let mask = power_int_positive_int 2 bits in
+  let mask = power_int_positive_int 2 (128-bits) in
     add_big_int (pred_big_int mask) (clear_bits ip bits)
     
 let to_range (ip, mask) =
@@ -80,7 +80,7 @@ let range2mask (low,high) =
   in
   let mask = get_highest_bit 0 (sub_big_int high low) in
   let high' = add_big_int low (pred_big_int (power_int_positive_int 2 mask)) in
-    if eq_big_int high high' then Some(low, mask)
+    if eq_big_int high high' then Some(low, 128-mask)
     else None
 (*
 let () =

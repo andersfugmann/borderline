@@ -22,5 +22,8 @@ module Id_map = Map.Make (struct
 
 let id2str (str, _) = str
 
+let eq_id (a, _) (b, _) = a = b
+
+
 
 

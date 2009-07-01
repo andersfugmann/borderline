@@ -50,7 +50,7 @@ rule token = parse
   | "dst"          { Parser.DESTINATION }
   | "port"         { Parser.PORT }
   | "state"        { Parser.STATE }
-  | "ip"           { Parser.IP }
+  | "address"           { Parser.ADDRESS }
   | "call"         { Parser.CALL }
 
 (* State types *)
