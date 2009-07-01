@@ -9,6 +9,9 @@ exception ImpossibleState
 (* Reorder rules. This is done if the system can see if two rules are independant of each other.
 *)
 
+let combinations acc conds : 'a list = 
+  List.flatten (List.map (fun acc -> List.map (fun cl -> acc @ [cl]) conds) acc)
+  
 let difference a b = 
   List.filter (fun x -> not (List.mem x b)) a
     
@@ -237,7 +240,19 @@ let rec eliminate_dublicate_rules = function
 
 exception MergeImpossible
 
-let merge rules =
+let merge_opers rle =
+
+  let is_sibling (a, _) (b, _) =
+    match a, b with
+        Interface (dir, _), Interface (dir', _) -> dir = dir'
+      | State s, State s' -> true 
+      | TcpPort (dir, _), TcpPort (dir', _) when dir = dir' -> true
+      | UdpPort (dir, _), UdpPort (dir', _) when dir = dir' -> true
+      | Protocol _, Protocol _ -> true
+      | IpRange (dir, _, _), IpRange (dir', _, _) -> dir = dir'
+      | Zone (dir, _), Zone (dir', _) -> dir = dir'
+      | _, _ -> false
+  in
   let test = function
       (x :: xs, _) as res -> res 
     | ([], _) -> raise MergeImpossible
@@ -280,21 +295,26 @@ let merge rules =
             else
               List.map (fun (l,h) -> (IpRange(dir, l, h), false)) ranges 
         end
+    | (Zone (dir, zone), neg), (Zone (dir', zone'), neg') when dir = dir' ->
+        let (zone'', neg'') = merge_elem (zone, neg) (zone', neg') in [(Zone (dir, zone''), neg'')]
         
+    | _, _ -> raise MergeImpossible   
   in
-    
-    
-  let siblings a b = false in
-  let rec merge_conditions rules = 
-    let (siblings, tail) = List.partition (siblings (List.hd rules)) rules in
-      merge_oper
-  (* Merge conditions. Returns a list of rules (Zero or more rules with the same target) *)
-  in     
-  let merge_conds (conds, target) =
-    (* Group the conditions.  *)
-    ()
+  let rec merge_siblings acc = function
+    cond_a :: cond_b :: xs -> 
+        let cond' = merge_oper (cond_a, cond_b) in
+          merge_siblings (combinations acc cond') xs
+      | cond_a :: [] -> [ cond_a ]
+      | [] -> []
   in
-    ()
+  let rec merge acc = function
+      cond :: xs -> 
+        let (siblings, rest) = List.partition (is_sibling cond ) xs in
+        let conds' = merge_siblings [] (cond :: siblings) in
+          merge (combinations acc conds') rest
+    | [] -> acc
+  in
+    merge [] rle
 
 
 let rec count_rules = function
