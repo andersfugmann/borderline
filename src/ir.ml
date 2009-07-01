@@ -36,7 +36,7 @@ type icmp_packet = ICMP_NET_UNREACHABLE | ICMP_HOST_UNREACHABLE
 
 
 type condition = Interface of direction * id
-               | Zone of zone option * zone option
+               | Zone of direction * zone
                | State of statetype list
                | TcpPort of direction * int list
                | UdpPort of direction * int list
@@ -44,7 +44,7 @@ type condition = Interface of direction * id
                | Protocol of protocol
 
 type action = Jump of chain_id
-            | MarkZone of zone option * zone option
+            | MarkZone of direction * zone
             | Accept
             | Drop
             | Return

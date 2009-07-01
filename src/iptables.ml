@@ -41,16 +41,13 @@ let get_protocol_name = function
   | UDP -> "udp"
   | ICMP -> "icmpv6"
 
-let gen_zone_mask (src, dst) = 
-  let (src_id, src_mask) = match src with 
-      Some(zone) -> (get_zone_id (id2str zone), 0x00ff)
-    | None -> (0x0, 0x0)
+let gen_zone_mask dir zone =
+  let zone_id = get_zone_id (id2str zone) in
+  let id, mask = match dir with
+      Ir.SOURCE -> zone_id, 0x00ff
+    | Ir.DESTINATION -> zone_id * 0x100, 0xff00
   in
-  let (dst_id, dst_mask) = match dst with 
-      Some(zone) -> ((get_zone_id (id2str zone)) * 0x100, 0xff00)
-    | None -> (0x0, 0x0)
-  in
-    sprintf "0x%04x/0x%04x" (src_id + dst_id) (src_mask + dst_mask)
+    sprintf "0x%04x/0x%04x" id mask
 
 (* Return a prefix and condition, between which a negation can be inserted *)
 let gen_condition = function
@@ -62,7 +59,7 @@ let gen_condition = function
       end
   | Interface(direction, name) -> ("", (choose_dir "--in-interface " "--out-interface " direction) ^ (id2str name))
   | State(states) -> "-m conntrack ", ("--ctstate " ^ ( String.concat "," (List.map get_state_name states)))
-  | Zone(a,b) -> "-m conmark ", "--mark " ^ (gen_zone_mask (a,b))
+  | Zone(dir, id) -> "-m conmark ", "--mark " ^ (gen_zone_mask dir id)
   | TcpPort(direction, ports) -> " -p tcp -m multiport ",
       ( "--" ^ (choose_dir "source" "destination" direction) ^ "-ports " ^ (String.concat "," (List.map string_of_int ports)) )
   | UdpPort(direction, ports) -> " -p udp -m multiport ",
@@ -77,7 +74,7 @@ let rec gen_conditions acc = function
   | [] -> acc
 
 let gen_action = function
-    MarkZone(a,b) -> "MARK --set-mark " ^ (gen_zone_mask (a, b)) 
+    MarkZone(dir, id) -> "MARK --set-mark " ^ (gen_zone_mask dir id) 
   | Jump(chain_id) -> (Chain.get_chain_name chain_id)
   | Return -> "RETURN"
   | Accept -> "ACCEPT"
@@ -88,7 +85,6 @@ let emit (cond_list, action) : string =
   let conditions = gen_conditions "" cond_list in
   let target = gen_action action in
     conditions ^ "-j " ^ target
-
 
 let emit_chain chain =
   let chain_name = Chain.get_chain_name chain.id in

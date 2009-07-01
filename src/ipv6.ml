@@ -27,6 +27,16 @@ let to_ip num =
   in
     convert [] num
 
+let difference (low_a, high_a) (low_b, high_b) =
+  let member a (low, high) = ge_big_int a low && le_big_int a high in
+  let low_m = member low_a (low_b, high_b) in
+  let high_m = member high_a (low_b, high_b) in
+    match (low_m, high_m) with
+        true, true -> []
+      | true, false -> [(succ_big_int high_b, high_a)]
+      | false, true -> [(low_a, pred_big_int low_b)]
+      | true, true -> [(succ_big_int high_b, high_a); (low_a, pred_big_int low_b)]
+          
 (* Functions related to IPv6 addresses *)
 let intersection (low_a, high_a) (low_b, high_b) =
   let low = max_big_int low_a low_b in

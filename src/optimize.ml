@@ -9,10 +9,11 @@ exception ImpossibleState
 (* Reorder rules. This is done if the system can see if two rules are independant of each other.
 *)
 
-let rec intersection xs = function 
-    x :: xs' when List.mem x xs -> x :: intersection xs xs'
-  | x :: xs' -> intersection xs xs'
-  | [] -> []   
+let difference a b = 
+  List.filter (fun x -> not (List.mem x b)) a
+    
+let rec intersection a b = 
+    List.filter (fun x -> List.mem x b) a
 
 (* Determine if a is a true subset of b *)
 let is_subset a b = 
@@ -234,15 +235,12 @@ let rec eliminate_dublicate_rules = function
 
 (* This function merges identical rule types for a chain. *)
 
-exception CondImpossible
+exception MergeImpossible
 
-let optimize_conditions rules =
-  let difference a b = 
-    List.filter (fun x -> not (List.mem x b)) a
-  in
+let merge rules =
   let test = function
       (x :: xs, _) as res -> res 
-    | ([], _) -> raise CondImpossible
+    | ([], _) -> raise MergeImpossible
   in
   let merge_list (s, neg) (s', neg') =   
     match neg, neg' with
@@ -254,28 +252,42 @@ let optimize_conditions rules =
     let (i'', neg'') = merge_list ([i], neg) ([i'], neg') in
       (List.hd i'', neg'')
   in 
-  let merge = function
+
+  let merge_oper = function
       (Interface (dir, i), neg), (Interface (dir', i'), neg') when dir = dir' -> 
-        let (i'', neg'') = merge_elem (i, neg) (i', neg') in (Interface (dir, i''), neg'')
+        let (i'', neg'') = merge_elem (i, neg) (i', neg') in [(Interface (dir, i''), neg'')]
     | (State s, neg), (State s', neg') -> 
-        let (s'', neg'') = merge_list (s, neg) (s', neg') in (State s'', neg'')           
+        let (s'', neg'') = merge_list (s, neg) (s', neg') in [(State s'', neg'')]
     | (TcpPort (dir, ports), neg), (TcpPort (dir', ports'), neg') when dir = dir' ->
-        let (ports'', neg'') = merge_list (ports, neg) (ports', neg') in (TcpPort (dir, ports''), neg'')
+        let (ports'', neg'') = merge_list (ports, neg) (ports', neg') in [(TcpPort (dir, ports''), neg'')]
     | (UdpPort (dir, ports), neg), (UdpPort (dir', ports'), neg') when dir = dir' -> 
-        let (ports'', neg'') = merge_list (ports, neg) (ports', neg') in (UdpPort (dir, ports''), neg'')
+        let (ports'', neg'') = merge_list (ports, neg) (ports', neg') in [(UdpPort (dir, ports''), neg'')]
     | (Protocol proto, neg), (Protocol proto', neg') -> 
-        let (proto'', neg'') = merge_elem (proto, neg) (proto', neg') in (Protocol (proto''), neg'')
+        let (proto'', neg'') = merge_elem (proto, neg) (proto', neg') in [(Protocol (proto''), neg'')]
     | (IpRange (dir, low, high), neg), (IpRange (dir', low', high'), neg') 
         when dir = dir' && neg = neg' -> begin
           match Ipv6.intersection (low, high) (low', high') with
-              Some(low'', high'') -> (IpRange (dir, low'', high''), neg)
-            | None -> raise CondImpossible
+              Some(low'', high'') -> [(IpRange (dir, low'', high''), neg)]
+            | None -> raise MergeImpossible
         end
+    | (IpRange (dir, low, high), neg), (IpRange (dir', low', high'), neg') 
+        when dir = dir' && not (neg = neg') -> begin
+          let ranges = match neg with
+              true -> Ipv6.difference  (low', high') (low, high)
+            | false -> Ipv6.difference  (low', high') (low, high)
+          in
+            if List.length ranges = 0 then raise MergeImpossible
+            else
+              List.map (fun (l,h) -> (IpRange(dir, l, h), false)) ranges 
+        end
+        
   in
+    
+    
   let siblings a b = false in
   let rec merge_conditions rules = 
     let (siblings, tail) = List.partition (siblings (List.hd rules)) rules in
-      merge
+      merge_oper
   (* Merge conditions. Returns a list of rules (Zero or more rules with the same target) *)
   in     
   let merge_conds (conds, target) =
