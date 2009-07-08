@@ -49,13 +49,18 @@ statement:
   | IMPORT STRING                                                 { Import($2) }
   | ZONE ID LBRACE zone_stms RBRACE                               { Zone($2, $4)   }
   | DEFINE ID EQ rule_stms                                        { Define($2, $4) }
-  | PROCESS process_type LBRACE rule_stms RBRACE POLICY policy    { Process($2, $4, $7) }
+  | process                                                       { $1 }
 ;
 
 zone_stm:
   | NETWORK EQ IPv6                                               { let i, p = $3 in Network(Ipv6.to_number i, p) }
   | INTERFACE EQ ID                                               { Interface($3) }
+  | process                                                       { ZoneP $1 }
 ;
+
+process:
+  | PROCESS process_type LBRACE rule_stms RBRACE POLICY policy    { Process($2, $4, $7) }
+
 
 zone_stms:
   | zone_stm SEMI zone_stms                                       { $1 :: $3 }
@@ -103,7 +108,7 @@ filter_direction:
 filter_stm:
   | TCP PORT EQ int_list                                          { TcpPort($4) }
   | UDP PORT EQ int_list                                          { UdpPort($4) }
-  | ADDRESS EQ IPv6                                                    { let i, p = $3 in Ip(Ipv6.to_number i, p) }
+  | ADDRESS EQ IPv6                                               { let i, p = $3 in Ip(Ipv6.to_number i, p) }
   | ZONE EQ ID                                                    { FZone($3) }
 ;
 

@@ -8,24 +8,25 @@ type policytype = ALLOW | DENY | REJECT
 
 type action_stm = Policy of policytype
 
-type zone_stm = Interface of id
-                | Network of ip
+and node = Import of id
+         | Zone of id * zone_stm list
+         | Define of id * rule_stm list
+         | Process of processtype * rule_stm list * policytype
 
-type filter_stm = Ip of ip
-                | TcpPort of int list
-                | UdpPort of int list
-                | FZone of id
+and zone_stm = Interface of id
+             | Network of ip
+             | ZoneP of node
 
-type rule_stm = Filter of Ir.direction * filter_stm
-              | State of Ir.statetype list
-              | Rule of rule_stm list * action_stm
-              | Protocol of Ir.protocol
-              | Reference of id
+and filter_stm = Ip of ip
+               | TcpPort of int list
+               | UdpPort of int list
+               | FZone of id
 
-type node = Import of id
-          | Zone of id * zone_stm list
-          | Define of id * rule_stm list
-          | Process of processtype * rule_stm list * policytype
+and rule_stm = Filter of Ir.direction * filter_stm
+             | State of Ir.statetype list
+             | Rule of rule_stm list * action_stm
+             | Protocol of Ir.protocol
+             | Reference of id
 
 let rec create_define_map_rec acc = function
     Define (id, stms) :: xs -> create_define_map_rec (Id_map.add id stms acc) xs

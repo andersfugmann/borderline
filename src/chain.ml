@@ -45,7 +45,7 @@ let get chain_id =
   List.find ( fun chn -> cmp_chain_id (chain_id, chn.id) ) !chains
 
 let emit emitter =
-  List.flatten ( List.map emitter !chains )
+  emitter !chains
 
 let optimize opt  =
   chains := opt !chains

@@ -1,21 +1,9 @@
-* Setup wiki page for blorderline.
-* Extend ip address notation to include '::'
 * Require one rule for each zone definition. (add a rule stm to the zone struct)
-* Move implementation to .ml and types to .mli
+* Add comments about source rule. Extend rule to contain position info.
 * Allow ip and port definitions (Series that will be or'ed)
 
+* Setup wiki page for borderline.
+* Extend ip address notation to include '::'
+* Move implementation to .ml and types to .mli
 
-Work in progress:
-* Merge source and dest zone specification when emitting rules.
-
-
-
-
-
-
-
-
-
-
-
-
+* Add ipv4 support - Somehow. Maybe by adding a switch, and by using the same framework but disallowing ipv6 constructs. The validation pass must validate the all rules to be allowed. Also a mangle filter must be present for ipv4 firewalling. 

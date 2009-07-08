@@ -10,7 +10,6 @@ let _ =
     
     let (zones, procs) = process_file "test.bl" in
 
-    (* Inline all the defines as long as there are defines to be inlined *)
     let input_opers, output_opers, forward_opers = Zone.emit (zones) in
       
     let filter_chains = List.map Rule.process procs in
@@ -19,7 +18,7 @@ let _ =
     let _ = Chain.set { Ir.id = Ir.Builtin Ir.OUTPUT ; rules = output_opers @ filter_ops; comment = "Builtin" } in
     let _ = Chain.set { Ir.id = Ir.Builtin Ir.FORWARD ; rules = forward_opers @ filter_ops; comment = "Builtin" } in
     let _ = Chain.optimize Optimize.optimize in
-      List.iter (Printf.printf "%s\n") (Chain.emit Iptables.emit_chain)
+      List.iter (Printf.printf "%s\n") (Chain.emit Iptables.emit_chains)
 
   with ParseError (err, id) -> prerr_endline (error2string (err,id) )
 

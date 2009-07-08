@@ -43,12 +43,13 @@ let get_protocol_name = function
 
 let gen_zone_mask dir zone =
   let zone_id = get_zone_id (id2str zone) in
-  let id, mask = match dir with
-      Ir.SOURCE -> zone_id, 0x00ff
-    | Ir.DESTINATION -> zone_id * 0x100, 0xff00
-  in
-    sprintf "0x%04x/0x%04x" id mask
+  match dir with
+      SOURCE -> zone_id, 0x00ff
+    | DESTINATION -> zone_id * 0x100, 0xff00
 
+let gen_zone_mask_str dir zone = 
+  let id, mask = gen_zone_mask dir zone in sprintf "0x%04x/0x%04x" id mask
+    
 (* Return a prefix and condition, between which a negation can be inserted *)
 let gen_condition = function
     IpRange(direction, low, high) -> 
@@ -59,13 +60,14 @@ let gen_condition = function
       end
   | Interface(direction, name) -> ("", (choose_dir "--in-interface " "--out-interface " direction) ^ (id2str name))
   | State(states) -> "-m conntrack ", ("--ctstate " ^ ( String.concat "," (List.map get_state_name states)))
-  | Zone(dir, id) -> "-m conmark ", "--mark " ^ (gen_zone_mask dir id)
-  | TcpPort(direction, ports) -> "-p tcp -m multiport ",
+  | Zone(dir, id) -> "-m conmark ", "--mark " ^ (gen_zone_mask_str dir id)
+  | TcpPort(direction, ports) -> "-m multiport ",
       ( "--" ^ (choose_dir "source" "destination" direction) ^ "-ports " ^ (String.concat "," (List.map string_of_int ports)) )
-  | UdpPort(direction, ports) -> "-p udp -m multiport ",
+  | UdpPort(direction, ports) -> "-m multiport ",
       ( "--" ^ (choose_dir "source" "destination" direction) ^ "-ports " ^ (String.concat "," (List.map string_of_int ports)) )
 
   | Protocol(protocol) -> ("", "-p " ^ (get_protocol_name protocol))
+  | Mark (value, mask) -> "-m conmark ", sprintf "--mark 0x%04x/0x%04x" value mask
 
 let rec gen_conditions acc = function
     (cond, neg) :: xs -> 
@@ -74,23 +76,75 @@ let rec gen_conditions acc = function
   | [] -> acc
 
 let gen_action = function
-    MarkZone(dir, id) -> "MARK --set-mark " ^ (gen_zone_mask dir id) 
+    MarkZone(dir, id) -> "MARK --set-mark " ^ (gen_zone_mask_str dir id) 
   | Jump(chain_id) -> (Chain.get_chain_name chain_id)
   | Return -> "RETURN"
   | Accept -> "ACCEPT"
   | Drop   -> "DROP"
   | _ -> "#### Unsupported action"
 
+(* Transform rules into something emittable. This may introduce new chains. *)
+let transform chains = 
+  let zone_to_mask conds =
+    let rec map = function
+        (Zone (dir, zone), neg) :: (Zone(dir', zone'), neg') :: xs when neg = neg' && not (dir = dir') ->
+          let v1, m1 = gen_zone_mask dir zone in
+          let v2, m2 = gen_zone_mask dir' zone' in
+            (Mark (v1 + v2, m1 + m2), neg) :: map xs
+      | (Zone (dir, zone), neg) :: xs -> 
+          let v, m = gen_zone_mask dir zone in (Mark (v, m), neg) :: map xs
+      | x :: xs -> x :: map xs
+      | [] -> []
+    in
+      map (List.sort Ir.compare conds)
+  in  
+  let rec map_rules = function
+      (conds, target) :: xs -> 
+        (zone_to_mask conds, target) :: map_rules xs
+    | [] -> []
+  in
+  let rec split_opers acc = function 
+      (x, neg) :: xs -> 
+        if List.exists (fun (y, _) -> cond_type_identical x y) acc then
+          acc :: (split_opers [(x, neg)] xs)
+        else
+          split_opers (acc @ [(x, neg)]) xs
+    | [] -> [ acc ]
+
+  in
+    (* Return rule and a list of new chains *)
+  let rec create_chains chains target = function       
+      []  -> (([], target), chains)
+    | rle :: [] -> ((rle, target), chains)
+    | rle :: xs -> 
+        let chain = Chain.create [ (rle, target) ] "Continuation" in
+          create_chains (chain :: chains) (Jump(chain.id)) xs 
+  in 
+  let map_chain chain =
+    let (rules, chains) = List.split (List.map (fun (ops, target) -> create_chains [] target (split_opers [] ops) ) chain.rules)
+    in { id = chain.id; rules = rules; comment = chain.comment } :: (List.flatten chains)
+         
+  in 
+  let chains = List.map (fun chn -> {id = chn.id; rules = map_rules chn.rules; comment = chn.comment }) chains in
+  let chains = List.flatten (List.map map_chain chains) in
+    chains
+    
+
 let emit (cond_list, action) : string =
   let conditions = gen_conditions "" cond_list in
   let target = gen_action action in
     conditions ^ "-j " ^ target
 
-let emit_chain chain =
+let emit_chain chain =  
   let chain_name = Chain.get_chain_name chain.id in
   let ops = List.map emit chain.rules in
   let lines = List.map ( sprintf "ip6tables -A %s %s" chain_name ) ops in
     match chain.id with
         Builtin(_) -> lines
       | _          -> (sprintf "ip6tables -N %s #%s" chain_name chain.comment) :: lines
+
+let emit_chains chains = 
+  let chains' = transform chains in
+    List.flatten (List.map emit_chain chains')
+
 

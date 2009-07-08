@@ -12,6 +12,7 @@ let rec gen_zone_oper direction = function
     Interface(name) -> Ir.Interface(direction, name)
   | Network(a, m) -> let (low, high) = Ipv6.to_range (a, m) in
       Ir.IpRange(direction, low, high)
+  | _ -> raise InternalError
 
 let expand = function
     Zone(id, nodes) -> (id, nodes)
@@ -21,15 +22,15 @@ let expand = function
 let create_zone_chain direction (id, nodes) =
   let networks = List.filter ( fun tpe -> match tpe with Network _ -> true | _ -> false ) nodes in
   let interfaces = List.filter ( fun tpe -> match tpe with Interface _ -> true | _ -> false ) nodes in
+  let tmp_chn = Chain.create [([], Ir.MarkZone(direction, id))] ("Mark zone " ^ (id2str id)) in
   let chain = 
-    let tmp_chn = Chain.create [([], Ir.MarkZone(direction, id))] ("Mark zone " ^ (id2str id)) in
-      if List.length networks = 0 then
-        tmp_chn
-      else
-        Chain.create (List.map (gen_oper (Ir.Jump tmp_chn.Ir.id) (gen_zone_oper direction)) networks) ("Match networks for zone " ^ (id2str id))
+    if List.length networks = 0 then
+      tmp_chn
+    else
+      Chain.create (List.map (gen_oper (Ir.Jump tmp_chn.Ir.id) (gen_zone_oper direction)) networks) ("Match networks for zone " ^ (id2str id))
   in
     Chain.create (List.map (gen_oper (Ir.Jump chain.Ir.id) (gen_zone_oper direction)) interfaces) ("Match interfaces for zone " ^ (id2str id))
-
+      
 let rec filter = function
     Zone(id, nodes) :: xs -> (id, nodes) :: filter xs
   | x :: xs -> filter xs
@@ -40,8 +41,7 @@ let emit_nodes zones =
   let rec gen_rule_stems (zone_id, _) =  
     Rule([Filter(Ir.DESTINATION, FZone(zone_id)); Reference zone_id], Policy DENY)
   in
-  let id = ("zones", Lexing.dummy_pos) in 
-    [ Define(id, List.map gen_rule_stems zones) ]
+    [ Define(all_zones, List.map gen_rule_stems zones) ]
 
 
 let emit zones =
