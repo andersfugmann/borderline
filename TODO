@@ -1,9 +1,37 @@
-* Require one rule for each zone definition. (add a rule stm to the zone struct)
-* Add comments about source rule. Extend rule to contain position info.
-* Allow ip and port definitions (Series that will be or'ed)
+In progress: 
+* Extend source / destination addresses to be lists. 
+* Allow ip definitions (Series that will be or'ed)
+* Change Port definitions to be Int list definitions, and allow these definitions everywhere an int is used.
 
-* Setup wiki page for borderline.
+* Move implementation to .ml and types to .mli - Need to figure out
+  how to avoid type definition redundancy.
+
+Future:  
+* Add comments about source rule. Extend rule to contain position
+  info.
+
+* Setup wiki page for borderline.  
+
 * Extend ip address notation to include '::'
-* Move implementation to .ml and types to .mli
 
-* Add ipv4 support - Somehow. Maybe by adding a switch, and by using the same framework but disallowing ipv6 constructs. The validation pass must validate the all rules to be allowed. Also a mangle filter must be present for ipv4 firewalling. 
+Planning:
+* Add ipv4 support - Somehow. Maybe by adding a switch, and by using
+  the same framework but disallowing ipv6 constructs. The validation
+  pass must validate the all rules to be allowed. Also a mangle filter
+  must be present for ipv4 firewalling.
+
+* Define strategy about Mangle and Nat tables. It may require a
+  seperate tree, with special validation and optimization passes. It
+  will also require cha ins to be locked to a specific table, which it
+  is currently not. Table creation could take a parent table and
+  inherit the table info.
+
+
+# To create a checkpoint do:
+tar zvcf checkpoint1.tar.gz TODO src/*.{ml,mli} src/*bl src/test/*.bl
+
+Consider using git for development rather than svn. 
+
+
+
+
