@@ -1,4 +1,5 @@
 open Common
+open Frontend_types
 open Frontend
 
 let rec get_zone_ids acc = function
@@ -20,8 +21,8 @@ let rec get_referenced_ids node =
     | _ -> acc
   in 
   match node with
-      DefineRule _ as x -> fold get_id [ x ] Id_set.empty
-    | DefinePort (id, ports) -> List.fold_left (fun acc id -> Id_set.add id acc) Id_set.empty (get_port_ids ports)
+      DefineStms _ as x -> fold get_id [ x ] Id_set.empty
+    | DefineInts (id, ports) -> List.fold_left (fun acc id -> Id_set.add id acc) Id_set.empty (get_port_ids ports)
     | x -> fold get_id [ x ] Id_set.empty
  
 let rec get_referenced_zones nodes =
@@ -56,8 +57,8 @@ let rec test_shadow_defines acc nodes =
                  else ()
   in
     match nodes with 
-        DefineRule (id, _) :: xs -> test id; test_shadow_defines (Id_set.add id acc) xs
-      | DefinePort (id, _) :: xs -> test id; test_shadow_defines (Id_set.add id acc) xs
+        DefineStms (id, _) :: xs -> test id; test_shadow_defines (Id_set.add id acc) xs
+      | DefineInts (id, _) :: xs -> test id; test_shadow_defines (Id_set.add id acc) xs
       | _ :: xs -> test_shadow_defines acc xs 
       | [] -> ()
 

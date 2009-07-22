@@ -1,4 +1,5 @@
 open Common
+open Frontend_types
 open Frontend
 open Parser
 open Lexer
@@ -55,8 +56,8 @@ let rec inline_defines defines nodes =
       Port_nr _ as port :: xs -> port :: expand_ports xs
     | Port_id id :: xs -> begin 
           match Id_map.find id defines with
-              DefinePort(_, ports) -> expand_ports ports
-            | DefineRule(id', _) -> raise (ParseError [("Port definition required", id); ("But found rule definition", id')])
+              DefineInts(_, ports) -> expand_ports ports
+            | DefineStms(id', _) -> raise (ParseError [("Port definition required", id); ("But found rule definition", id')])
             | _ -> raise InternalError
         end @ expand_ports xs
     | [] -> []
@@ -64,8 +65,8 @@ let rec inline_defines defines nodes =
   let rec expand_define = function 
       Reference id -> begin
         match Id_map.find id defines with
-            DefineRule(_, stm) -> expand_rules expand_define stm
-          | DefinePort(id', _) -> raise (ParseError [("Rule definition required", id); ("But found port definition", id')])
+            DefineStms(_, stm) -> expand_rules expand_define stm
+          | DefineInts(id', _) -> raise (ParseError [("Rule definition required", id); ("But found port definition", id')])
           | _ -> raise InternalError
       end
     | Filter (dir, TcpPort ports) -> [ Filter (dir, TcpPort (expand_ports ports)) ]
@@ -77,7 +78,7 @@ let rec inline_defines defines nodes =
 let process_file file = 
   let nodes = parse_file "test.bl" in
   let zones = Zone.filter nodes in
-  let nodes' = (Zone.emit_nodes Frontend.FILTER zones) @ nodes in 
+  let nodes' = (Zone.emit_nodes Frontend_types.FILTER zones) @ nodes in 
     Validate.validate nodes';
     (zones, Rule.filter_process (inline_defines (create_define_map nodes') nodes'))
 

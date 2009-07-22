@@ -1,5 +1,6 @@
 open Common
 open Frontend
+open Frontend_types
 open Chain
 open Big_int
 

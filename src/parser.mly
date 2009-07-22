@@ -3,6 +3,7 @@
  */
 %{
   open Frontend
+  open Frontend_types
   open Printf
   open Scanf
   open Lexing
@@ -33,7 +34,7 @@
 %token LBRACE RBRACE COMMA DOT COLON DCOLON SLASH END
 
 %start main
-%type <Frontend.node list> main
+%type <Frontend_types.node list> main
 %%
 
 main:
@@ -49,8 +50,8 @@ statements:
 statement:
   | IMPORT STRING                                                 { Import($2) }
   | ZONE ID LBRACE zone_stms RBRACE                               { Zone($2, $4)   }
-  | DEFINE ID EQ rule_stms                                        { DefineRule($2, $4) }
-  | DEFINE ID EQ port_list                                        { DefinePort($2, $4) }
+  | DEFINE ID EQ rule_stms                                        { DefineStms($2, $4) }
+  | DEFINE ID EQ port_list                                        { DefineInts($2, $4) }
   | PROCESS process_type LBRACE rule_stms RBRACE POLICY policy    { Process($2, $4, $7) }
 ;
 

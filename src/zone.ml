@@ -1,4 +1,5 @@
 open Common
+open Frontend_types
 open Frontend
 open Chain
 
@@ -49,7 +50,7 @@ let emit_nodes table zones =
       fun (rules, policy) -> Rule( [ Filter(Ir.DESTINATION, FZone(zone_id)) ] @ rules, Policy policy )
     ) (filter_zonerules table nodes)
   in
-    [ DefineRule (all_zones, List.flatten (List.map gen_rule_stems zones)) ]
+    [ DefineStms (all_zones, List.flatten (List.map gen_rule_stems zones)) ]
 
 let emit table zones =
   let src_chains = List.map (create_zone_chain Ir.SOURCE) zones in

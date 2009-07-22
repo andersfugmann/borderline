@@ -1,5 +1,6 @@
 open Common 
 open Parse
+open Frontend_types
 open Frontend
 open Iptables
 open Printf
