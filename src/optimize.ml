@@ -5,6 +5,8 @@ open Chain
 
 exception MergeImpossible
 
+let max_inline_size = 1
+
 let rec chain_reference_count id chains = 
   let filter id = function (_, Jump chn_id) when chn_id = id -> true | _ -> false in
     match chains with
@@ -286,7 +288,7 @@ let optimize_pass chains: Ir.chain list =   let _ = printf "Optim: %d " (count_r
   let chains' = fold_return_statements chains' in
   let chains' = map_chain_rules eliminate_dead_rules chains' in
   let chains' = map_chain_rules eliminate_dublicate_rules chains' in
-  let chains' = inline (fun _ c -> List.length c.rules <= 2) chains' in
+  let chains' = inline (fun _ c -> List.length c.rules <= max_inline_size) chains' in
   let chains' = inline (fun cs c -> chain_reference_count c.id cs = 1 && List.length c.rules < 3) chains' in
   let chains' = map_chain_rules reorder chains' in
   let chains' = map_chain_rules reduce chains' in

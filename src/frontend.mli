@@ -8,16 +8,17 @@ type action_stm = Policy of policytype
 
 and node = Import of id
          | Zone of id * zone_stm list
-         | Define of id * rule_stm list
+         | DefineRule of id * rule_stm list
+         | DefinePort of id * port list
          | Process of processtype * rule_stm list * policytype
 
 and zone_stm = Interface of id
              | Network of ip
-             | ZoneP of node
+             | ZoneRules of processtype * rule_stm list * policytype
 
 and filter_stm = Ip of ip
-               | TcpPort of int list
-               | UdpPort of int list
+               | TcpPort of port list
+               | UdpPort of port list
                | FZone of id
 
 and rule_stm = Filter of Ir.direction * filter_stm
@@ -26,8 +27,15 @@ and rule_stm = Filter of Ir.direction * filter_stm
              | Protocol of Ir.protocol
              | Reference of id
 
+and port = Port_nr of int
+          | Port_id of id 
+
+type address = Address_nr of ip
+             | Address_id of id 
+
+
 val lineno : int ref
-val create_define_map : node list -> ( (rule_stm list) Id_map.t)
+val create_define_map : node list -> ( node Id_map.t)
 
 val node_type : int -> node -> bool
 

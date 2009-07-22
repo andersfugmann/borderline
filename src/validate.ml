@@ -1,24 +1,29 @@
 open Common
 open Frontend
 
-(* exception ParseError of string * int *)
-
-(* Need to traverse the tree. If we encounter a unresolvable zone, raise and exception. *)
-(* Can we detect cyclic references at the same time? *)
-
 let rec get_zone_ids acc = function
     Zone (id, _) :: xs -> get_zone_ids (Id_set.add id acc) xs
   | _ :: xs -> get_zone_ids acc xs
   | [] -> acc
 
 
-let rec get_referenced_ids nodes =
+let rec get_port_ids = function
+    Port_id id :: xs -> id :: get_port_ids xs
+  | _ :: xs -> get_port_ids xs
+  | [] -> []
+
+let rec get_referenced_ids node =
   let rec get_id acc = function
       Reference id -> Id_set.add id acc
+    | Filter (dir, TcpPort ports) -> List.fold_left (fun acc id -> Id_set.add id acc) acc (get_port_ids ports)
+    | Filter (dir, UdpPort ports) -> List.fold_left (fun acc id -> Id_set.add id acc) acc (get_port_ids ports)
     | _ -> acc
   in 
-    fold get_id nodes Id_set.empty
-
+  match node with
+      DefineRule _ as x -> fold get_id [ x ] Id_set.empty
+    | DefinePort (id, ports) -> List.fold_left (fun acc id -> Id_set.add id acc) Id_set.empty (get_port_ids ports)
+    | x -> fold get_id [ x ] Id_set.empty
+ 
 let rec get_referenced_zones nodes =
   let rec get_id acc = function
       Filter (_, FZone id) -> Id_set.add id acc
@@ -26,31 +31,40 @@ let rec get_referenced_zones nodes =
   in 
     fold get_id nodes Id_set.empty 
     
-let test_cyclic_references defines start =
-  let rec test_define acc define = 
-    let test id = 
-      try test_define (Id_set.add id acc) (Define(id, Id_map.find id defines))
-      with Not_found -> raise (ParseError ("Unknown reference to definition", id))
-    in
-    let references = get_referenced_ids [define] in
-
-    let cyclic_references = Id_set.inter acc references in
-      if not (Id_set.is_empty cyclic_references) then 
-        raise (ParseError ("Cyclic reference", Id_set.choose cyclic_references)) (* Should add more info here *); 
-      Id_set.iter test references
+let rec detect_cyclic_references id_func defines seen elem =
+  let recurse id =
+    let next_elem = try Id_map.find id defines with Not_found -> raise (ParseError [("Unknown reference to definition", id)]) in
+      match List.mem id seen with
+          true -> raise (ParseError (("Cyclic reference", id) :: List.rev_map (fun id' -> ("Referenced from", id')) seen))
+        | false -> detect_cyclic_references id_func defines (seen @ [id]) next_elem
   in
-    test_define Id_set.empty start
-
+    List.iter recurse (id_func elem)
+    
 let test_unresolved_zone_references nodes = 
   let zone_ids = get_zone_ids Id_set.empty nodes in
   let zone_refs = get_referenced_zones nodes in
-    try raise (ParseError ("Unresolved zone reference", Id_set.choose (Id_set.diff zone_refs zone_ids)))
-    with Not_found -> () 
+    match Id_set.elements (Id_set.diff zone_refs zone_ids) with       
+        [] -> ()
+      | diff -> raise (ParseError (List.map (fun id -> ("Unresolved zone reference", id)) diff))
+
+let rec test_shadow_defines acc nodes =
+  let get_id id = Id_set.fold (fun elt acc -> if eq_id elt acc then elt else acc) acc id 
+  in
+  let test id = if Id_set.mem id acc then 
+                    raise (ParseError [("Definition shadows previous definition", id); 
+                                       ("Definition first seen here", get_id id)])
+                 else ()
+  in
+    match nodes with 
+        DefineRule (id, _) :: xs -> test id; test_shadow_defines (Id_set.add id acc) xs
+      | DefinePort (id, _) :: xs -> test id; test_shadow_defines (Id_set.add id acc) xs
+      | _ :: xs -> test_shadow_defines acc xs 
+      | [] -> ()
 
 let validate nodes =
   let defines = create_define_map nodes in
-  let entries = Rule.filter_process nodes in
-    List.iter (test_cyclic_references defines) entries; 
-    test_unresolved_zone_references nodes 
+  let entries = List.map (fun (t, r, p) -> Process(t, r, p)) (Rule.filter_process nodes) in
+    test_shadow_defines Id_set.empty nodes;
+    test_unresolved_zone_references nodes;
+    List.iter (fun entry -> detect_cyclic_references (fun node -> Id_set.elements (get_referenced_ids node)) defines [] entry) entries
     
-

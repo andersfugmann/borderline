@@ -4,10 +4,12 @@ exception InternalError
 
 type id = string * Lexing.position
 
-exception ParseError of string * id
+exception ParseError of (string * id) list
 
-let error2string (err, (id, pos)) =
-    sprintf "File \"%s\", line %d: Error. %s '%s'" pos.Lexing.pos_fname pos.Lexing.pos_lnum err id 
+let error2string errors = 
+  let err2str (err, (id, pos)) = sprintf "File \"%s\", line %d: Error. %s '%s'" pos.Lexing.pos_fname pos.Lexing.pos_lnum err id 
+  in
+    String.concat "\n" (List.map err2str errors)
 
 module Id_set = Set.Make (struct
   type t = id

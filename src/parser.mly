@@ -38,6 +38,7 @@
 
 main:
   | statements END                                                { $1 }
+  | END                                                           { [] }
 ;
 
 statements:
@@ -48,19 +49,16 @@ statements:
 statement:
   | IMPORT STRING                                                 { Import($2) }
   | ZONE ID LBRACE zone_stms RBRACE                               { Zone($2, $4)   }
-  | DEFINE ID EQ rule_stms                                        { Define($2, $4) }
-  | process                                                       { $1 }
+  | DEFINE ID EQ rule_stms                                        { DefineRule($2, $4) }
+  | DEFINE ID EQ port_list                                        { DefinePort($2, $4) }
+  | PROCESS process_type LBRACE rule_stms RBRACE POLICY policy    { Process($2, $4, $7) }
 ;
 
 zone_stm:
   | NETWORK EQ IPv6                                               { let i, p = $3 in Network(Ipv6.to_number i, p) }
   | INTERFACE EQ ID                                               { Interface($3) }
-  | process                                                       { ZoneP $1 }
+  | PROCESS process_type LBRACE rule_stms RBRACE POLICY policy    { ZoneRules($2, $4, $7) }
 ;
-
-process:
-  | PROCESS process_type LBRACE rule_stms RBRACE POLICY policy    { Process($2, $4, $7) }
-
 
 zone_stms:
   | zone_stm SEMI zone_stms                                       { $1 :: $3 }
@@ -90,6 +88,7 @@ rule_stms:
 
 action:
   | POLICY policy                                                 { Policy($2) }
+
 policy:
   | ALLOW                                                         { ALLOW }
   | DENY                                                          { DENY }
@@ -106,8 +105,8 @@ filter_direction:
 ;
 
 filter_stm:
-  | TCP PORT EQ int_list                                          { TcpPort($4) }
-  | UDP PORT EQ int_list                                          { UdpPort($4) }
+  | TCP PORT EQ port_list                                         { TcpPort($4) }
+  | UDP PORT EQ port_list                                         { UdpPort($4) }
   | ADDRESS EQ IPv6                                               { let i, p = $3 in Ip(Ipv6.to_number i, p) }
   | ZONE EQ ID                                                    { FZone($3) }
 ;
@@ -123,8 +122,11 @@ state:
   | INVALID                                                       { Ir.INVALID }
 ;
 
+port_list:
+  | port                                                          { [ $1 ] }
+  | port COMMA port_list                                          { $1 :: $3 }
 
-int_list:
-  | INT                                                           { [ $1 ] }
-  | INT COMMA int_list                                            { $1 :: $3 }
+port:
+  | INT                                                           { Port_nr ($1) }
+  | ID                                                            { Port_id ($1) }
 ;

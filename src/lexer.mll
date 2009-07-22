@@ -50,7 +50,7 @@ rule token = parse
   | "dst"          { Parser.DESTINATION }
   | "port"         { Parser.PORT }
   | "state"        { Parser.STATE }
-  | "address"           { Parser.ADDRESS }
+  | "address"      { Parser.ADDRESS }
   | "call"         { Parser.CALL }
 
 (* State types *)
@@ -96,11 +96,11 @@ rule token = parse
   | '/'            { SLASH }
   | '='            { EQ }
   | ';'            { SEMI }
-  | '#'            { comment lexbuf; token lexbuf }
+  | '#'            { comment lexbuf }
   | eof            { END }
   | _              { raise (Lexer_error !lineno) }
 
 and comment = parse
-    '\n'           { new_line lexbuf }
-  | eof            { }
+    '\n'           { new_line lexbuf; token lexbuf }
+  | eof            { END }
   | _              { comment lexbuf }

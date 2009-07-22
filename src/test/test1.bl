@@ -1,1 +1,3 @@
-define web = rule { destination tcp port = 80,443; } policy allow
+
+
+#define web = rule { destination tcp port = web_ports; } policy allow

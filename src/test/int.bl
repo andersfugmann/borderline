@@ -1,25 +1,23 @@
 zone int {
      interface = int;
-     network = 2001:16d8:dd2d:0:0:0:0:0/64
+     network = 2001:16d8:dd2d:0:0:0:0:0/64;
+     process filter {
+         rule { destination tcp port = allowed_ports; } policy allow;
+         rule { destination udp port = dns; } policy allow;
+         rule { source zone = stue; } policy allow;
+         rule { source zone = stue; } policy allow; # Dublicate.
+         rule { source address = 2001:16d8:dd2d:0:2e0:4cff:fe69:103d/64; 
+             rule { source address = 2001:16d8:dd2d:0:2e0:4cff:fe69:103d/128 } policy allow;
+         } policy deny;
+         rule { destination zone = stue; } policy deny;
+         rule { source zone = wlan; 
+             rule { destination tcp port = 4321; } policy allow;
+         } policy deny
+     } policy deny
 }
-# Move this to the zone definition.
-define web = rule { destination tcp port = 80,443; } policy allow
+define web = rule { destination tcp port = web_ports; } policy allow
 
-define int = rule {
-                 rule { destination tcp port = 22,25,80,443,993,53; } policy allow;
-                 rule { destination udp port = 53; } policy allow;
-                 rule { source zone = stue; } policy allow;
-                 rule { source zone = stue; } policy allow; # Dublicate.
-                 rule { source address = 2001:16d8:dd2d:0:2e0:4cff:fe69:103d/64; 
-                        rule { source address = 2001:16d8:dd2d:0:2e0:4cff:fe69:103d/128 } policy allow;
-                 } policy deny;
-                 rule { destination zone = stue; } policy deny;
-                 rule { source zone = wlan; 
-                      rule { destination tcp port = 4321; } policy allow;
-                 } policy deny
-             } policy deny
-
-
-
-
+define web_ports = 80, 443
+define allowed_ports = 22, 25, 993, 53, web_ports
+define dns = 53
 

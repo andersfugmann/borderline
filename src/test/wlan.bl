@@ -1,9 +1,9 @@
 zone wlan {
      interface = wlan0;
-     network = 2001:16d8:dd2d:1:0:0:0:0/64
-}
+     network = 2001:16d8:dd2d:1:0:0:0:0/64;
+     process filter { 
+         rule { destination tcp port = 4321; } policy allow;
+     } policy deny
 
-define wlan = rule { 
-                  rule { destination tcp port = 4321; } policy allow;
-              } policy deny
+}
 
