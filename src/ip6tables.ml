@@ -85,6 +85,18 @@ let gen_action = function
 
 (* Transform rules into something emittable. This may introduce new chains. *)
 let transform chains = 
+  (* Return a list of chains, and a single rule *)
+  let denormalize (conds, target) = 
+    let rec denorm_rule tg = function
+        cl :: [] -> ([], (cl, tg)) 
+      | cl :: xs -> 
+          let chn', rle = denorm_rule target xs in
+          let chn = Chain.create [rle] "Denormalize" in 
+            (chn :: chn', (cl, Ir.Jump chn.id))
+      | [] -> ([], ([], tg))
+    in 
+      denorm_rule target (uniq (fun (a, _) (b, _) -> cond_type_identical a b) conds)
+  in
   let zone_to_mask (conds, target) =
     let rec zone_to_mask' = function
         (Zone (dir, zone), neg) :: (Zone(dir', zone'), neg') :: xs when neg = neg' && not (dir = dir') ->
@@ -104,38 +116,10 @@ let transform chains =
           { id = chain.id; rules = rules; comment = chain.comment } :: map_chains func ((List.flatten chains) @ xs)
     | [] -> []
   in
-    map_chains zone_to_mask chains 
+  let chains = map_chains zone_to_mask chains in
+  let chains = map_chains denormalize chains in
+    chains
     
-(* Pass to denormalize rules based on knowledge of ip6tables.
-   This pass will make sure that there are not two identical conditions on one line
-   (Amongst other things)
-*)
-let denormalize chains =
-  let cond_eq (a, _) (b, _) = cond_type_identical a b in
-  let rec denorm_rule chn_acc target = function
-      conds :: xs -> let (chains, rules) = denorm_rule [] target xs in
-        begin match rules with
-            [] -> (chains, [(conds, target)])
-          | _ -> let new_chain = Chain.create rules "Denormalize" in
-              (new_chain :: chains, [(conds, Ir.Jump new_chain.id)])
-        end
-    | [] -> ([], [])    
-  (* Need to create a list containint only unique elements *)
-  in
-  let rec map_rules acc1 acc2 = function
-      (conds, target) :: xs -> 
-        let chains, rules = denorm_rule [] target (uniq cond_eq conds) in
-          map_rules (chains @ acc1) (rules @ acc2) xs
-           
-    | [] -> (acc1, acc2) 
-  in        
-  let rec map_chains = function
-       { id = id; rules = rules; comment = comment } :: xs ->
-         let chns, rules' = map_rules [] [] rules in
-           {id = id; rules = rules'; comment = comment} :: map_chains (chns @ xs)
-    | [] -> []
-  in 
-    map_chains chains
 
 let emit (cond_list, action) : string =
   let conditions = gen_conditions "" cond_list in
@@ -152,7 +136,6 @@ let emit_chain chain =
 
 let emit_chains chains = 
   let chains' = transform chains in
-  let chains' = denormalize chains' in
     List.flatten (List.map emit_chain chains')
 
 

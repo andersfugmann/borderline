@@ -49,7 +49,7 @@ let has_intersection eq_oper a b =
 let rec group eq_oper acc = function
     x :: xs -> 
       let lst, rest = List.partition (eq_oper x) xs in
-        group eq_oper ((x :: lst) :: acc) xs 
+        group eq_oper ((x :: lst) :: acc) rest 
   | [] -> acc
 
 (* Create as few lists as possible with no identical items *)
@@ -61,7 +61,7 @@ let uniq eq_oper lst =
       | _, (x :: xs) :: ys -> uniq' (x :: acc1) (xs :: acc2) ys 
       | _, [] -> acc1 :: uniq' [] [] acc2
   in
-    uniq' [] [] (group eq_oper [] lst)
+  uniq' [] [] (group eq_oper [] lst)
 
     
 

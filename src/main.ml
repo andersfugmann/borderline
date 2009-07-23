@@ -17,7 +17,8 @@ let _ =
     let _ = Chain.set { Ir.id = Ir.Builtin Ir.OUTPUT ; rules = output_opers @ filter_ops; comment = "Builtin" } in
     let _ = Chain.set { Ir.id = Ir.Builtin Ir.FORWARD ; rules = forward_opers @ filter_ops; comment = "Builtin" } in
     let _ = Chain.optimize Optimize.optimize in
-      List.iter (Printf.printf "%s\n") (Chain.emit Ip6tables.emit_chains)
+    let lines = Chain.emit Ip6tables.emit_chains in
+      Printf.printf "%s\nLines: %d\n" (String.concat "\n" lines) (List.length lines) 
 
   with ParseError err as excpt -> flush stdout; prerr_endline (error2string err); raise excpt
 
