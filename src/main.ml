@@ -2,7 +2,6 @@ open Common
 open Parse
 open Frontend_types
 open Frontend
-open Iptables
 open Printf
 open Chain
 
@@ -18,7 +17,7 @@ let _ =
     let _ = Chain.set { Ir.id = Ir.Builtin Ir.OUTPUT ; rules = output_opers @ filter_ops; comment = "Builtin" } in
     let _ = Chain.set { Ir.id = Ir.Builtin Ir.FORWARD ; rules = forward_opers @ filter_ops; comment = "Builtin" } in
     let _ = Chain.optimize Optimize.optimize in
-      List.iter (Printf.printf "%s\n") (Chain.emit Iptables.emit_chains)
+      List.iter (Printf.printf "%s\n") (Chain.emit Ip6tables.emit_chains)
 
   with ParseError err as excpt -> flush stdout; prerr_endline (error2string err); raise excpt
 

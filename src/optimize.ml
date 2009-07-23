@@ -50,9 +50,9 @@ let merge_opers rle =
   in
   let merge_list (s, neg) (s', neg') =   
     match neg, neg' with
-        (true, true) | (false, false) -> test (intersection equality s s', neg)
-      | (false, true) -> test (difference equality s s', false)
-      | (true, false) -> test (difference equality s' s, false)
+        (true, true) | (false, false) -> test (intersection (=) s s', neg)
+      | (false, true) -> test (difference (=) s s', false)
+      | (true, false) -> test (difference (=) s' s, false)
   in
   let merge_elem (i, neg) (i', neg') =        
     let (i'', neg'') = merge_list ([i], neg) ([i'], neg') in

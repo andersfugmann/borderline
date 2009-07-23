@@ -26,8 +26,6 @@ let id2str (str, _) = str
 
 let eq_id (a, _) (b, _) = a = b
 
-let equality a b = a = b
-
 let combinations acc conds : 'a list = 
     List.flatten (List.map (fun acc -> List.map (fun cl -> acc @ [cl]) conds) acc)
 
@@ -46,6 +44,26 @@ let is_subset eq_oper a b =
 
 let has_intersection eq_oper a b =
   not (intersection eq_oper a b = [])
+
+(* Group items into lists of identical elemenets *)
+let rec group eq_oper acc = function
+    x :: xs -> 
+      let lst, rest = List.partition (eq_oper x) xs in
+        group eq_oper ((x :: lst) :: acc) xs 
+  | [] -> acc
+
+(* Create as few lists as possible with no identical items *)
+let uniq eq_oper lst =
+  let rec uniq' acc1 acc2 xs =
+    match (acc2, xs) with
+        [], [] -> []
+      | _, [] :: ys -> uniq' acc1 acc2 ys 
+      | _, (x :: xs) :: ys -> uniq' (x :: acc1) (xs :: acc2) ys 
+      | _, [] -> acc1 :: uniq' [] [] acc2
+  in
+    uniq' [] [] (group eq_oper [] lst)
+
+    
 
 
 

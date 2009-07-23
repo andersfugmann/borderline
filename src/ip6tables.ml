@@ -85,50 +85,57 @@ let gen_action = function
 
 (* Transform rules into something emittable. This may introduce new chains. *)
 let transform chains = 
-  let zone_to_mask conds =
-    let rec map = function
+  let zone_to_mask (conds, target) =
+    let rec zone_to_mask' = function
         (Zone (dir, zone), neg) :: (Zone(dir', zone'), neg') :: xs when neg = neg' && not (dir = dir') ->
           let v1, m1 = gen_zone_mask dir zone in
           let v2, m2 = gen_zone_mask dir' zone' in
-            (Mark (v1 + v2, m1 + m2), neg) :: map xs
+            (Mark (v1 + v2, m1 + m2), neg) :: zone_to_mask' xs
       | (Zone (dir, zone), neg) :: xs -> 
-          let v, m = gen_zone_mask dir zone in (Mark (v, m), neg) :: map xs
-      | x :: xs -> x :: map xs
+          let v, m = gen_zone_mask dir zone in (Mark (v, m), neg) :: zone_to_mask' xs
+      | x :: xs -> x :: zone_to_mask' xs
       | [] -> []
     in
-      map (List.sort Ir.compare conds)
+      ([], (zone_to_mask' (List.sort Ir.compare conds), target))
   in  
-  let rec map_rules = function
-      (conds, target) :: xs -> 
-        (zone_to_mask conds, target) :: map_rules xs
+  let rec map_chains func = function
+      chain :: xs -> 
+        let chains, rules = List.split (List.map func chain.rules) in
+          { id = chain.id; rules = rules; comment = chain.comment } :: map_chains func ((List.flatten chains) @ xs)
     | [] -> []
   in
-  let rec split_opers acc = function 
-      (x, neg) :: xs -> 
-        if List.exists (fun (y, _) -> cond_type_identical x y) acc then
-          acc :: (split_opers [(x, neg)] xs)
-        else
-          split_opers (acc @ [(x, neg)]) xs
-    | [] -> [ acc ]
-
-  in
-    (* Return rule and a list of new chains *)
-  let rec create_chains chains target = function       
-      []  -> (([], target), chains)
-    | rle :: [] -> ((rle, target), chains)
-    | rle :: xs -> 
-        let chain = Chain.create [ (rle, target) ] "Continuation" in
-          create_chains (chain :: chains) (Jump(chain.id)) xs 
-  in 
-  let map_chain chain =
-    let (rules, chains) = List.split (List.map (fun (ops, target) -> create_chains [] target (split_opers [] ops) ) chain.rules)
-    in { id = chain.id; rules = rules; comment = chain.comment } :: (List.flatten chains)
-         
-  in 
-  let chains = List.map (fun chn -> {id = chn.id; rules = map_rules chn.rules; comment = chn.comment }) chains in
-  let chains = List.flatten (List.map map_chain chains) in
-    chains
+    map_chains zone_to_mask chains 
     
+(* Pass to denormalize rules based on knowledge of ip6tables.
+   This pass will make sure that there are not two identical conditions on one line
+   (Amongst other things)
+*)
+let denormalize chains =
+  let cond_eq (a, _) (b, _) = cond_type_identical a b in
+  let rec denorm_rule chn_acc target = function
+      conds :: xs -> let (chains, rules) = denorm_rule [] target xs in
+        begin match rules with
+            [] -> (chains, [(conds, target)])
+          | _ -> let new_chain = Chain.create rules "Denormalize" in
+              (new_chain :: chains, [(conds, Ir.Jump new_chain.id)])
+        end
+    | [] -> ([], [])    
+  (* Need to create a list containint only unique elements *)
+  in
+  let rec map_rules acc1 acc2 = function
+      (conds, target) :: xs -> 
+        let chains, rules = denorm_rule [] target (uniq cond_eq conds) in
+          map_rules (chains @ acc1) (rules @ acc2) xs
+           
+    | [] -> (acc1, acc2) 
+  in        
+  let rec map_chains = function
+       { id = id; rules = rules; comment = comment } :: xs ->
+         let chns, rules' = map_rules [] [] rules in
+           {id = id; rules = rules'; comment = comment} :: map_chains (chns @ xs)
+    | [] -> []
+  in 
+    map_chains chains
 
 let emit (cond_list, action) : string =
   let conditions = gen_conditions "" cond_list in
@@ -145,6 +152,7 @@ let emit_chain chain =
 
 let emit_chains chains = 
   let chains' = transform chains in
+  let chains' = denormalize chains' in
     List.flatten (List.map emit_chain chains')
 
 
