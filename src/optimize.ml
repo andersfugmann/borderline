@@ -12,7 +12,7 @@ module Chain_set = Set.Make (struct
                                let compare = Chain.compare
                              end)
 
-let rec chain_reference_count id chains = 
+let rec chain_reference_count id chains =
   let filter id = function (_, Jump chn_id) when chn_id = id -> true | _ -> false in
     match chains with
         chain :: xs ->
@@ -25,10 +25,10 @@ let map_chain_rules func chains : Ir.chain list =
 
 let rec map_chain_rules_expand func chains : Ir.chain list =
   let rec map_rules = function
-      (opers, target) :: xs -> 
+      (opers, target) :: xs ->
         (try
-          (List.map (fun opers' -> (opers', target)) (func opers)) 
-         with _ -> printf "E"; [] 
+          (List.map (fun opers' -> (opers', target)) (func opers))
+         with _ -> printf "E"; []
         ) @ map_rules xs
     | [] -> []
   in
@@ -41,7 +41,7 @@ let merge_opers rle =
   let is_sibling (a, _) (b, _) =
     match a, b with
         Interface (dir, _), Interface (dir', _) -> dir = dir'
-      | State s, State s' -> true 
+      | State s, State s' -> true
       | TcpPort (dir, _), TcpPort (dir', _) when dir = dir' -> true
       | UdpPort (dir, _), UdpPort (dir', _) when dir = dir' -> true
       | Protocol _, Protocol _ -> true
@@ -50,37 +50,37 @@ let merge_opers rle =
       | _, _ -> false
   in
   let test = function
-      (x :: xs, _) as res -> res 
+      (x :: xs, _) as res -> res
     | ([], _) -> raise MergeImpossible
   in
-  let merge_list (s, neg) (s', neg') =   
+  let merge_list (s, neg) (s', neg') =
     match neg, neg' with
         (true, true) | (false, false) -> test (intersection (=) s s', neg)
       | (false, true) -> test (difference (=) s s', false)
       | (true, false) -> test (difference (=) s' s, false)
   in
-  let merge_elem (i, neg) (i', neg') =        
+  let merge_elem (i, neg) (i', neg') =
     let (i'', neg'') = merge_list ([i], neg) ([i'], neg') in
       (List.hd i'', neg'')
-  in 
+  in
   let merge_oper = function
-      (Interface (dir, i), neg), (Interface (dir', i'), neg') when dir = dir' -> 
+      (Interface (dir, i), neg), (Interface (dir', i'), neg') when dir = dir' ->
         let (i'', neg'') = merge_elem (i, neg) (i', neg') in [(Interface (dir, i''), neg'')]
-    | (State s, neg), (State s', neg') -> 
+    | (State s, neg), (State s', neg') ->
         let (s'', neg'') = merge_list (s, neg) (s', neg') in [(State s'', neg'')]
     | (TcpPort (dir, ports), neg), (TcpPort (dir', ports'), neg') when dir = dir' ->
         let (ports'', neg'') = merge_list (ports, neg) (ports', neg') in [(TcpPort (dir, ports''), neg'')]
-    | (UdpPort (dir, ports), neg), (UdpPort (dir', ports'), neg') when dir = dir' -> 
+    | (UdpPort (dir, ports), neg), (UdpPort (dir', ports'), neg') when dir = dir' ->
         let (ports'', neg'') = merge_list (ports, neg) (ports', neg') in [(UdpPort (dir, ports''), neg'')]
-    | (Protocol proto, neg), (Protocol proto', neg') -> 
+    | (Protocol proto, neg), (Protocol proto', neg') ->
         let (proto'', neg'') = merge_list (proto, neg) (proto', neg') in [(Protocol (proto''), neg'')]
-    | (IpRange (dir, low, high), neg), (IpRange (dir', low', high'), neg') 
+    | (IpRange (dir, low, high), neg), (IpRange (dir', low', high'), neg')
         when dir = dir' && neg = neg' -> begin
           match Ipv6.intersection (low, high) (low', high') with
               Some(low'', high'') -> [(IpRange (dir, low'', high''), neg)]
             | None -> raise MergeImpossible
         end
-    | (IpRange (dir, low, high), neg), (IpRange (dir', low', high'), neg') 
+    | (IpRange (dir, low, high), neg), (IpRange (dir', low', high'), neg')
         when dir = dir' && not (neg = neg') -> begin
           let ranges = match neg with
               true -> Ipv6.difference  (low', high') (low, high)
@@ -88,12 +88,12 @@ let merge_opers rle =
           in
             if List.length ranges = 0 then raise MergeImpossible
             else
-              List.map (fun (l,h) -> (IpRange(dir, l, h), false)) ranges 
+              List.map (fun (l,h) -> (IpRange(dir, l, h), false)) ranges
         end
     | (Zone (dir, zone), neg), (Zone (dir', zone'), neg') when dir = dir' ->
         let (zone'', neg'') = merge_elem (zone, neg) (zone', neg') in [(Zone (dir, zone''), neg'')]
-        
-    | _, _ -> raise MergeImpossible   
+
+    | _, _ -> raise MergeImpossible
 
   in
     (* Return a list of all needed rules *)
@@ -105,16 +105,16 @@ let merge_opers rle =
     [ List.flatten (List.map (fun lst -> merge_siblings [List.hd lst] (List.tl lst)) (group is_sibling [] rle)) ]
 
 (* Merge two rules that points to the same target when rule a is a subset of rule b. *)
-let reduce rules = 
+let reduce rules =
   let rec reduce_rev = function
-      (cl1, tg1) as r :: (cl2, tg2) :: xs when tg1 = tg2 && is_subset eq_cond cl1 cl2 -> 
-        printf "*"; r :: reduce_rev xs              
+      (cl1, tg1) as r :: (cl2, tg2) :: xs when tg1 = tg2 && is_subset eq_cond cl1 cl2 ->
+        printf "*"; r :: reduce_rev xs
     | r :: xs -> r :: reduce_rev xs
     | [] -> []
   in
-  let rec reduce_inner rules = 
+  let rec reduce_inner rules =
     let rules' = reduce_rev rules in
-      if Ir.eq_rules rules rules' then rules 
+      if Ir.eq_rules rules rules' then rules
       else reduce_inner rules'
   in
     List.rev (reduce_inner (List.rev rules))
@@ -126,14 +126,14 @@ let rec fold_return_statements chains =
     | [] -> []
   in
   let rec fold_return rules = function
-      (cl, Return) :: xs -> 
+      (cl, Return) :: xs ->
         printf "F";
         let chn = Chain.create xs "Return stm inlined" in
           (rules @ [(neg cl, Jump(chn.id))], [chn])
     | rle :: xs -> fold_return (rules @ [rle]) xs
     | [] -> (rules, [])
   in match chains with
-      chn :: xs -> 
+      chn :: xs ->
         let (rules, chn') = fold_return [] chn.rules in
           { id = chn.id; rules = rules; comment = chn.comment } :: fold_return_statements (chn' @ xs)
     | [] -> []
@@ -141,19 +141,19 @@ let rec fold_return_statements chains =
 let remove_unreferenced_chains chains =
 (* This function visits all reachable chains, and removed all unvisited chains. *)
 
-  let rec get_chain_references = function 
+  let rec get_chain_references = function
       (_, Jump chn_id) :: xs -> chn_id :: get_chain_references xs
     | x :: xs -> get_chain_references xs
     | [] -> []
   in
-  let find_chain_opers id = 
+  let find_chain_opers id =
     try
       let chn = List.find (fun chn -> chn.id = id) chains in
         chn.rules
     with Not_found -> []
   in
   let rec visit visited = function
-      chn_id :: xs when not (Chain_set.mem chn_id visited) -> 
+      chn_id :: xs when not (Chain_set.mem chn_id visited) ->
         let visited = visit (Chain_set.add chn_id visited) (get_chain_references (find_chain_opers chn_id)) in
           visit visited xs
     | x :: xs -> visit visited xs
@@ -162,13 +162,13 @@ let remove_unreferenced_chains chains =
   let build_in_chains = List.map (fun chn -> chn.id) (List.filter (fun chn -> Chain.is_builtin chn.id) chains) in
   let referenced_chains = visit Chain_set.empty build_in_chains in
 
-    List.filter (fun chn -> Chain_set.mem chn.id referenced_chains) chains  
+    List.filter (fun chn -> Chain_set.mem chn.id referenced_chains) chains
 
 (* Remove dublicate chains *)
-let remove_dublicate_chains chains = 
-  let replace_chain_ids ids id chains = 
-    let replace = function 
-        (conds, Jump id') when List.mem id' ids -> (conds, Jump id)          
+let remove_dublicate_chains chains =
+  let replace_chain_ids ids id chains =
+    let replace = function
+        (conds, Jump id') when List.mem id' ids -> (conds, Jump id)
       | x -> x
     in
       map_chain_rules (List.map replace) chains
@@ -184,38 +184,38 @@ let remove_dublicate_chains chains =
 
 (* Move drops to the bottom. This allows improvement to dead code elimination, and helps reduce *)
 let rec reorder rules =
-  let can_reorder cl1 cl2 = 
+  let can_reorder cl1 cl2 =
     try
       let _ = merge_opers (cl1 @ cl2) in
         false (* The rules did not conflict. *)
     with MergeImpossible -> true
   in
-    
+
   let order = function
       Notrack -> 1
-    | Return -> 2
-    | Jump _ -> 3
-    | MarkZone _ -> 4
-    | Accept -> 5
+    | Accept -> 2
+    | MarkZone _ -> 3
+    | Jump _ -> 4
+    | Return -> 5
     | Reject _ -> 6
     | Drop -> 7
   in
-  let should_reorder_rules (cl1, act1) (cl2, act2) = 
+  let should_reorder_rules (cl1, act1) (cl2, act2) =
     order act1 > order act2 && can_reorder cl1 cl2
   in
   let rec reorder_rules = function
-      rule1 :: rule2 :: xs when should_reorder_rules rule1 rule2 -> 
+      rule1 :: rule2 :: xs when should_reorder_rules rule1 rule2 ->
         printf "R";
         rule2 :: reorder_rules (rule1 :: xs)
-    | rule1 :: xs -> 
+    | rule1 :: xs ->
         rule1 :: reorder_rules xs
     | [] -> []
-  
+
   in
   let rules' = reorder_rules rules in
-    if Ir.eq_rules rules rules' then rules' 
+    if Ir.eq_rules rules rules' then rules'
     else reorder rules'
-      
+
 (* Inline chains for which expr evaluates true *)
 let rec inline expr chains : Ir.chain list =
   let has_target target rules =
@@ -234,11 +234,11 @@ let rec inline expr chains : Ir.chain list =
     | x :: xs -> x :: inline_chain chain xs
     | [] -> []
   in
-  let chain_to_inline expr chains chain  = 
+  let chain_to_inline expr chains chain  =
     (not (has_target Return chain.rules || Chain.is_builtin chain.id) ) && expr chains chain
   in
 
-  let rec find_inlineable_chain expr chains = 
+  let rec find_inlineable_chain expr chains =
     List.find (chain_to_inline expr chains) chains
   in
 
@@ -246,12 +246,12 @@ let rec inline expr chains : Ir.chain list =
     let chain = find_inlineable_chain expr chains in
     let filtered_chains = List.filter (fun chn -> chn.id != chain.id) chains in
       printf "I";
-      inline expr (map_chain_rules (inline_chain chain) filtered_chains) 
+      inline expr (map_chain_rules (inline_chain chain) filtered_chains)
   with not_found -> chains
 
 let rec eliminate_dead_rules = function
-    ([], Accept) | ([], Drop) | ([], Return) | ([], Reject _) as rle :: xs -> 
-      if List.length xs > 0 then printf "D"; 
+    ([], Accept) | ([], Drop) | ([], Return) | ([], Reject _) as rle :: xs ->
+      if List.length xs > 0 then printf "D";
       [ rle ]
   | rle :: xs -> rle :: eliminate_dead_rules xs
   | [] -> []
@@ -260,9 +260,9 @@ let rec eliminate_dublicate_rules = function
     rle1 :: rle2 :: xs when Ir.eq_oper rle1 rle2 ->
       printf "d";
       rle1 :: eliminate_dublicate_rules xs
-  | (([(Zone(Ir.SOURCE, id), false)], Ir.Accept) as x) :: (([(Zone(Ir.SOURCE, id'), false)], Ir.Accept) as y) :: xs -> 
+  | (([(Zone(Ir.SOURCE, id), false)], Ir.Accept) as x) :: (([(Zone(Ir.SOURCE, id'), false)], Ir.Accept) as y) :: xs ->
       printf "IDS: %s, %s\n" (id2str id) (id2str id'); if x = y then printf "Wah" else printf "What";
-eliminate_dublicate_rules xs      
+eliminate_dublicate_rules xs
   | rle :: xs -> rle :: eliminate_dublicate_rules xs
   | [] -> []
 
@@ -280,8 +280,8 @@ let optimize_pass chains: Ir.chain list =   let _ = printf "Optim: %d " (count_r
   let chains' = inline (fun cs c -> chain_reference_count c.id cs = 1 && List.length c.rules < 3) chains' in
   let chains' = map_chain_rules reorder chains' in
   let chains' = map_chain_rules reduce chains' in
-  let chains' = map_chain_rules_expand merge_opers chains' in 
-  let chains' = remove_unreferenced_chains chains' in 
+  let chains' = map_chain_rules_expand merge_opers chains' in
+  let chains' = remove_unreferenced_chains chains' in
   let _ = printf " %d\n" (count_rules chains') in
     chains'
 
@@ -289,5 +289,5 @@ let rec optimize chains : Ir.chain list =
   let chains' = optimize_pass chains in
     if not (count_rules chains' = count_rules chains) then optimize chains'
     else (
-      printf "\nOptimization done\n"; 
+      printf "\nOptimization done\n";
       chains')

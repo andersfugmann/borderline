@@ -19,8 +19,6 @@ type chain_id = Temporary of int
               | Builtin of chain_type
               | Named of string
 
-type protocol = TCP | UDP | ICMP
-
 type tcp_flags = SYN | ACK | FIN | RST | URG | PSH
 type direction = SOURCE | DESTINATION
 
@@ -41,7 +39,7 @@ type condition = Interface of direction * id
                | TcpPort of direction * int list
                | UdpPort of direction * int list
                | IpRange of direction * ip_number * ip_number
-               | Protocol of protocol list
+               | Protocol of int list
                | Mark of int * int
 
 type action = Jump of chain_id
@@ -56,7 +54,7 @@ type oper = (condition * bool) list * action
 
 type chain = { id: chain_id; rules : oper list; comment: string; }
 
-let eq_cond (x, n) (y, m) = 
+let eq_cond (x, n) (y, m) =
   n = m && (
     match x, y with
         IpRange (d, x, y), IpRange (d', x', y') -> d = d' && Ipv6.eq x x' && Ipv6.eq y y'
@@ -69,11 +67,11 @@ let eq_oper (conds, action) (conds', action') =
   try action = action' && (List.for_all2 (fun c1 c2 -> eq_cond c1 c2) conds conds')
   with Invalid_argument _ -> false
 
-let eq_rules a b = 
-  try List.for_all2 eq_oper a b 
+let eq_rules a b =
+  try List.for_all2 eq_oper a b
   with Invalid_argument _ -> false
 
-let cond_type_identical cond1 cond2 = 
+let cond_type_identical cond1 cond2 =
   match cond1 with
       Interface _ -> begin match cond2 with Interface _-> true | _ -> false end
     | Zone _ -> begin match cond2 with Zone _ -> true | _ -> false end
@@ -84,7 +82,7 @@ let cond_type_identical cond1 cond2 =
     | Protocol _ -> begin match cond2 with Protocol _ -> true | _ -> false end
     | Mark _ -> begin match cond2 with Mark _ -> true | _ -> false end
 
-let compare (cond1, neg1) (cond2, neg2) = 
+let compare (cond1, neg1) (cond2, neg2) =
   let enumerate_cond = function
       Interface _ -> 1
     | Zone _ -> 2
@@ -96,7 +94,7 @@ let compare (cond1, neg1) (cond2, neg2) =
     | Mark _ -> 8
   in
   let res = compare neg1 neg2 in
-    if res = 0 then 
+    if res = 0 then
       compare (enumerate_cond cond1) (enumerate_cond cond2)
     else res
 

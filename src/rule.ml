@@ -4,6 +4,9 @@ open Frontend_types
 open Chain
 open Big_int
 
+let tcp = 4
+let udp = 17
+
 let gen_policy = function
     ALLOW -> Ir.Accept
   | DENY -> Ir.Drop
@@ -12,25 +15,25 @@ let gen_policy = function
 let gen_action = function
     Policy(p_type) -> gen_policy p_type
 
-let rec ports2ints = function
-    Port_nr nr :: xs -> nr :: ports2ints xs
-  | _ :: xs -> ports2ints xs (* raise InternalError *)
+let rec nums2ints = function
+    Number nr :: xs -> nr :: nums2ints xs
+  | _ :: xs -> failwith "No all ints have been expanded"
   | [] -> []
 
 let gen_filter dir = function
     Ip(ip) -> let low, high = Ipv6.to_range ip in Ir.IpRange(dir, low, high)
-  | TcpPort(ports) -> Ir.TcpPort(dir, ports2ints ports)
-  | UdpPort(ports) -> Ir.UdpPort(dir, ports2ints ports)
+  | TcpPort(ports) -> Ir.TcpPort(dir, nums2ints ports)
+  | UdpPort(ports) -> Ir.UdpPort(dir, nums2ints ports)
   | FZone(id) -> Ir.Zone(dir, id)
 
 let rec process_rule table (rules, target) =
   let gen_op table target = function
       State(states) -> [( [ (Ir.State(states), true)], target) ]
-    | Filter(dir, TcpPort(ports)) -> [ ( [(Ir.Protocol([Ir.TCP]), true); (Ir.TcpPort(dir, ports2ints ports), true)], target ) ]
-    | Filter(dir, UdpPort(ports)) -> [ ( [(Ir.Protocol([Ir.UDP]), true); (Ir.UdpPort(dir, ports2ints ports), true)], target ) ]
+    | Filter(dir, TcpPort(ports)) -> [ ( [(Ir.Protocol([tcp]), true); (Ir.TcpPort(dir, nums2ints ports), true)], target ) ]
+    | Filter(dir, UdpPort(ports)) -> [ ( [(Ir.Protocol([udp]), true); (Ir.UdpPort(dir, nums2ints ports), true)], target ) ]
     | Filter(dir, stm) -> [ ( [(gen_filter dir stm, true)], target ) ]
     | Rule(rls, tg)  -> let chain = process_rule table (rls, tg) in [([], Ir.Jump(chain))]
-    | Protocol proto -> [ ( [(Ir.Protocol(proto), true)], target) ]
+    | Protocol protos -> [ ( [(Ir.Protocol(nums2ints protos), true)], target) ]
     | Reference _ -> failwith "Reference to definition not expected"
 
   in

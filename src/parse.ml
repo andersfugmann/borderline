@@ -5,7 +5,7 @@ open Parser
 open Lexer
 open Str
 
-let is_dir path = 
+let is_dir path =
   let stat = Unix.stat path in
     stat.Unix.st_kind = Unix.S_DIR
 
@@ -20,9 +20,9 @@ let parse file =
     lexbuf.Lexing.lex_curr_p <- { lexbuf.Lexing.lex_curr_p with Lexing.pos_fname = file; };
     Parser.main Lexer.token lexbuf
 
-let exclude_file file = 
+let exclude_file file =
   List.exists (fun regex -> string_match regex file 0) exlude_regex
-  
+
 let rec parse_file file =
   let full_path = (Unix.getcwd ()) ^ "/" ^ file in
   match List.exists ( fun x -> x = full_path ) !imported || exclude_file file with
@@ -32,12 +32,12 @@ let rec parse_file file =
         expand (parse full_path)
 
 and include_path dir_handle =
-  try 
+  try
     (* Do not include files ending on ~ or . files *)
     let file = Unix.readdir dir_handle in
     parse_file file @ (include_path dir_handle)
   with End_of_file -> []
-        
+
 and expand = function
     Import(path, _) :: xs when is_dir path ->
       let dir = Unix.opendir path in
@@ -51,34 +51,35 @@ and expand = function
   | x :: xs -> x :: expand xs
   | [ ] -> [ ]
 
-let rec inline_defines defines nodes = 
-  let rec expand_ports = function
-      Port_nr _ as port :: xs -> port :: expand_ports xs
-    | Port_id id :: xs -> begin 
+let rec inline_defines defines nodes =
+  let rec expand_ints = function
+      Number _ as port :: xs -> port :: expand_ints xs
+    | Id id :: xs -> begin
           match Id_map.find id defines with
-              DefineInts(_, ports) -> expand_ports ports
+              DefineInts(_, ports) -> expand_ints ports
             | DefineStms(id', _) -> raise (ParseError [("Port definition required", id); ("But found rule definition", id')])
             | _ -> failwith "Cannot expand definition id to port list"
-        end @ expand_ports xs
+        end @ expand_ints xs
     | [] -> []
-  in    
-  let rec expand_define = function 
+  in
+  let rec expand_define = function
       Reference id -> begin
         match Id_map.find id defines with
             DefineStms(_, stm) -> expand_rules expand_define stm
           | DefineInts(id', _) -> raise (ParseError [("Rule definition required", id); ("But found port definition", id')])
           | _ -> failwith "Cannot expand definition id to stm list"
       end
-    | Filter (dir, TcpPort ports) -> [ Filter (dir, TcpPort (expand_ports ports)) ]
-    | Filter (dir, UdpPort ports) -> [ Filter (dir, UdpPort (expand_ports ports)) ]
+    | Filter (dir, TcpPort ports) -> [ Filter (dir, TcpPort (expand_ints ports)) ]
+    | Filter (dir, UdpPort ports) -> [ Filter (dir, UdpPort (expand_ints ports)) ]
+    | Protocol (protos) -> [ Protocol (expand_ints protos) ]
     | rle -> [rle]
   in
-    Frontend.expand expand_define nodes 
+    Frontend.expand expand_define nodes
 
-let process_file file = 
+let process_file file =
   let nodes = parse_file "test.bl" in
   let zones = Zone.filter nodes in
-  let nodes' = (Zone.emit_nodes Frontend_types.FILTER zones) @ nodes in 
+  let nodes' = (Zone.emit_nodes Frontend_types.FILTER zones) @ nodes in
     Validate.validate nodes';
     (zones, Rule.filter_process (inline_defines (create_define_map nodes') nodes'))
 

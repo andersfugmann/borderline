@@ -14,17 +14,17 @@
     let c_end = pos_end.pos_cnum - pos_end.pos_bol + 1 in
     let c_start = pos_start.pos_cnum - pos_start.pos_bol + 1 in
       printf "File \"%s\", line %d, character %d-%d:\n" pos_end.pos_fname pos_end.pos_lnum c_start c_end;
-      printf "%s\n" s        
+      printf "%s\n" s
 %}
 
 %token ZONE PROCESS RULE DEFINE IMPORT
 %token NETWORK INTERFACE
 %token MANGLE FILTER NAT
 %token POLICY ALLOW DENY REJECT
-%token SOURCE DESTINATION PORT ADDRESS STATE CALL
+%token SOURCE DESTINATION ADDRESS STATE CALL
 %token NEW ESTABLISHED RELATED INVALID
 %token START EQ ENDL SEMI PROTOCOL
-%token TCP UDP ICMP
+%token TCPPORT UDPPORT
 
 %token <int> INT
 %token <string * Lexing.position> ID
@@ -51,7 +51,7 @@ statement:
   | IMPORT STRING                                                 { Import($2) }
   | ZONE ID LBRACE zone_stms RBRACE                               { Zone($2, $4)   }
   | DEFINE ID EQ rule_stms                                        { DefineStms($2, $4) }
-  | DEFINE ID EQ port_list                                        { DefineInts($2, $4) }
+  | DEFINE ID EQ int_list                                         { DefineInts($2, $4) }
   | PROCESS process_type LBRACE rule_stms RBRACE POLICY policy    { Process($2, $4, $7) }
 ;
 
@@ -78,7 +78,7 @@ rule_stm:
   | CALL ID                                                       { Reference($2) }
   | filter_direction filter_stm                                   { Filter($1, $2) }
   | STATE EQ state_list                                           { State($3) }
-  | PROTOCOL EQ protocol                                          { Protocol([$3]) }
+  | PROTOCOL EQ int_list                                          { Protocol($3) }
 ;
 
 rule_stms:
@@ -96,18 +96,14 @@ policy:
   | REJECT                                                        { REJECT }
 ;
 
-protocol:
-  | TCP                                                           { Ir.TCP }
-  | UDP                                                           { Ir.UDP }
-
 filter_direction:
   | SOURCE                                                        { Ir.SOURCE }
   | DESTINATION                                                   { Ir.DESTINATION }
 ;
 
 filter_stm:
-  | TCP PORT EQ port_list                                         { TcpPort($4) }
-  | UDP PORT EQ port_list                                         { UdpPort($4) }
+  | TCPPORT EQ int_list                                           { TcpPort($3) }
+  | UDPPORT EQ int_list                                           { UdpPort($3) }
   | ADDRESS EQ IPv6                                               { let i, p = $3 in Ip(Ipv6.to_number i, p) }
   | ZONE EQ ID                                                    { FZone($3) }
 ;
@@ -123,11 +119,11 @@ state:
   | INVALID                                                       { Ir.INVALID }
 ;
 
-port_list:
-  | port                                                          { [ $1 ] }
-  | port COMMA port_list                                          { $1 :: $3 }
+int_list:
+  | int                                                           { [ $1 ] }
+  | int COMMA int_list                                            { $1 :: $3 }
 
-port:
-  | INT                                                           { Port_nr ($1) }
-  | ID                                                            { Port_id ($1) }
+int:
+  | INT                                                           { Number ($1) }
+  | ID                                                            { Id     ($1) }
 ;

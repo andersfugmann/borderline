@@ -48,22 +48,18 @@ rule token = parse
   | "src"          { Parser.SOURCE }
   | "destination"
   | "dst"          { Parser.DESTINATION }
-  | "port"         { Parser.PORT }
+  | "udp port"     { Parser.UDPPORT }
+  | "tcp port"     { Parser.UDPPORT }
   | "state"        { Parser.STATE }
   | "address"      { Parser.ADDRESS }
   | "call"         { Parser.CALL }
+  | "protocol"     { Parser.PROTOCOL }
 
 (* State types *)
   | "new"          { Parser.NEW }
   | "established"  { Parser.ESTABLISHED }
   | "related"      { Parser.RELATED }
   | "invalid"      { Parser.INVALID }
-
-(* Protocols *)
-  | "protocol"     { Parser.PROTOCOL }
-  | "tcp"          { Parser.TCP }
-  | "udp"          { Parser.UDP }
-  | "icmp"         { Parser.ICMP }
 
 (* Data *)
   | (['0'-'9''a'-'f''A'-'F']+ as x1) ':'

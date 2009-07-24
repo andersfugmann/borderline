@@ -1,10 +1,10 @@
 zone stue {
      interface = stue;
      network = 2001:16d8:dd2d:2:0:0:0:0/64;
-     process filter { 
-         rule { 
-           protocol = tcp;
+     process filter {
+         rule {
+           protocol = 4;
            destination udp port = 56;
-         } policy deny;  
+         } policy deny;
      } policy allow
 }
