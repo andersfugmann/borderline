@@ -82,6 +82,19 @@ let gen_action = function
 
 (* Transform rules into something emittable. This may introduce new chains. *)
 let transform chains =
+  (* Order of conditions. This is used when expanding the conditions, in order to move expanding conditions to the back *)
+  let order a b =
+    let value = function
+        Interface _ -> 1
+      | Zone _ -> 1
+      | State _ -> 1
+      | Ports (_, ports) -> List.length ports
+      | IpRange _ -> 1
+      | Protocol protocols -> List.length protocols
+      | Mark _ -> 1
+    in
+      -(Pervasives.compare (value a) (value b))
+  in
   (* Return a list of chains, and a single rule *)
   let denormalize (conds, target) =
     let rec denorm_rule tg = function
@@ -101,12 +114,12 @@ let transform chains =
           let chain = Chain.create rules "Expanded" in
             expand_conds (chain :: acc1) acc2 (Ir.Jump chain.id) xs
       | (Protocol protocols, true) :: xs when List.length protocols > 1 ->
-          let rules = (List.map (fun p -> ([(Protocol [p], false)], tg)) protocols) @ [ (acc2, tg) ] in
+          let rules = (List.map (fun p -> ([(Protocol [p], false)], Ir.Return)) protocols) @ [ (acc2, tg) ] in
           let chain = Chain.create rules "Expanded" in
             expand_conds (chain :: acc1) [] (Ir.Jump chain.id) xs
       | cond :: xs -> expand_conds acc1 (cond :: acc2) tg xs
       | [] -> (acc1, (acc2, tg))
-    in expand_conds [] [] target conds
+    in expand_conds [] [] target (List.sort (fun (a, _) (b, _) -> order a b) conds)
   in
   let fix_multiport (conds, target) =
     (* If multiport and no protocol spec, then extend into two rules in a new chain *)

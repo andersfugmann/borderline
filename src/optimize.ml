@@ -19,6 +19,13 @@ let rec chain_reference_count id chains =
           List.length (List.filter (filter id) chain.rules) + chain_reference_count id xs
       | [] -> 0
 
+let rec get_referring_rule c = function
+    chn :: xs -> begin
+      try List.find (fun (conds, target) -> target = Jump (c.id)) chn.rules with Not_found -> get_referring_rule c xs
+    end
+  | [] -> failwith "Chain not referenced"
+
+
 (* Optimize rules in each chain. No chain insertion or removal is possible *)
 let map_chain_rules func chains : Ir.chain list =
   List.map (fun chn -> { id = chn.id; rules = func chn.rules; comment = chn.comment } ) chains
@@ -267,7 +274,8 @@ let optimize_pass chains: Ir.chain list =   let _ = printf "Optim: %d " (count_r
   let chains' = map_chain_rules eliminate_dead_rules chains' in
   let chains' = map_chain_rules eliminate_dublicate_rules chains' in
   let chains' = inline (fun _ c -> List.length c.rules <= max_inline_size) chains' in
-  let chains' = inline (fun cs c -> chain_reference_count c.id cs = 1 && List.length c.rules < 3) chains' in
+  let chains' = inline (fun cs c -> chain_reference_count c.id cs = 1 && List.length (fst (get_referring_rule c cs)) < 1) chains' in
+  let chains' = inline (fun cs c -> chain_reference_count c.id cs < 2 && List.length c.rules < 3) chains' in
   let chains' = map_chain_rules reorder chains' in
   let chains' = map_chain_rules reduce chains' in
   let chains' = map_chain_rules_expand merge_opers chains' in

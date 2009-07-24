@@ -19,11 +19,12 @@ and filter_stm = Ip of ip
                | UdpPort of num list
                | FZone of id
 
-and rule_stm = Filter of Ir.direction * filter_stm
-             | State of Ir.statetype list
+and rule_stm = Filter of Ir.direction * filter_stm * Ir.pol
+             | State of Ir.statetype list * Ir.pol
+             | Protocol of num list * Ir.pol
              | Rule of rule_stm list * policytype
-             | Protocol of num list
              | Reference of id
+
 
 and num = Number of int
         | Id of id

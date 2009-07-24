@@ -23,7 +23,7 @@ let rec parse_file file =
   let full_path = (Unix.getcwd ()) ^ "/" ^ file in
   match List.exists ( fun x -> x = full_path ) !imported || exclude_file file with
       true -> [ ]
-    | false    ->
+    | false ->
         imported := full_path :: !imported;
         expand (parse full_path)
 
@@ -65,9 +65,9 @@ let rec inline_defines defines nodes =
           | DefineInts(id', _) -> raise (ParseError [("Rule definition required", id); ("But found port definition", id')])
           | _ -> failwith "Cannot expand definition id to stm list"
       end
-    | Filter (dir, TcpPort ports) -> [ Filter (dir, TcpPort (expand_ints ports)) ]
-    | Filter (dir, UdpPort ports) -> [ Filter (dir, UdpPort (expand_ints ports)) ]
-    | Protocol (protos) -> [ Protocol (expand_ints protos) ]
+    | Filter (dir, TcpPort ports, neg) -> [ Filter (dir, TcpPort (expand_ints ports), neg) ]
+    | Filter (dir, UdpPort ports, neg) -> [ Filter (dir, UdpPort (expand_ints ports), neg) ]
+    | Protocol (protos, neg) -> [ Protocol ((expand_ints protos), neg) ]
     | rle -> [rle]
   in
     Frontend.expand expand_define nodes

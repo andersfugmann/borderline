@@ -30,9 +30,15 @@ let set chain =
 (*  let c = List.filter ( fun chn -> cmp_chain_id (chain.id, chn.id)) !chains in *)
   chains := chain :: !chains; chain
 
+let delete id =
+  chains := List.filter ( fun chn -> not (cmp_chain_id (id, chn.id)) ) !chains
+
 let create rules comment =
   let id = !next_id in
-  incr next_id; set { Ir.id = Temporary(id); rules = rules; comment = comment } 
+  incr next_id; set { id = Temporary(id); rules = rules; comment = comment }
+
+let replace id rules comment =
+  delete id; set { id = id; rules = rules; comment = comment }
 
 let get_named_chain (id, _) = Named(id)
 

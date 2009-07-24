@@ -21,16 +21,13 @@ type chain_id = Temporary of int
 
 type tcp_flags = SYN | ACK | FIN | RST | URG | PSH
 type direction = SOURCE | DESTINATION
+type pol       = bool
 
-type tcp_cond = Port of direction * int list
-              | Flags of tcp_flags list * tcp_flags list
 
-type udp_cond = Port of direction * int list
-
-type icmp_packet = ICMP_NET_UNREACHABLE | ICMP_HOST_UNREACHABLE
-                   | ICMP_PORT_UNREACHABLE | ICMP_PROTO_UNREACHABLE
-                   | ICMP_NET_PROHIBITED | ICMP_HOST_PROHIBITED
-                   | ICMP_ADMIN_PROHIBITED | TCP_RESET
+type icmp_packet_type = ICMP_NET_UNREACHABLE | ICMP_HOST_UNREACHABLE
+                      | ICMP_PORT_UNREACHABLE | ICMP_PROTO_UNREACHABLE
+                      | ICMP_NET_PROHIBITED | ICMP_HOST_PROHIBITED
+                      | ICMP_ADMIN_PROHIBITED | TCP_RESET
 
 
 type condition = Interface of direction * id
@@ -46,7 +43,7 @@ type action = Jump of chain_id
             | Accept
             | Drop
             | Return
-            | Reject of icmp_packet
+            | Reject of icmp_packet_type
             | Notrack
 
 type oper = (condition * bool) list * action

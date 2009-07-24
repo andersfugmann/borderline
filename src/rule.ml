@@ -16,22 +16,54 @@ let rec nums2ints = function
 
 let rec process_rule table (rules, target) =
   let gen_op table target = function
-      State(states) -> [( [ (Ir.State(states), true)], target) ]
-    | Filter(dir, TcpPort(ports)) -> [ ( [(Ir.Protocol([tcp]), true); (Ir.Ports(dir, nums2ints ports), true)], target ) ]
-    | Filter(dir, UdpPort(ports)) -> [ ( [(Ir.Protocol([udp]), true); (Ir.Ports(dir, nums2ints ports), true)], target ) ]
-    | Filter(dir, Ip(ip)) -> let low, high = Ipv6.to_range ip in [ ( [(Ir.IpRange(dir, low, high), true)], target ) ]
-    | Filter(dir, FZone(id)) -> [ ( [(Ir.Zone(dir, id), true)], target ) ]
-    | Rule(rls, tg)  -> let chain = process_rule table (rls, tg) in [([], Ir.Jump(chain))]
-    | Protocol protos -> [ ( [(Ir.Protocol(nums2ints protos), true)], target) ]
+      State(states, neg) -> [( [ (Ir.State(states), not neg)], target) ]
+    | Filter(dir, TcpPort(ports), neg) -> [ ( [(Ir.Protocol([tcp]), true); (Ir.Ports(dir, nums2ints ports), not neg)], target ) ]
+    | Filter(dir, UdpPort(ports), neg) -> [ ( [(Ir.Protocol([udp]), true); (Ir.Ports(dir, nums2ints ports), not neg)], target ) ]
+    | Filter(dir, Ip(ip), neg) -> let low, high = Ipv6.to_range ip in [ ( [(Ir.IpRange(dir, low, high), not neg)], target ) ]
+    | Filter(dir, FZone(id), neg) -> [ ( [(Ir.Zone(dir, id), not neg)], target ) ]
+    | Rule(rls, tg)  -> let chain = process_rule table (rls, tg) in [([], Ir.Jump(chain.Ir.id))]
+    | Protocol (protos, neg) -> [ ( [(Ir.Protocol(nums2ints protos), not neg)], target) ]
     | Reference _ -> failwith "Reference to definition not expected"
 
   in
   let action = gen_policy target in
+
   let opers = List.flatten (List.map ( gen_op table Ir.Return) rules) in
   let chain = Chain.create (opers @ [ ([], action) ]) "Rule" in
-    chain.Ir.id
+    chain
 
-let process (table, rules, policy) = process_rule table (rules, policy)
+(* New version *)
+let rec process_rule' table (rules, target') =
+  let rec gen_op target acc = function
+      State(states, neg) :: xs -> gen_op target ((Ir.State(states), neg) :: acc) xs
+    | Filter(dir, TcpPort(ports), false) :: xs -> gen_op target ( (Ir.Protocol([tcp]), false) :: (Ir.Ports(dir, nums2ints ports), false) :: acc ) xs
+    | Filter(dir, UdpPort(ports), false) :: xs-> gen_op target ( (Ir.Protocol([udp]), false) :: (Ir.Ports(dir, nums2ints ports), false) :: acc ) xs
+    | Filter(dir, TcpPort(ports), true) :: xs ->
+        let chain = gen_op target [] xs in
+        let chain = Chain.replace chain.Ir.id (([(Ir.Protocol([tcp]), false); (Ir.Ports(dir, nums2ints ports), false)], Ir.Return) :: chain.Ir.rules) chain.Ir.comment in
+          Chain.create [ (acc, Ir.Jump chain.Ir.id) ] "Rule"
+    | Filter(dir, UdpPort(ports), true) :: xs ->
+        let chain = gen_op target [] xs in
+        let chain = Chain.replace chain.Ir.id (([(Ir.Protocol([udp]), false); (Ir.Ports(dir, nums2ints ports), false)], Ir.Return) :: chain.Ir.rules) chain.Ir.comment in
+          Chain.create [ (acc, Ir.Jump chain.Ir.id) ] "Rule"
+    | Filter(dir, Ip(ip), neg) :: xs -> let low, high = Ipv6.to_range ip in gen_op target ( (Ir.IpRange(dir, low, high), neg) :: acc ) xs
+    | Filter(dir, FZone(id), neg) :: xs -> gen_op target ((Ir.Zone(dir, id), neg) :: acc) xs
+
+    | Rule(rls, tg) :: xs ->
+        let rule_chain = gen_op (gen_policy tg) [] rls in
+        let cont = gen_op target [] xs in
+        let cont = Chain.replace cont.Ir.id (([], Ir.Jump rule_chain.Ir.id) :: cont.Ir.rules) cont.Ir.comment in
+          Chain.create [ (acc, Ir.Jump cont.Ir.id) ] "Rule"
+
+
+    | Protocol (protos, neg) :: xs -> gen_op target ((Ir.Protocol(nums2ints protos), not neg) :: acc) xs
+    | Reference _ :: xs -> failwith "Reference to definition not expected"
+    | [] -> Chain.create [ (acc, target) ] "Rule"
+
+  in
+    gen_op (gen_policy target') [] rules
+
+let process (table, rules, policy) = process_rule' table (rules, policy)
 
 let rec filter_process = function
     Process (table, rules, policy) :: xs -> (table, rules, policy) :: filter_process xs

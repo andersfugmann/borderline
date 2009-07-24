@@ -8,9 +8,10 @@ zone self {
 
 process filter {
         rule {
+             rule { state = invalid; } policy deny;
              rule { state = related, established; } policy allow;
              protocol = tcp, udp, icmp, ipv6-icmp;
-             state = new;
+             { state = new };
              call zones;
         } policy deny
 } policy deny

@@ -49,7 +49,7 @@ rule token = parse
   | "destination"
   | "dst"          { Parser.DESTINATION }
   | "udp port"     { Parser.UDPPORT }
-  | "tcp port"     { Parser.UDPPORT }
+  | "tcp port"     { Parser.TCPPORT }
   | "state"        { Parser.STATE }
   | "address"      { Parser.ADDRESS }
   | "call"         { Parser.CALL }
@@ -90,6 +90,7 @@ rule token = parse
   | ':'            { COLON }
   | "::"           { DCOLON }
   | '/'            { SLASH }
+  | "!="           { NE }
   | '='            { EQ }
   | ';'            { SEMI }
   | '#'            { comment lexbuf }

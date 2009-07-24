@@ -15,9 +15,9 @@ let rec get_ids = function
 let rec get_referenced_ids node =
   let rec get_id acc = function
       Reference id -> Id_set.add id acc
-    | Filter (dir, TcpPort ports) -> List.fold_left (fun acc id -> Id_set.add id acc) acc (get_ids ports)
-    | Filter (dir, UdpPort ports) -> List.fold_left (fun acc id -> Id_set.add id acc) acc (get_ids ports)
-    | Protocol protos -> List.fold_left (fun acc id -> Id_set.add id acc) acc (get_ids protos)
+    | Filter (_, TcpPort ports, _) -> List.fold_left (fun acc id -> Id_set.add id acc) acc (get_ids ports)
+    | Filter (_, UdpPort ports, _) -> List.fold_left (fun acc id -> Id_set.add id acc) acc (get_ids ports)
+    | Protocol (protos, _) -> List.fold_left (fun acc id -> Id_set.add id acc) acc (get_ids protos)
     | _ -> acc
   in
   match node with
@@ -27,7 +27,7 @@ let rec get_referenced_ids node =
 
 let rec get_referenced_zones nodes =
   let rec get_id acc = function
-      Filter (_, FZone id) -> Id_set.add id acc
+      Filter (_, FZone id, _) -> Id_set.add id acc
     | _ -> acc
   in
     fold get_id nodes Id_set.empty

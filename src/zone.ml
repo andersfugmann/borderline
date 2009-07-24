@@ -43,7 +43,7 @@ let rec filter = function
 let emit_nodes table zones =
   let rec gen_rule_stems (zone_id, nodes) =
     List.map (
-      fun (rules, policy) -> Rule( [ Filter(Ir.DESTINATION, FZone(zone_id)) ] @ rules, policy )
+      fun (rules, policy) -> Rule( [ Filter(Ir.DESTINATION, FZone(zone_id), false) ] @ rules, policy )
     ) (filter_zonerules table nodes)
   in
     [ DefineStms (all_zones, List.flatten (List.map gen_rule_stems zones)) ]

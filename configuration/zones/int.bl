@@ -18,6 +18,6 @@ zone int {
 define web = rule { destination tcp port = web_ports; } policy allow
 
 define web_ports = 80, 443
-define allowed_ports = 22, 25, 993, 53, web_ports
+define allowed_ports = 22, 25, 993, dns, web_ports
 define dns = 53
 

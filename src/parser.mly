@@ -25,6 +25,7 @@
 %token NEW ESTABLISHED RELATED INVALID
 %token START EQ ENDL SEMI PROTOCOL
 %token TCPPORT UDPPORT
+%token EQ NE
 
 %token <int> INT
 %token <string * Lexing.position> ID
@@ -80,9 +81,10 @@ process_type:
 rule_stm:
   | RULE rule_seq action                                          { Rule($2, $3) }
   | CALL ID                                                       { Reference($2) }
-  | filter_direction filter_stm                                   { Filter($1, $2) }
-  | STATE EQ state_list                                           { State($3) }
-  | PROTOCOL EQ int_list                                          { Protocol($3) }
+  | filter_direction filter_stm                                   { let stm, pol = $2 in
+                                                                      Filter($1, stm, pol) }
+  | STATE oper state_list                                           { State($3, $2) }
+  | PROTOCOL oper int_list                                          { Protocol($3, $2) }
 ;
 
 rule_stms:
@@ -112,11 +114,16 @@ filter_direction:
 ;
 
 filter_stm:
-  | TCPPORT EQ int_list                                           { TcpPort($3) }
-  | UDPPORT EQ int_list                                           { UdpPort($3) }
-  | ADDRESS EQ IPv6                                               { let i, p = $3 in Ip(Ipv6.to_number i, p) }
-  | ZONE EQ ID                                                    { FZone($3) }
+  | TCPPORT oper int_list                                           { (TcpPort($3), $2) }
+  | UDPPORT oper int_list                                           { (UdpPort($3), $2) }
+  | ADDRESS oper IPv6                                               { let i, p = $3 in
+                                                                        (Ip(Ipv6.to_number i, p), $2) }
+  | ZONE oper ID                                                    { (FZone($3), $2) }
 ;
+
+oper:
+  | EQ                                                            { false }
+  | NE                                                            { true }
 
 state_list:
   | state                                                         { [ $1 ] }

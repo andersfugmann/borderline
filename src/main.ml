@@ -15,7 +15,7 @@ let _ =
     let input_opers, output_opers, forward_opers = Zone.emit FILTER (zones) in
 
     let filter_chains = List.map Rule.process procs in
-    let filter_ops = List.map ( fun chn -> ([], Ir.Jump(chn)) ) filter_chains in
+    let filter_ops = List.map ( fun chn -> ([], Ir.Jump(chn.Ir.id)) ) filter_chains in
     let _ = Chain.set { Ir.id = Ir.Builtin Ir.INPUT ; rules = input_opers @ filter_ops; comment = "Builtin" } in
     let _ = Chain.set { Ir.id = Ir.Builtin Ir.OUTPUT ; rules = output_opers @ filter_ops; comment = "Builtin" } in
     let _ = Chain.set { Ir.id = Ir.Builtin Ir.FORWARD ; rules = forward_opers @ filter_ops; comment = "Builtin" } in
