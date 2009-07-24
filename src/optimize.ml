@@ -89,13 +89,12 @@ let merge_opers rle =
         end
     | (Zone (dir, zone), neg), (Zone (dir', zone'), neg') when dir = dir' ->
         let (zone'', neg'') = merge_elem (zone, neg) (zone', neg') in [(Zone (dir, zone''), neg'')]
-
     | _, _ -> raise MergeImpossible
 
   in
     (* Return a list of all needed rules *)
   let rec merge_siblings acc = function
-      x :: xs -> let acc' = List.flatten ( List.map ( fun sib -> merge_oper (x, sib) ) acc ) in
+      x :: xs -> let acc' = List.flatten ( List.map ( fun sib -> merge_oper (sib, x) ) acc ) in
                  merge_siblings acc' xs
     | [] -> acc
   in
@@ -198,20 +197,24 @@ let rec reorder rules =
     | Drop -> 7
   in
   let should_reorder_rules (cl1, act1) (cl2, act2) =
-    order act1 > order act2 && can_reorder cl1 cl2
+    if can_reorder cl1 cl2 then
+      match order act1 - order act2 with
+          n when n > 0 -> true
+        | 0 -> List.length cl1 < List.length cl2
+        | _ -> false
+    else
+      false
   in
-  let rec reorder_rules = function
+  let rec reorder_rules acc = function
       rule1 :: rule2 :: xs when should_reorder_rules rule1 rule2 ->
         printf "R";
-        rule2 :: reorder_rules (rule1 :: xs)
+        reorder_rules [] (acc @ rule2 :: rule1 :: xs)
     | rule1 :: xs ->
-        rule1 :: reorder_rules xs
-    | [] -> []
+        reorder_rules (acc @ [ rule1]) xs
+    | [] -> acc
 
   in
-  let rules' = reorder_rules rules in
-    if Ir.eq_rules rules rules' then rules'
-    else reorder rules'
+    reorder_rules [] rules
 
 (* Inline chains for which expr evaluates true *)
 let rec inline expr chains : Ir.chain list =
@@ -257,9 +260,6 @@ let rec eliminate_dublicate_rules = function
     rle1 :: rle2 :: xs when Ir.eq_oper rle1 rle2 ->
       printf "d";
       rle1 :: eliminate_dublicate_rules xs
-  | (([(Zone(Ir.SOURCE, id), false)], Ir.Accept) as x) :: (([(Zone(Ir.SOURCE, id'), false)], Ir.Accept) as y) :: xs ->
-      printf "IDS: %s, %s\n" (id2str id) (id2str id'); if x = y then printf "Wah" else printf "What";
-eliminate_dublicate_rules xs
   | rle :: xs -> rle :: eliminate_dublicate_rules xs
   | [] -> []
 

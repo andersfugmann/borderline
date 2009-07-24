@@ -20,9 +20,9 @@ let get_zone_id zone =
     StringMap.find zone !zone_map
   with Not_found ->
     let id = !zone_id in
-    let _ = zone_id := !zone_id + 1 in
     let _ = zone_map := StringMap.add zone id !zone_map in
-      id
+      incr zone_id; printf "#Zone: %s -> %d\n" zone id; id
+
 
 let gen_neg = function
     true -> "! "
