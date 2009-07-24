@@ -79,8 +79,8 @@ rule token = parse
 
     }
   | ['0'-'9']+ as lxm { INT(int_of_string lxm) }
-  | ['a'-'z''A'-'Z''_']?['a'-'z''A'-'Z''0'-'9''_']+ as lxm { ID (lxm, lexbuf.Lexing.lex_curr_p) }
-  | ['"'](['0'-'9''a'-'z''.''/']+ as str)['"'] { STRING (str, lexbuf.Lexing.lex_curr_p) }
+  | ['a'-'z''A'-'Z''_']['a'-'z''A'-'Z''0'-'9''_''-''.']* as lxm { ID (lxm, lexbuf.Lexing.lex_curr_p) }
+  | ['"'](['0'-'9''a'-'z''A'-'Z''.''/''_''-']+ as str)['"'] { STRING (str, lexbuf.Lexing.lex_curr_p) }
 
 (* Simple tokens *)
   | '{'            { LBRACE }

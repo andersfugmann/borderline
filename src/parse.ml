@@ -5,17 +5,13 @@ open Parser
 open Lexer
 open Str
 
-let is_dir path =
-  let stat = Unix.stat path in
-    stat.Unix.st_kind = Unix.S_DIR
-
 (* Precompiled regular expressions *)
-let exlude_regex = [ regexp "^.*[~]$"; regexp "^[.].*$" ]
+let exlude_regex = [ regexp "^.*[~]$"; regexp "^[.].*$"; regexp "^[Mm]akefile$" ]
 
 let imported = ref []
 
 let parse file =
-  Printf.printf "Parse: %s\n" file;
+  prerr_endline (Printf.sprintf "Parse: %s" file);
   let lexbuf = Lexing.from_channel (open_in file) in
     lexbuf.Lexing.lex_curr_p <- { lexbuf.Lexing.lex_curr_p with Lexing.pos_fname = file; };
     Parser.main Lexer.token lexbuf
@@ -39,14 +35,14 @@ and include_path dir_handle =
   with End_of_file -> []
 
 and expand = function
-    Import(path, _) :: xs when is_dir path ->
+    Import(path, _) :: xs when Sys.is_directory path ->
       let dir = Unix.opendir path in
       let prev_dir = Unix.getcwd () in
       let _ = Unix.chdir path in
       let res = include_path dir in
       let _ = Unix.chdir prev_dir in
         res @ expand xs
-  | Import(file, _) :: xs when not (is_dir file) ->
+  | Import(file, _) :: xs when not (Sys.is_directory file) ->
       parse_file file @ expand xs
   | x :: xs -> x :: expand xs
   | [ ] -> [ ]
@@ -76,8 +72,8 @@ let rec inline_defines defines nodes =
   in
     Frontend.expand expand_define nodes
 
-let process_file file =
-  let nodes = parse_file "test.bl" in
+let process_files files =
+  let nodes = (* List.flatten (List.map parse_file files) *) parse_file "main.bl" in
   let zones = Zone.filter nodes in
   let nodes' = (Zone.emit_nodes Frontend_types.FILTER zones) @ nodes in
     Validate.validate nodes';

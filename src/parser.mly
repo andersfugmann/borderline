@@ -38,17 +38,13 @@
 %%
 
 main:
-  | statements END                                                { $1 }
+  | statement                                                     { [ $1 ] }
+  | statement main                                                { $1 :: $2 }
   | END                                                           { [] }
 ;
 
-statements:
-  | statement                                                     { [ $1 ] }
-  | statement statements                                          { $1 :: $2 }
-;
-
 process:
-  process_type rule_seq action                                    { ($1, $2, $3) }
+  | process_type rule_seq action                                  { ($1, $2, $3) }
 
 statement:
   | IMPORT STRING                                                 { Import($2) }

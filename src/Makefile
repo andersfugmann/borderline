@@ -7,9 +7,6 @@ OCAMLBUILD=ocamlbuild -verbose 1 -cflags -g -lflag -g -quiet -lflag unix.cma -lf
 .PHONY: main
 .PHONY: force
 
-test_run: main
-	OCAMLRUNPARAM=b ./main
-
 all: main
 
 force:

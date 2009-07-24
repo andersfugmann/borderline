@@ -1,9 +1,5 @@
-import "./test"
-
-define tcp = 4
-define udp = 17
-define icmp = 1
-define icmpv6 = 58
+import "./generic"
+import "./zones"
 
 zone self {
      interface = lo;
@@ -13,7 +9,7 @@ zone self {
 process filter {
         rule {
              rule { state = related, established; } policy allow;
-             protocol = tcp, udp, icmp, icmpv6;
+             protocol = tcp, udp, icmp, ipv6-icmp;
              state = new;
              call zones;
         } policy deny

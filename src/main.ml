@@ -1,4 +1,4 @@
-open Common 
+open Common
 open Parse
 open Frontend_types
 open Frontend
@@ -7,10 +7,13 @@ open Chain
 
 let _ =
   try
-    let (zones, procs) = process_file "test.bl" in
+    let files = List.tl (Array.to_list Sys.argv) in
+      prerr_endline (Printf.sprintf "Parsing files: %s" (String.concat ", " files));
+
+    let (zones, procs) = process_files files in
 
     let input_opers, output_opers, forward_opers = Zone.emit FILTER (zones) in
-      
+
     let filter_chains = List.map Rule.process procs in
     let filter_ops = List.map ( fun chn -> ([], Ir.Jump(chn)) ) filter_chains in
     let _ = Chain.set { Ir.id = Ir.Builtin Ir.INPUT ; rules = input_opers @ filter_ops; comment = "Builtin" } in
@@ -18,7 +21,7 @@ let _ =
     let _ = Chain.set { Ir.id = Ir.Builtin Ir.FORWARD ; rules = forward_opers @ filter_ops; comment = "Builtin" } in
     let _ = Chain.optimize Optimize.optimize in
     let lines = Chain.emit Ip6tables.emit_chains in
-      Printf.printf "%s\nLines: %d\n" (String.concat "\n" lines) (List.length lines) 
+      Printf.printf "%s\nLines: %d\n" (String.concat "\n" lines) (List.length lines)
 
   with ParseError err as excpt -> flush stdout; prerr_endline (error2string err); raise excpt
 
