@@ -6,16 +6,11 @@ In progress:
 * Move implementation to .ml and types to .mli - Need to figure out
   how to avoid type definition redundancy.
 
-* Implement negation of filters
-
 Future:
 
 * Setup wiki page for borderline. Maybe use trac for wiki and tickets.
 
 * Extend ip address notation to include '::'
-
-* When parsing the forntend tree create more chains, and avoid
-   excessicve use of return statements.
 
 Planning:
 * Add ipv4 support - Somehow. Maybe by adding a switch, and by using

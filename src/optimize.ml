@@ -41,9 +41,6 @@ let rec map_chain_rules_expand func chains : Ir.chain list =
   in
     List.map (fun chn -> { id = chn.id; rules = map_rules chn.rules; comment = chn.comment } ) chains
 
-(* This function merges identical rule types for a chain. *)
-exception MergeImpossible
-
 let merge_opers rle =
   let is_sibling (a, _) (b, _) =
     (cond_type_identical a b) && (get_dir a = get_dir b)

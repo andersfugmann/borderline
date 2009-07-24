@@ -1,38 +1,17 @@
 The Ir tree must be independant of the iptables rules - It should be possible to make a userspace firewall, disabling the iptables rule generation.
 
 
-IR optimization:
-Any and all conditions are allowed on one line. 
-Conditions can be merged (more efficient), but it is not required.
-
-IPTables rule generation and de-normalization.
-Multiple conditions of the same kind can easily be emitted bu adding an extra chain. 
- a, b, c -> X === a -> X, b -> X, c -> X
-
-not a, b, c -> X === a -> return, b -> return, c -> return, () -> X
-
-This can be done while emitting the iptable rules.
-
-Remember that port definitions can be merged. 
-
-Address ranges should be removed. They are too specific.
-
-Optimization passes: 
-* Inline (trivial)
-* Rule merging (Non trivial)
-
-
-Steps: 
-Extend the iptables emitter to allow multiple conditions of the same type 
+Steps:
+Extend the iptables emitter to allow multiple conditions of the same type
 Change inlining to be dumb.
 Change merging to be more efficient - But is must not emit new rules. Still check for impossible rules.
 
 
 
- 
 
 
 
 
 
- 
+
+
