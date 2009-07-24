@@ -1,16 +1,21 @@
-In progress: 
-* Extend source / destination addresses to be lists. 
+In progress:
+* Extend source / destination addresses to be lists.
 * Allow ip definitions (Series that will be or'ed)
+
 * Change Port definitions to be Int list definitions, and allow these definitions everywhere an int is used.
 
 * Move implementation to .ml and types to .mli - Need to figure out
   how to avoid type definition redundancy.
 
-Future:  
-* Add comments about source rule. Extend rule to contain position
-  info.
+* Implement negation of filters
 
-* Setup wiki page for borderline.  
+
+Future:
+* Implement negation of filters
+
+* Change language  wrt. statement lists enclosed by '{' '}'.
+
+* Setup wiki page for borderline. Maybe use trac for wiki and tickets.
 
 * Extend ip address notation to include '::'
 
@@ -26,11 +31,7 @@ Planning:
   is currently not. Table creation could take a parent table and
   inherit the table info.
 
-
-# To create a checkpoint do:
-tar zvcf checkpoint1.tar.gz TODO src/*.{ml,mli} src/*bl src/test/*.bl
-
-Consider using git for development rather than svn. 
+* Consider using git for development rather than svn.
 
 
 

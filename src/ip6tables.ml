@@ -15,7 +15,6 @@ let zone_map = ref StringMap.empty
 let elem lst =
   assert (List.length lst = 1); List.hd lst
 
-
 let get_zone_id zone =
   try
     StringMap.find zone !zone_map
@@ -61,9 +60,7 @@ let gen_condition = function
   | Interface(direction, name) -> ("", (choose_dir "--in-interface " "--out-interface " direction) ^ (id2str name))
   | State(states) -> "-m conntrack ", ("--ctstate " ^ ( String.concat "," (List.map get_state_name states)))
   | Zone(dir, id) -> "-m conmark ", "--mark " ^ (gen_zone_mask_str dir id)
-  | TcpPort(direction, ports) -> "-m multiport ",
-      ( "--" ^ (choose_dir "source" "destination" direction) ^ "-ports " ^ (String.concat "," (List.map string_of_int ports)) )
-  | UdpPort(direction, ports) -> "-m multiport ",
+  | Ports(direction, ports) -> "-m multiport ",
       ( "--" ^ (choose_dir "source" "destination" direction) ^ "-ports " ^ (String.concat "," (List.map string_of_int ports)) )
 
   | Protocol(protocol) -> ("", sprintf "--protocol %d" (elem protocol))
@@ -111,6 +108,19 @@ let transform chains =
       | [] -> (acc1, (acc2, tg))
     in expand_conds [] [] target conds
   in
+  let fix_multiport (conds, target) =
+    (* If multiport and no protocol spec, then extend into two rules in a new chain *)
+    if not (List.exists (fun (cond, _) -> (cond_type_identical (Protocol []) cond)) conds) then
+      let ports, rest = List.partition (fun (cond, _) -> (cond_type_identical (Ports (SOURCE, [])) cond)) conds in
+      match List.length ports with
+          0 -> ([], (conds, target))
+        | 1 -> let chn = Chain.create [ ([(Protocol [tcp], false); elem ports], target);
+                                        ([(Protocol [udp], false); elem ports], target)] "Fix multiport" in
+            ([chn], (rest, Ir.Jump chn.id))
+        | n -> failwith "Too many port filters in one rule. Denomalization must be broken"
+    else
+      ([], (conds, target))
+  in
   let zone_to_mask (conds, target) =
     let rec zone_to_mask' = function
         (Zone (dir, zone), neg) :: (Zone(dir', zone'), neg') :: xs when neg = neg' && not (dir = dir') ->
@@ -133,6 +143,7 @@ let transform chains =
   let chains = map_chains zone_to_mask chains in
   let chains = map_chains expand chains in
   let chains = map_chains denormalize chains in
+  let chains = map_chains fix_multiport chains in
     chains
 
 

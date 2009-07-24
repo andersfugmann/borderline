@@ -36,8 +36,7 @@ type icmp_packet = ICMP_NET_UNREACHABLE | ICMP_HOST_UNREACHABLE
 type condition = Interface of direction * id
                | Zone of direction * zone
                | State of statetype list
-               | TcpPort of direction * int list
-               | UdpPort of direction * int list
+               | Ports of direction * int list
                | IpRange of direction * ip_number * ip_number
                | Protocol of int list
                | Mark of int * int
@@ -71,30 +70,28 @@ let eq_rules a b =
   try List.for_all2 eq_oper a b
   with Invalid_argument _ -> false
 
+let get_dir = function
+    Interface _ -> None
+  | Zone (direction, _) -> Some direction
+  | State _ -> None
+  | Ports (direction, _) -> Some direction
+  | IpRange (direction, _, _) -> Some direction
+  | Protocol _ -> None
+  | Mark _ -> None
+
+let enumerate_cond = function
+    Interface _ -> 1
+  | Zone _ -> 2
+  | State _ -> 3
+  | Ports _ -> 4
+  | IpRange _ -> 5
+  | Protocol _ -> 6
+  | Mark _ -> 7
+
 let cond_type_identical cond1 cond2 =
-  match cond1 with
-      Interface _ -> begin match cond2 with Interface _-> true | _ -> false end
-    | Zone _ -> begin match cond2 with Zone _ -> true | _ -> false end
-    | State _ -> begin match cond2 with State _ -> true | _ -> false end
-    | TcpPort _ -> begin match cond2 with TcpPort _ -> true | _ -> false end
-    | UdpPort _ -> begin match cond2 with UdpPort _ -> true | _ -> false end
-    | IpRange _ -> begin match cond2 with IpRange _ -> true | _ -> false end
-    | Protocol _ -> begin match cond2 with Protocol _ -> true | _ -> false end
-    | Mark _ -> begin match cond2 with Mark _ -> true | _ -> false end
+  (enumerate_cond cond1) = (enumerate_cond cond2)
 
 let compare (cond1, neg1) (cond2, neg2) =
-  let enumerate_cond = function
-      Interface _ -> 1
-    | Zone _ -> 2
-    | State _ -> 3
-    | TcpPort _ -> 4
-    | UdpPort _ -> 5
-    | IpRange _ -> 6
-    | Protocol _ -> 7
-    | Mark _ -> 8
-  in
-  let res = compare neg1 neg2 in
-    if res = 0 then
-      compare (enumerate_cond cond1) (enumerate_cond cond2)
-    else res
+  let res = compare (enumerate_cond cond1) (enumerate_cond cond2) in
+    if res = 0 then compare neg1 neg2 else res
 

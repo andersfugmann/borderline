@@ -39,15 +39,7 @@ exception MergeImpossible
 
 let merge_opers rle =
   let is_sibling (a, _) (b, _) =
-    match a, b with
-        Interface (dir, _), Interface (dir', _) -> dir = dir'
-      | State s, State s' -> true
-      | TcpPort (dir, _), TcpPort (dir', _) when dir = dir' -> true
-      | UdpPort (dir, _), UdpPort (dir', _) when dir = dir' -> true
-      | Protocol _, Protocol _ -> true
-      | IpRange (dir, _, _), IpRange (dir', _, _) -> dir = dir'
-      | Zone (dir, _), Zone (dir', _) -> dir = dir'
-      | _, _ -> false
+    (cond_type_identical a b) && (get_dir a = get_dir b)
   in
   let test = function
       (x :: xs, _) as res -> res
@@ -68,10 +60,8 @@ let merge_opers rle =
         let (i'', neg'') = merge_elem (i, neg) (i', neg') in [(Interface (dir, i''), neg'')]
     | (State s, neg), (State s', neg') ->
         let (s'', neg'') = merge_list (s, neg) (s', neg') in [(State s'', neg'')]
-    | (TcpPort (dir, ports), neg), (TcpPort (dir', ports'), neg') when dir = dir' ->
-        let (ports'', neg'') = merge_list (ports, neg) (ports', neg') in [(TcpPort (dir, ports''), neg'')]
-    | (UdpPort (dir, ports), neg), (UdpPort (dir', ports'), neg') when dir = dir' ->
-        let (ports'', neg'') = merge_list (ports, neg) (ports', neg') in [(UdpPort (dir, ports''), neg'')]
+    | (Ports (dir, ports), neg), (Ports (dir', ports'), neg') when dir = dir' ->
+        let (ports'', neg'') = merge_list (ports, neg) (ports', neg') in [(Ports (dir, ports''), neg'')]
     | (Protocol proto, neg), (Protocol proto', neg') ->
         let (proto'', neg'') = merge_list (proto, neg) (proto', neg') in [(Protocol (proto''), neg'')]
     | (IpRange (dir, low, high), neg), (IpRange (dir', low', high'), neg')
