@@ -1,7 +1,5 @@
 open Printf
 
-exception InternalError
-
 type id = string * Lexing.position
 
 exception ParseError of (string * id) list

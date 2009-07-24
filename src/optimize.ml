@@ -7,6 +7,11 @@ exception MergeImpossible
 
 let max_inline_size = 1
 
+module Chain_set = Set.Make (struct
+                               type t = Ir.chain_id
+                               let compare = Chain.compare
+                             end)
+
 let rec chain_reference_count id chains = 
   let filter id = function (_, Jump chn_id) when chn_id = id -> true | _ -> false in
     match chains with
@@ -68,7 +73,7 @@ let merge_opers rle =
     | (UdpPort (dir, ports), neg), (UdpPort (dir', ports'), neg') when dir = dir' -> 
         let (ports'', neg'') = merge_list (ports, neg) (ports', neg') in [(UdpPort (dir, ports''), neg'')]
     | (Protocol proto, neg), (Protocol proto', neg') -> 
-        let (proto'', neg'') = merge_elem (proto, neg) (proto', neg') in [(Protocol (proto''), neg'')]
+        let (proto'', neg'') = merge_list (proto, neg) (proto', neg') in [(Protocol (proto''), neg'')]
     | (IpRange (dir, low, high), neg), (IpRange (dir', low', high'), neg') 
         when dir = dir' && neg = neg' -> begin
           match Ipv6.intersection (low, high) (low', high') with
@@ -97,17 +102,7 @@ let merge_opers rle =
                  merge_siblings acc' xs
     | [] -> acc
   in
-    
-  let rec merge acc = function
-      cond :: xs -> 
-        let (siblings, rest) = List.partition (is_sibling cond ) xs in
-        let conds' = merge_siblings [cond] siblings in 
-        let combs = combinations acc conds' in
-          merge combs rest
-    | [] -> acc
-  in
-    merge [[]] rle
-
+    [ List.flatten (List.map (fun lst -> merge_siblings [List.hd lst] (List.tl lst)) (group is_sibling [] rle)) ]
 
 (* Merge two rules that points to the same target when rule a is a subset of rule b. *)
 let reduce rules = 
@@ -142,13 +137,6 @@ let rec fold_return_statements chains =
         let (rules, chn') = fold_return [] chn.rules in
           { id = chn.id; rules = rules; comment = chn.comment } :: fold_return_statements (chn' @ xs)
     | [] -> []
-
-module Chain_set = Set.Make (struct
-                               type t = Ir.chain_id
-                               let compare = Chain.compare
-                             end)
-
-
 
 let remove_unreferenced_chains chains =
 (* This function visits all reachable chains, and removed all unvisited chains. *)

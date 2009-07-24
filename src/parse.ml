@@ -58,7 +58,7 @@ let rec inline_defines defines nodes =
           match Id_map.find id defines with
               DefineInts(_, ports) -> expand_ports ports
             | DefineStms(id', _) -> raise (ParseError [("Port definition required", id); ("But found rule definition", id')])
-            | _ -> raise InternalError
+            | _ -> failwith "Cannot expand definition id to port list"
         end @ expand_ports xs
     | [] -> []
   in    
@@ -67,7 +67,7 @@ let rec inline_defines defines nodes =
         match Id_map.find id defines with
             DefineStms(_, stm) -> expand_rules expand_define stm
           | DefineInts(id', _) -> raise (ParseError [("Rule definition required", id); ("But found port definition", id')])
-          | _ -> raise InternalError
+          | _ -> failwith "Cannot expand definition id to stm list"
       end
     | Filter (dir, TcpPort ports) -> [ Filter (dir, TcpPort (expand_ports ports)) ]
     | Filter (dir, UdpPort ports) -> [ Filter (dir, UdpPort (expand_ports ports)) ]

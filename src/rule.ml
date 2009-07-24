@@ -26,12 +26,12 @@ let gen_filter dir = function
 let rec process_rule table (rules, target) =
   let gen_op table target = function
       State(states) -> [( [ (Ir.State(states), true)], target) ]
-    | Filter(dir, TcpPort(ports)) -> [ ( [(Ir.Protocol(Ir.TCP), true); (Ir.TcpPort(dir, ports2ints ports), true)], target ) ]
-    | Filter(dir, UdpPort(ports)) -> [ ( [(Ir.Protocol(Ir.UDP), true); (Ir.UdpPort(dir, ports2ints ports), true)], target ) ]
+    | Filter(dir, TcpPort(ports)) -> [ ( [(Ir.Protocol([Ir.TCP]), true); (Ir.TcpPort(dir, ports2ints ports), true)], target ) ]
+    | Filter(dir, UdpPort(ports)) -> [ ( [(Ir.Protocol([Ir.UDP]), true); (Ir.UdpPort(dir, ports2ints ports), true)], target ) ]
     | Filter(dir, stm) -> [ ( [(gen_filter dir stm, true)], target ) ]
     | Rule(rls, tg)  -> let chain = process_rule table (rls, tg) in [([], Ir.Jump(chain))]
     | Protocol proto -> [ ( [(Ir.Protocol(proto), true)], target) ]
-    | Reference _ -> raise InternalError
+    | Reference _ -> failwith "Reference to definition not expected"
 
   in
   let action = gen_action target in

@@ -78,7 +78,7 @@ rule_stm:
   | CALL ID                                                       { Reference($2) }
   | filter_direction filter_stm                                   { Filter($1, $2) }
   | STATE EQ state_list                                           { State($3) }
-  | PROTOCOL EQ protocol                                          { Protocol($3) }
+  | PROTOCOL EQ protocol                                          { Protocol([$3]) }
 ;
 
 rule_stms:

@@ -41,7 +41,7 @@ type condition = Interface of direction * id
                | TcpPort of direction * int list
                | UdpPort of direction * int list
                | IpRange of direction * ip_number * ip_number
-               | Protocol of protocol
+               | Protocol of protocol list
                | Mark of int * int
 
 type action = Jump of chain_id

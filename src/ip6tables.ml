@@ -12,6 +12,10 @@ module StringMap = Map.Make(String)
 let zone_id = ref 1
 let zone_map = ref StringMap.empty
 
+let elem lst = 
+  assert (List.length lst = 1); List.hd lst
+  
+
 let get_zone_id zone =
   try
     StringMap.find zone !zone_map
@@ -66,7 +70,7 @@ let gen_condition = function
   | UdpPort(direction, ports) -> "-m multiport ",
       ( "--" ^ (choose_dir "source" "destination" direction) ^ "-ports " ^ (String.concat "," (List.map string_of_int ports)) )
 
-  | Protocol(protocol) -> ("", "-p " ^ (get_protocol_name protocol))
+  | Protocol(protocol) -> ("", "-p " ^ (get_protocol_name (elem protocol)))
   | Mark (value, mask) -> "-m conmark ", sprintf "--mark 0x%04x/0x%04x" value mask
 
 let rec gen_conditions acc = function

@@ -21,10 +21,6 @@ let rec filter_zonerules table = function
   | _ :: xs -> filter_zonerules table xs
   | [] -> []
 
-let expand = function
-    Zone(id, nodes) -> (id, nodes)
-  | _ -> raise InternalError 
-
 (* Return a chain that will mark the zone based on direction *)
 let create_zone_chain direction (id, nodes) =
   let create_network_rule chain (a, m) = 
