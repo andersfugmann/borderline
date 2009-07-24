@@ -7,13 +7,8 @@ In progress:
 * Move implementation to .ml and types to .mli - Need to figure out
   how to avoid type definition redundancy.
 
-* Implement negation of filters
-
-
 Future:
 * Implement negation of filters
-
-* Change language  wrt. statement lists enclosed by '{' '}'.
 
 * Setup wiki page for borderline. Maybe use trac for wiki and tickets.
 

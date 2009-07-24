@@ -14,7 +14,7 @@
     let c_end = pos_end.pos_cnum - pos_end.pos_bol + 1 in
     let c_start = pos_start.pos_cnum - pos_start.pos_bol + 1 in
       printf "File \"%s\", line %d, character %d-%d:\n" pos_end.pos_fname pos_end.pos_lnum c_start c_end;
-      printf "%s\n" s
+      printf "%s after here\n" s
 %}
 
 %token ZONE PROCESS RULE DEFINE IMPORT
@@ -47,25 +47,33 @@ statements:
   | statement statements                                          { $1 :: $2 }
 ;
 
+process:
+  process_type rule_seq action                                    { ($1, $2, $3) }
+
 statement:
   | IMPORT STRING                                                 { Import($2) }
-  | ZONE ID LBRACE zone_stms RBRACE                               { Zone($2, $4)   }
-  | DEFINE ID EQ rule_stms                                        { DefineStms($2, $4) }
+  | ZONE ID zone_seq                                              { Zone($2, $3) }
+  | DEFINE ID EQ rule_seq                                         { DefineStms($2, $4) }
   | DEFINE ID EQ int_list                                         { DefineInts($2, $4) }
-  | PROCESS process_type LBRACE rule_stms RBRACE POLICY policy    { Process($2, $4, $7) }
+  | PROCESS process                                               { let a, b, c = $2 in Process(a, b, c) }
 ;
 
 zone_stm:
   | NETWORK EQ IPv6                                               { let i, p = $3 in Network(Ipv6.to_number i, p) }
-  | INTERFACE EQ ID                                               { Interface($3) }
-  | PROCESS process_type LBRACE rule_stms RBRACE POLICY policy    { ZoneRules($2, $4, $7) }
+  | INTERFACE EQ ID                                               { Interface($3)}
+  | PROCESS process                                               { let a, b, c = $2 in ZoneRules(a, b, c) }
 ;
 
 zone_stms:
-  | zone_stm SEMI zone_stms                                       { $1 :: $3 }
-  | zone_stm SEMI                                                 { [ $1 ] }
-  | zone_stm                                                      { [ $1 ] }
+  | zone_seq SEMI zone_stms                                       { $1 @ $3 }
+  | zone_seq                                                      { $1 }
+  | SEMI                                                          { [] }
+  |                                                               { [] }
 ;
+
+zone_seq:
+  | zone_stm                                                      { [ $1 ] }
+  | LBRACE zone_stms RBRACE                                       { $2 }
 
 process_type:
   | MANGLE                                                        { MANGLE }
@@ -74,7 +82,7 @@ process_type:
 ;
 
 rule_stm:
-  | RULE LBRACE rule_stms RBRACE action                           { Rule($3, $5) }
+  | RULE rule_seq action                                          { Rule($2, $3) }
   | CALL ID                                                       { Reference($2) }
   | filter_direction filter_stm                                   { Filter($1, $2) }
   | STATE EQ state_list                                           { State($3) }
@@ -82,13 +90,19 @@ rule_stm:
 ;
 
 rule_stms:
-  | rule_stm SEMI rule_stms                                       { $1 :: $3 }
-  | rule_stm                                                      { [ $1 ] }
+  | rule_seq SEMI rule_stms                                       { $1 @ $3 }
+  | rule_seq                                                      { $1 }
+  | SEMI                                                          { [] }
   |                                                               { [] }
 ;
 
+rule_seq:
+  | rule_stm                                                      { [$1] }
+  | LBRACE rule_stms RBRACE                                       { $2 }
+
+
 action:
-  | POLICY policy                                                 { Policy($2) }
+  | POLICY policy                                                 { $2 }
 
 policy:
   | ALLOW                                                         { ALLOW }

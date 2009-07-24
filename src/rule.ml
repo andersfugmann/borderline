@@ -9,9 +9,6 @@ let gen_policy = function
   | DENY -> Ir.Drop
   | REJECT -> Ir.Reject(Ir.ICMP_PORT_UNREACHABLE)
 
-let gen_action = function
-    Policy(p_type) -> gen_policy p_type
-
 let rec nums2ints = function
     Number nr :: xs -> nr :: nums2ints xs
   | _ :: xs -> failwith "No all ints have been expanded"
@@ -29,12 +26,12 @@ let rec process_rule table (rules, target) =
     | Reference _ -> failwith "Reference to definition not expected"
 
   in
-  let action = gen_action target in
+  let action = gen_policy target in
   let opers = List.flatten (List.map ( gen_op table Ir.Return) rules) in
   let chain = Chain.create (opers @ [ ([], action) ]) "Rule" in
     chain.Ir.id
 
-let process (table, rules, policy) = process_rule table (rules, Policy(policy))
+let process (table, rules, policy) = process_rule table (rules, policy)
 
 let rec filter_process = function
     Process (table, rules, policy) :: xs -> (table, rules, policy) :: filter_process xs
