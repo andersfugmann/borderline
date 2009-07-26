@@ -3,7 +3,6 @@ open Big_int
 
 type mask = int
 
-(* Maybe this should be an array *)
 type ip_number = big_int
 type ip = ip_number * mask
 

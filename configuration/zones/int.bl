@@ -21,6 +21,7 @@ zone int {
          rule { source address = network_address;
              rule { source address != users; } policy allow;
          } policy deny;
+         rule { source address = users; } policy allow;
          rule { destination zone = stue; } policy deny;
          rule { source zone = wlan;
              rule { destination tcp port = 4321; } policy allow;

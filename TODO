@@ -5,6 +5,11 @@ In progress:
 
 Future:
 
+* Test if one rule overshadows the next rule by merging the
+   conditions. If the merged conditions are equal to the first rules
+   conditions, then the other rule can never be matched. The rules
+   needs not to be sucsessive.
+
 * Setup wiki page for borderline. Maybe use trac for wiki and tickets.
 
 * Extend ip address notation to include '::'
@@ -23,3 +28,6 @@ Planning:
 
 * Consider using git for development rather than svn.
 
+* Implenent match for TCP options to make validating system
+
+* Try applying the rules in a real kernel.
