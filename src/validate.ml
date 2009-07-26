@@ -22,7 +22,7 @@ let rec get_referenced_ids node =
   in
   match node with
       DefineStms _ as x -> fold get_id [ x ] Id_set.empty
-    | DefineInts (id, ports) -> List.fold_left (fun acc id -> Id_set.add id acc) Id_set.empty (get_ids ports)
+    | DefineList (id, items) -> List.fold_left (fun acc id -> Id_set.add id acc) Id_set.empty (get_ids items)
     | x -> fold get_id [ x ] Id_set.empty
 
 let rec get_referenced_zones nodes =
@@ -58,7 +58,7 @@ let rec test_shadow_defines acc nodes =
   in
     match nodes with
         DefineStms (id, _) :: xs -> test id; test_shadow_defines (Id_set.add id acc) xs
-      | DefineInts (id, _) :: xs -> test id; test_shadow_defines (Id_set.add id acc) xs
+      | DefineList (id, _) :: xs -> test id; test_shadow_defines (Id_set.add id acc) xs
       | _ :: xs -> test_shadow_defines acc xs
       | [] -> ()
 

@@ -1,7 +1,4 @@
 In progress:
-* Extend source / destination addresses to be lists.
-
-* Allow ip definitions (Series that will be or'ed)
 
 * Move implementation to .ml and types to .mli - Need to figure out
   how to avoid type definition redundancy.
@@ -25,7 +22,4 @@ Planning:
   inherit the table info.
 
 * Consider using git for development rather than svn.
-
-
-
 

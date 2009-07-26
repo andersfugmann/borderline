@@ -1,3 +1,15 @@
+define network_address = 2001:16d8:dd2d:0:2e0:4cff:fe69:103d/64
+define marvin = 2001:16d8:dd2d:0:2e0:4cff:fe69:103d/128
+define other = 2001:16d8:dd2d:0:2e0:4cff:fe69:2/128
+define users = marvin, other
+
+define web = rule { destination tcp port = web_ports; } policy allow
+
+define web_ports = 80, 443
+define allowed_ports = 22, 25, 993, dns, web_ports
+define dns = 53
+
+
 zone int {
      interface = int;
      network = 2001:16d8:dd2d:0:0:0:0:0/64;
@@ -6,8 +18,8 @@ zone int {
          rule { destination udp port = dns; } policy allow;
          rule { source zone = stue; } policy allow;
          rule { source zone = stue; } policy allow; # Dublicate.
-         rule { source address = 2001:16d8:dd2d:0:2e0:4cff:fe69:103d/64;
-             rule { source address = 2001:16d8:dd2d:0:2e0:4cff:fe69:103d/128 } policy allow;
+         rule { source address = network_address;
+             rule { source address != users; } policy allow;
          } policy deny;
          rule { destination zone = stue; } policy deny;
          rule { source zone = wlan;
@@ -15,9 +27,3 @@ zone int {
          } policy deny
      } policy deny
 }
-define web = rule { destination tcp port = web_ports; } policy allow
-
-define web_ports = 80, 443
-define allowed_ports = 22, 25, 993, dns, web_ports
-define dns = 53
-

@@ -23,8 +23,8 @@ let rec filter_zonerules table = function
 
 (* Return a chain that will mark the zone based on direction *)
 let create_zone_chain direction (id, nodes) =
-  let create_network_rule chain (a, m) =
-    let (low, high) = Ipv6.to_range (a, m) in ([(Ir.IpRange(direction, low, high), false)], Ir.Jump chain.Ir.id)
+  let create_network_rule chain ip =
+    ([(Ir.IpRange(direction, [ Ipv6.to_range ip ] ), false)], Ir.Jump chain.Ir.id)
   in
   let create_interface_rule chain interface =
     ([(Ir.Interface(direction, interface), false)], Ir.Jump chain.Ir.id)

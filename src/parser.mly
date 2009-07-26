@@ -21,15 +21,15 @@
 %token NETWORK INTERFACE
 %token MANGLE FILTER NAT
 %token POLICY ALLOW DENY REJECT
-%token SOURCE DESTINATION ADDRESS STATE CALL
+%token SOURCE DESTINATION ADDRESS STATE USE
 %token NEW ESTABLISHED RELATED INVALID
 %token START EQ ENDL SEMI PROTOCOL
 %token TCPPORT UDPPORT
 %token EQ NE
 
-%token <int> INT
+%token <int * Lexing.position> INT
 %token <string * Lexing.position> ID
-%token <int list * int> IPv6
+%token <int list * int * Lexing.position> IPv6
 %token <string * Lexing.position> STRING
 
 %token LBRACE RBRACE COMMA DOT COLON DCOLON SLASH END
@@ -51,12 +51,12 @@ statement:
   | IMPORT STRING                                                 { Import($2) }
   | ZONE ID zone_seq                                              { Zone($2, $3) }
   | DEFINE ID EQ rule_seq                                         { DefineStms($2, $4) }
-  | DEFINE ID EQ int_list                                         { DefineInts($2, $4) }
+  | DEFINE ID EQ data_list                                        { DefineList($2, $4) }
   | PROCESS process                                               { let a, b, c = $2 in Process(a, b, c) }
 ;
 
 zone_stm:
-  | NETWORK EQ IPv6                                               { let i, p = $3 in Network(Ipv6.to_number i, p) }
+  | NETWORK EQ IPv6                                               { let i, p, pos = $3 in Network(Ipv6.to_number i, p) }
   | INTERFACE EQ ID                                               { Interface($3)}
   | PROCESS process                                               { let a, b, c = $2 in ZoneRules(a, b, c) }
 ;
@@ -80,11 +80,11 @@ process_type:
 
 rule_stm:
   | RULE rule_seq action                                          { Rule($2, $3) }
-  | CALL ID                                                       { Reference($2) }
+  | USE ID                                                        { Reference($2) }
   | filter_direction filter_stm                                   { let stm, pol = $2 in
                                                                       Filter($1, stm, pol) }
-  | STATE oper state_list                                           { State($3, $2) }
-  | PROTOCOL oper int_list                                          { Protocol($3, $2) }
+  | STATE oper state_list                                         { State($3, $2) }
+  | PROTOCOL oper data_list                                        { Protocol($3, $2) }
 ;
 
 rule_stms:
@@ -114,11 +114,10 @@ filter_direction:
 ;
 
 filter_stm:
-  | TCPPORT oper int_list                                           { (TcpPort($3), $2) }
-  | UDPPORT oper int_list                                           { (UdpPort($3), $2) }
-  | ADDRESS oper IPv6                                               { let i, p = $3 in
-                                                                        (Ip(Ipv6.to_number i, p), $2) }
-  | ZONE oper ID                                                    { (FZone($3), $2) }
+  | TCPPORT oper data_list                                        { (TcpPort($3), $2) }
+  | UDPPORT oper data_list                                        { (UdpPort($3), $2) }
+  | ADDRESS oper data_list                                        { (Address($3), $2) }
+  | ZONE oper ID                                                  { (FZone($3), $2) }
 ;
 
 oper:
@@ -136,11 +135,11 @@ state:
   | INVALID                                                       { Ir.INVALID }
 ;
 
-int_list:
-  | int                                                           { [ $1 ] }
-  | int COMMA int_list                                            { $1 :: $3 }
+data_list:
+  | data                                                          { [ $1 ] }
+  | data COMMA data_list                                          { $1 :: $3 }
 
-int:
-  | INT                                                           { Number ($1) }
+data:
+  | INT                                                           { let n, pos = $1 in Number (n, pos) }
   | ID                                                            { Id     ($1) }
-;
+  | IPv6                                                          { let i, p, pos = $1 in Ip ((Ipv6.to_number i, p), pos) }

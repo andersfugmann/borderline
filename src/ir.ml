@@ -30,11 +30,13 @@ type icmp_packet_type = ICMP_NET_UNREACHABLE | ICMP_HOST_UNREACHABLE
                       | ICMP_ADMIN_PROHIBITED | TCP_RESET
 
 
+type ip_range = (ip_number * ip_number)
+
 type condition = Interface of direction * id
                | Zone of direction * zone
                | State of statetype list
                | Ports of direction * int list
-               | IpRange of direction * ip_number * ip_number
+               | IpRange of direction * ip_range list
                | Protocol of int list
                | Mark of int * int
 
@@ -53,7 +55,11 @@ type chain = { id: chain_id; rules : oper list; comment: string; }
 let eq_cond (x, n) (y, m) =
   n = m && (
     match x, y with
-        IpRange (d, x, y), IpRange (d', x', y') -> d = d' && Ipv6.eq x x' && Ipv6.eq y y'
+        IpRange (d, r), IpRange (d', r') ->
+          begin
+            try d = d' && List.for_all2 (fun (x, y) (x', y') -> Ipv6.eq x x' && Ipv6.eq y y') r r'
+            with Invalid_argument _ -> false
+          end
       | Zone(dir, id), Zone (dir', id') -> dir = dir' && (eq_id id id')
       | Interface(dir, id), Interface(dir', id') -> dir = dir' && (eq_id id id')
       | x, y -> x = y
@@ -72,7 +78,7 @@ let get_dir = function
   | Zone (direction, _) -> Some direction
   | State _ -> None
   | Ports (direction, _) -> Some direction
-  | IpRange (direction, _, _) -> Some direction
+  | IpRange (direction, _) -> Some direction
   | Protocol _ -> None
   | Mark _ -> None
 

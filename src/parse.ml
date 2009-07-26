@@ -49,24 +49,37 @@ and expand = function
 
 let rec inline_defines defines nodes =
   let rec expand_ints = function
-      Number _ as port :: xs -> port :: expand_ints xs
+      Number _ as num :: xs -> num :: expand_ints xs
+    | Ip (_, pos) :: xs -> raise (ParseError [("Cannot use ip address in int list", ("", pos))])
     | Id id :: xs -> begin
           match Id_map.find id defines with
-              DefineInts(_, ports) -> expand_ints ports
-            | DefineStms(id', _) -> raise (ParseError [("Port definition required", id); ("But found rule definition", id')])
-            | _ -> failwith "Cannot expand definition id to port list"
+              DefineList(_, list) -> expand_ints list
+            | DefineStms(id', _) -> raise (ParseError [("List definition required", id); ("But found rule definition", id')])
+            | _ -> failwith "Unexpected node type"
         end @ expand_ints xs
+    | [] -> []
+  in
+  let rec expand_ips = function
+    | Ip _ as ip :: xs -> ip :: expand_ips xs
+    | Number _ :: xs -> raise (ParseError [("Cannot use int in ip address list", ("", Lexing.dummy_pos))])
+    | Id id :: xs -> begin
+          match Id_map.find id defines with
+              DefineList(_, list) -> expand_ips list
+            | DefineStms(id', _) -> raise (ParseError [("List definition required", id); ("But found rule definition", id')])
+            | _ -> failwith "Unexpected node type"
+        end @ expand_ips xs
     | [] -> []
   in
   let rec expand_define = function
       Reference id -> begin
         match Id_map.find id defines with
             DefineStms(_, stm) -> expand_rules expand_define stm
-          | DefineInts(id', _) -> raise (ParseError [("Rule definition required", id); ("But found port definition", id')])
-          | _ -> failwith "Cannot expand definition id to stm list"
+          | DefineList(id', _) -> raise (ParseError [("Rule definition required", id); ("But found port definition", id')])
+          | _ -> failwith "Unexpected node type"
       end
     | Filter (dir, TcpPort ports, neg) -> [ Filter (dir, TcpPort (expand_ints ports), neg) ]
     | Filter (dir, UdpPort ports, neg) -> [ Filter (dir, UdpPort (expand_ints ports), neg) ]
+    | Filter (dir, Address(ips), neg) -> [ Filter (dir, Address (expand_ips ips), neg) ]
     | Protocol (protos, neg) -> [ Protocol ((expand_ints protos), neg) ]
     | rle -> [rle]
   in

@@ -51,10 +51,11 @@ let gen_zone_mask_str dir zone =
 
 (* Return a prefix and condition, between which a negation can be inserted *)
 let gen_condition = function
-    IpRange(direction, low, high) ->
+    IpRange(direction, ips) ->
       begin
+        let low, high = elem ips in
         match Ipv6.range2mask (low, high) with
-            Some(ip, mask) -> "", sprintf "--%s %s/%d" (choose_dir "src" "dst" direction) (Ipv6.to_string low) mask
+            Some(ip, mask) -> "", sprintf "--%s %s/%d" (choose_dir "src" "dst" direction) (Ipv6.to_string ip) mask
           | None -> "-m iprange ", sprintf "--%s-range %s-%s" (choose_dir "src" "dst" direction) (Ipv6.to_string low) (Ipv6.to_string high)
       end
   | Interface(direction, name) -> ("", (choose_dir "--in-interface " "--out-interface " direction) ^ (id2str name))
@@ -108,15 +109,21 @@ let transform chains =
       denorm_rule target (uniq (fun (a, _) (b, _) -> cond_type_identical a b) conds)
   in
   let expand (conds, target) =
+    let expand_cond target cond_func lst = function
+        false ->
+          let rules = List.map (fun p -> ([(cond_func p, false)], target)) lst in
+            Chain.create rules "Expanded"
+      | true ->
+          let rules = (List.map (fun p -> ([(cond_func p, false)], Ir.Return)) lst) in
+            Chain.create ( rules @ [ ([], target) ]) "Expanded"
+    in
     let rec expand_conds acc1 acc2 tg = function
-        (Protocol protocols, false) :: xs when List.length protocols > 1 ->
-          let rules = List.map (fun p -> ([(Protocol [p], false)], tg)) protocols in
-          let chain = Chain.create rules "Expanded" in
+        (Protocol protocols, neg) :: xs when List.length protocols > 1 ->
+          let chain = expand_cond tg (fun p -> Protocol [p]) protocols neg in
             expand_conds (chain :: acc1) acc2 (Ir.Jump chain.id) xs
-      | (Protocol protocols, true) :: xs when List.length protocols > 1 ->
-          let rules = (List.map (fun p -> ([(Protocol [p], false)], Ir.Return)) protocols) @ [ (acc2, tg) ] in
-          let chain = Chain.create rules "Expanded" in
-            expand_conds (chain :: acc1) [] (Ir.Jump chain.id) xs
+      | (IpRange(direction, ips), neg) :: xs when List.length ips > 1 ->
+          let chain = expand_cond tg (fun ip -> IpRange(direction, [ip])) ips neg in
+            expand_conds (chain :: acc1) acc2 (Ir.Jump chain.id) xs
       | cond :: xs -> expand_conds acc1 (cond :: acc2) tg xs
       | [] -> (acc1, (acc2, tg))
     in expand_conds [] [] target (List.sort (fun (a, _) (b, _) -> order a b) conds)

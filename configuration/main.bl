@@ -12,7 +12,7 @@ process filter {
              rule { state = related, established; } policy allow;
              protocol = tcp, udp, icmp, ipv6-icmp;
              { state = new };
-             call zones;
+             use zones;
         } policy deny
 } policy deny
 

@@ -59,7 +59,7 @@ let merge_opers rle =
     let (i'', neg'') = merge_list ([i], neg) ([i'], neg') in
       (List.hd i'', neg'')
   in
-  let merge_oper = function
+  let rec merge_oper = function
       (Interface (dir, i), neg), (Interface (dir', i'), neg') when dir = dir' ->
         let (i'', neg'') = merge_elem (i, neg) (i', neg') in [(Interface (dir, i''), neg'')]
     | (State s, neg), (State s', neg') ->
@@ -68,22 +68,12 @@ let merge_opers rle =
         let (ports'', neg'') = merge_list (ports, neg) (ports', neg') in [(Ports (dir, ports''), neg'')]
     | (Protocol proto, neg), (Protocol proto', neg') ->
         let (proto'', neg'') = merge_list (proto, neg) (proto', neg') in [(Protocol (proto''), neg'')]
-    | (IpRange (dir, low, high), neg), (IpRange (dir', low', high'), neg')
-        when dir = dir' && neg = neg' -> begin
-          match Ipv6.intersection (low, high) (low', high') with
-              Some(low'', high'') -> [(IpRange (dir, low'', high''), neg)]
-            | None -> raise MergeImpossible
-        end
-    | (IpRange (dir, low, high), neg), (IpRange (dir', low', high'), neg')
-        when dir = dir' && not (neg = neg') -> begin
-          let ranges = match neg with
-              true -> Ipv6.difference  (low', high') (low, high)
-            | false -> Ipv6.difference  (low', high') (low, high)
-          in
-            if List.length ranges = 0 then raise MergeImpossible
-            else
-              List.map (fun (l,h) -> (IpRange(dir, l, h), false)) ranges
-        end
+    | ((IpRange (dir, ips), true) as a), ((IpRange (dir', ips'), false) as b) when dir = dir' ->
+        printf "X\n"; flush stdout; merge_oper (b,a)
+    | (IpRange (dir, ips), false), (IpRange (dir', ips'), true) when dir = dir' ->
+        [ (IpRange (dir, Ipv6.list_difference ips ips'), false) ]
+    | (IpRange (dir, ips), neg), (IpRange (dir', ips'), neg') when dir = dir' && neg = neg' ->
+        [ (IpRange (dir, Ipv6.list_intersection ips ips'), neg) ]
     | (Zone (dir, zone), neg), (Zone (dir', zone'), neg') when dir = dir' ->
         let (zone'', neg'') = merge_elem (zone, neg) (zone', neg') in [(Zone (dir, zone''), neg'')]
     | _, _ -> raise MergeImpossible
@@ -264,7 +254,7 @@ let rec count_rules = function
     chain :: xs -> List.length chain.rules + count_rules xs
   | [] -> 0
 
-let optimize_pass chains: Ir.chain list =   let _ = printf "Optim: %d " (count_rules chains) in
+let optimize_pass chains: Ir.chain list =  printf "Optim: %d " (count_rules chains); flush stdout;
   let chains' = chains in
   let chains' = remove_dublicate_chains chains' in
   let chains' = fold_return_statements chains' in

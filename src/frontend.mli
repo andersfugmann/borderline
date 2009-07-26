@@ -1,4 +1,4 @@
-open Common 
+open Common
 open Ipv6
 open Frontend_types
 

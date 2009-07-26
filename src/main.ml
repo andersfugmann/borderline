@@ -6,6 +6,8 @@ open Printf
 open Chain
 
 let _ =
+  Sys.set_signal 15 (Sys.Signal_handle (fun _ -> failwith "Stopped here"));
+
   try
     let files = List.tl (Array.to_list Sys.argv) in
       prerr_endline (Printf.sprintf "Parsing files: %s" (String.concat ", " files));

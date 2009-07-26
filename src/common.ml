@@ -26,8 +26,8 @@ let id2str (str, _) = str
 
 let eq_id (a, _) (b, _) = a = b
 
-let combinations acc conds : 'a list =
-    List.flatten (List.map (fun acc -> List.map (fun cl -> acc @ [cl]) conds) acc)
+let combinations a b =
+  List.flatten (List.map (fun x -> List.map (fun y -> (x, y)) b) a)
 
 let member eq_oper x lst =
   List.exists (fun x' -> eq_oper x x') lst

@@ -1,10 +1,10 @@
-open Printf 
+open Printf
 open Big_int
 
 type mask = int
 
 (* Maybe this should be an array *)
-type ip_number = big_int 
+type ip_number = big_int
 type ip = ip_number * mask
 
 let eq a b = eq_big_int a b
@@ -17,12 +17,12 @@ let get_mask = get_mask_rec 0
 let to_number ip : big_int =
   List.fold_left (fun acc num -> add_int_big_int num (mult_int_big_int 0x10000 acc)) zero_big_int ip
 
-let to_ip num = 
-  let rec convert acc num = 
+let to_ip num =
+  let rec convert acc num =
     match List.length acc with
         8 -> acc
-      | _ -> 
-          let (q,r) = quomod_big_int num (big_int_of_int 0x10000) in 
+      | _ ->
+          let (q,r) = quomod_big_int num (big_int_of_int 0x10000) in
             convert (int_of_big_int r :: acc) q
   in
     convert [] num
@@ -36,12 +36,12 @@ let difference (low_a, high_a) (low_b, high_b) =
       | true, false -> [(succ_big_int high_b, high_a)]
       | false, true -> [(low_a, pred_big_int low_b)]
       | false, false -> [(succ_big_int high_b, high_a); (low_a, pred_big_int low_b)]
-          
+
 (* Functions related to IPv6 addresses *)
 let intersection (low_a, high_a) (low_b, high_b) =
   let low = max_big_int low_a low_b in
   let high = min_big_int high_a high_b in
-    
+
     if le_big_int low high then Some(low, high)
     else None
 
@@ -49,39 +49,52 @@ let clear_bits ip bits =
   let mask = power_int_positive_int 2 (128-bits) in
     mult_big_int (div_big_int ip mask) mask
 
-let set_bits ip bits = 
+let set_bits ip bits =
   let mask = power_int_positive_int 2 (128-bits) in
     add_big_int (pred_big_int mask) (clear_bits ip bits)
-    
+
 let to_range (ip, mask) =
 (*
-  let rec build_range low high mask = function      
+  let rec build_range low high mask = function
       x :: xs when mask = 0 -> build_range (x :: low) (x :: high) mask xs
-    | x :: xs when mask < 16 -> let mask' = get_mask (mask) in          
+    | x :: xs when mask < 16 -> let mask' = get_mask (mask) in
         build_range (x lor mask' :: low) (x land (0xffff - mask') :: high) 0 xs
     | x :: xs -> build_range (0 :: low) (0xffff :: high) (mask - 16) xs
     | [] -> (to_number low, to_number high)
-        
+
   in build_range [] [] mask (List.rev ip)
 *)
   (clear_bits ip mask, set_bits ip mask)
 
-let to_string ip = 
+let to_string ip =
   (String.concat ":" (List.map (Printf.sprintf "%04x") (to_ip ip)))
 
-let range_to_string (low, high) = 
-  (to_string low) ^ " => " ^ (to_string high) 
+let range_to_string (low, high) =
+  (to_string low) ^ " => " ^ (to_string high)
 
 let range2mask (low,high) =
   let two = big_int_of_int 2 in
   let rec get_highest_bit acc n =
-    if eq_big_int n zero_big_int then acc
-    else get_highest_bit (acc + 1) (div_big_int n two)
+      if le_big_int n zero_big_int then acc
+      else get_highest_bit (acc + 1) (div_big_int n two)
   in
   let mask = get_highest_bit 0 (sub_big_int high low) in
   let high' = add_big_int low (pred_big_int (power_int_positive_int 2 mask)) in
     if eq_big_int high high' then Some(low, 128-mask)
     else None
+
+let list_intersection a b =
+  let combs = Common.combinations a b in
+  let intersect = List.map (fun (a,b) -> intersection a b) combs in
+  let filtered = List.filter (fun x -> not (x = None)) intersect in
+  List.map (fun x -> match x with Some(low, high) -> (low, high) | None -> failwith "Impossible state") filtered
+
+
+let rec list_difference a b =
+  match b with
+      y :: ys -> list_difference (List.flatten (List.map (fun x -> difference x y) a)) ys
+    | [] -> a
+
 (*
 let () =
   let marvin = (to_number [0x2001;0x16d8;0xdd2d;0x0;0x2e0;0x4cff;0xfe69;0x103d], 128) in

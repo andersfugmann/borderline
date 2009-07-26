@@ -52,7 +52,7 @@ rule token = parse
   | "tcp port"     { Parser.TCPPORT }
   | "state"        { Parser.STATE }
   | "address"      { Parser.ADDRESS }
-  | "call"         { Parser.CALL }
+  | "use"          { Parser.USE }
   | "protocol"     { Parser.PROTOCOL }
 
 (* State types *)
@@ -75,10 +75,10 @@ rule token = parse
           Some(mask) -> int_of_string mask
         | _ -> 128
       in
-        IPv6(addrs, mask)
+        IPv6(addrs, mask, lexbuf.Lexing.lex_curr_p)
 
     }
-  | ['0'-'9']+ as lxm { INT(int_of_string lxm) }
+  | ['0'-'9']+ as lxm { INT(int_of_string lxm, lexbuf.Lexing.lex_curr_p) }
   | ['a'-'z''A'-'Z''_']['a'-'z''A'-'Z''0'-'9''_''-''.']* as lxm { ID (lxm, lexbuf.Lexing.lex_curr_p) }
   | ['"'](['0'-'9''a'-'z''A'-'Z''.''/''_''-']+ as str)['"'] { STRING (str, lexbuf.Lexing.lex_curr_p) }
 
