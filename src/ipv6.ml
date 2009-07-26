@@ -27,6 +27,13 @@ let to_ip num =
   in
     convert [] num
 
+let to_string ip =
+  (String.concat ":" (List.map (Printf.sprintf "%04x") (to_ip ip)))
+
+let range_to_string (low, high) =
+  (to_string low) ^ " => " ^ (to_string high)
+
+
 let difference (low_a, high_a) (low_b, high_b) =
   let member a (low, high) = ge_big_int a low && le_big_int a high in
   let low_m = member low_a (low_b, high_b) in
@@ -35,7 +42,9 @@ let difference (low_a, high_a) (low_b, high_b) =
         true, true -> []
       | true, false -> [(succ_big_int high_b, high_a)]
       | false, true -> [(low_a, pred_big_int low_b)]
-      | false, false -> [(succ_big_int high_b, high_a); (low_a, pred_big_int low_b)]
+      | false, false when member low_b (low_a, high_a) ->
+          [(succ_big_int high_b, high_a); (low_a, pred_big_int low_b)]
+      | false, false -> [(low_a, high_a)]
 
 (* Functions related to IPv6 addresses *)
 let intersection (low_a, high_a) (low_b, high_b) =
@@ -66,13 +75,7 @@ let to_range (ip, mask) =
 *)
   (clear_bits ip mask, set_bits ip mask)
 
-let to_string ip =
-  (String.concat ":" (List.map (Printf.sprintf "%04x") (to_ip ip)))
-
-let range_to_string (low, high) =
-  (to_string low) ^ " => " ^ (to_string high)
-
-let range2mask (low,high) =
+let range2mask (low, high) =
   let two = big_int_of_int 2 in
   let rec get_highest_bit acc n =
       if le_big_int n zero_big_int then acc
