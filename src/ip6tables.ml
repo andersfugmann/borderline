@@ -185,6 +185,6 @@ let emit_chain chain =
 
 let emit_chains chains =
   let chains' = transform chains in
-    List.flatten (Chain_map.fold (fun _ chn acc -> emit_chain chn :: acc) chains' [])
+    List.flatten (List.rev (Chain_map.fold (fun _ chn acc -> emit_chain chn :: acc) chains' []))
 
 

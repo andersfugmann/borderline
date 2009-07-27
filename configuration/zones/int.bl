@@ -1,4 +1,4 @@
-define network_address = 2001:16d8:dd2d:0:2e0:4cff:fe69:103d/64
+define network_address = 2001:16d8:dd2d::/64
 define marvin = 2001:16d8:dd2d:0:2e0:4cff:fe69:103d/128
 define other = 2001:16d8:dd2d:0:2e0:4cff:fe69:2/128
 define users = marvin, other

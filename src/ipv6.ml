@@ -27,7 +27,15 @@ let to_ip num =
     convert [] num
 
 let to_string ip =
-  (String.concat ":" (List.map (Printf.sprintf "%04x") (to_ip ip)))
+  let rec strip = function
+      0 :: xs -> strip xs
+    | n :: xs -> List.rev (n :: xs)
+    | [] -> []
+  in
+  let ip_number = to_ip ip in
+  let ip_number' = strip (List.rev ip_number) in
+    String.concat ":" (List.map (Printf.sprintf "%04x") ip_number') ^ (if not (ip_number = ip_number') then "::" else "")
+
 
 let range_to_string (low, high) =
   (to_string low) ^ " => " ^ (to_string high)
