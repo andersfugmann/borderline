@@ -154,16 +154,19 @@ let transform chains =
     in
       ([], (zone_to_mask' (List.sort Ir.compare conds), target))
   in
-  let rec map_chains func = function
+  let rec map_chains acc func = function
       chain :: xs ->
         let chains, rules = List.split (List.map func chain.rules) in
-          { id = chain.id; rules = rules; comment = chain.comment } :: map_chains func ((List.flatten chains) @ xs)
-    | [] -> []
+        let chain' = { id = chain.id; rules = rules; comment = chain.comment } in
+          map_chains (Chain_map.add chain'.id chain' acc) func ((List.flatten chains) @ xs)
+    | [] -> acc
   in
-  let chains = map_chains zone_to_mask chains in
-  let chains = map_chains expand chains in
-  let chains = map_chains denormalize chains in
-  let chains = map_chains fix_multiport chains in
+  let map func chains = Chain_map.fold (fun _ chn acc -> map_chains acc func [chn]) chains Chain_map.empty in
+
+  let chains = map zone_to_mask chains  in
+  let chains = map expand chains in
+  let chains = map denormalize chains in
+  let chains = map fix_multiport chains in
     chains
 
 
@@ -182,6 +185,6 @@ let emit_chain chain =
 
 let emit_chains chains =
   let chains' = transform chains in
-    List.flatten (List.map emit_chain chains')
+    List.flatten (Chain_map.fold (fun _ chn acc -> emit_chain chn :: acc) chains' [])
 
 

@@ -7,28 +7,25 @@ exception MergeImpossible
 
 let max_inline_size = 1
 
-module Chain_set = Set.Make (struct
-                               type t = Ir.chain_id
-                               let compare = Chain.compare
-                             end)
-
 let rec chain_reference_count id chains =
-  let filter id = function (_, Jump chn_id) when chn_id = id -> true | _ -> false in
-    match chains with
-        chain :: xs ->
-          List.length (List.filter (filter id) chain.rules) + chain_reference_count id xs
-      | [] -> 0
+  let rec count_references = function
+      (_, Jump chn_id) :: xs when chn_id = id -> 1 + count_references xs
+    | x :: xs -> count_references xs
+    | [] -> 0
+  in
+    Chain_map.fold (fun _ chn acc -> acc + (count_references chn.rules)) chains 0
 
-let rec get_referring_rule c = function
-    chn :: xs -> begin
-      try List.find (fun (conds, target) -> target = Jump (c.id)) chn.rules with Not_found -> get_referring_rule c xs
-    end
-  | [] -> failwith "Chain not referenced"
-
+let rec get_referring_rule chain chains =
+  try
+    let test (conds, target) = target = Jump (chain.id) in
+    let referring_chain = Chain.find (fun chn -> List.exists test chn.rules) chains in
+      List.find test referring_chain.rules
+  with
+      _ -> failwith "Chain not referenced"
 
 (* Optimize rules in each chain. No chain insertion or removal is possible *)
-let map_chain_rules func chains : Ir.chain list =
-  List.map (fun chn -> { id = chn.id; rules = func chn.rules; comment = chn.comment } ) chains
+let map_chain_rules func chains =
+  Chain_map.map (fun chn -> { id = chn.id; rules = func chn.rules; comment = chn.comment }) chains
 
 let rec map_chain_rules_expand func chains : Ir.chain list =
   let rec map_rules = function
@@ -85,85 +82,145 @@ let merge_opers rle =
                  merge_siblings acc' xs
     | [] -> acc
   in
-    [ List.flatten (List.map (fun lst -> merge_siblings [List.hd lst] (List.tl lst)) (group is_sibling [] rle)) ]
+    List.sort Ir.compare (List.flatten (List.map (fun lst -> merge_siblings [List.hd lst] (List.tl lst)) (group is_sibling [] rle)))
 
-(* Merge two rules that points to the same target when rule a is a subset of rule b. *)
-let reduce rules =
-  let rec reduce_rev = function
-      (cl1, tg1) as r :: (cl2, tg2) :: xs when tg1 = tg2 && is_subset eq_cond cl1 cl2 ->
-        printf "*"; r :: reduce_rev xs
-    | r :: xs -> r :: reduce_rev xs
+let reduce chains =
+  (* Find the build-in chains *)
+  let builtin = Chain_map.fold (fun id _ acc -> match id with Builtin _ -> id :: acc | _ -> acc) chains [] in
+    (* Create a map of chains. The map is a reference, so all can access it and modify the chains within it *)
+  let chain_map = ref chains in
+  let reverse () =
+    chain_map := Chain_map.map (fun c -> { id = c.id; rules = List.rev c.rules; comment = c.comment }) !chain_map
+  in
+  let is_terminal = function
+      Jump _ | MarkZone _ | Notrack | Return -> false
+    | Accept | Drop | Reject _ -> true
+  in
+  let conditions_equal conds conds' =
+    try List.for_all2 (fun a b -> Ir.compare a b = 0) conds conds'
+    with Invalid_argument _ -> false
+  in
+  let rec map_chain func chain_id =
+    let chain = Chain_map.find chain_id !chain_map in
+    let rules = func chain.rules in
+      chain_map := Chain_map.add chain_id { id = chain_id; rules = rules; comment = chain.comment } !chain_map
+
+  and reduce_rules (conds, target) = function
+    | (conds', Jump chn_id) as rle :: xs ->
+        (try
+           map_chain (reduce_rules (merge_opers (conds @ conds'), target)) chn_id
+         with
+             MergeImpossible -> ()
+        ); rle :: reduce_rules (conds, target) xs
+    | (conds', Return) as rle :: xs -> begin
+        try
+          ignore (merge_opers (conds @ conds')); rle :: xs
+        with MergeImpossible -> rle :: reduce_rules (conds, target) xs
+      end
+    | (conds', target') as rle :: xs -> begin
+        try
+          if conditions_equal (merge_opers (conds @ conds')) conds' then
+            (printf "H";
+             reduce_rules (conds, target) xs)
+          else
+            rle :: reduce_rules (conds, target) xs
+        with
+            MergeImpossible -> rle :: reduce_rules (conds, target) xs
+      end
+    | [] -> []
+
+  and reduce_rules_rev (conds, target) = function
+    | (conds', Jump chn_id) as rle :: xs when (chain_reference_count chn_id !chain_map) = 1 -> begin
+        try
+          ignore (merge_opers (conds @ conds')); map_chain (reduce_rules_rev (conds, target)) chn_id;
+          rle :: xs
+        with
+          | MergeImpossible -> rle :: reduce_rules_rev (conds, target) xs
+      end
+    | (conds', Return) as rle :: xs -> begin
+        try
+          ignore (merge_opers (conds @ conds')); rle :: xs
+        with MergeImpossible -> rle :: reduce_rules_rev (conds, target) xs
+      end
+    | (conds', target') as rle :: xs when target = target' -> begin
+        try
+          if conditions_equal (merge_opers (conds @ conds')) conds' then
+            (printf "h";
+             reduce_rules_rev (conds, target) xs)
+          else
+            rle :: reduce_rules_rev (conds, target) xs
+        with
+          | MergeImpossible -> rle :: reduce_rules_rev (conds, target) xs
+      end
+    | (conds', target') as rle :: xs -> begin
+        try
+          ignore (conditions_equal (merge_opers (conds @ conds')) conds'); rle :: xs
+        with
+          | MergeImpossible -> rle :: reduce_rules_rev (conds, target) xs
+      end
+    | [] -> []
+
+  (* Dont find a terminal. For each terminal *)
+  and traverse func = function
+      (conds, target) as rle :: xs when is_terminal target ->
+        rle :: traverse func (func (conds, target) xs)
+    | (conds, Jump chn_id) as rle :: xs ->
+        map_chain (traverse func) chn_id; rle :: traverse func xs
+    | x :: xs -> x :: traverse func xs
     | [] -> []
   in
-  let rec reduce_inner rules =
-    let rules' = reduce_rev rules in
-      if Ir.eq_rules rules rules' then rules
-      else reduce_inner rules'
-  in
-    List.rev (reduce_inner (List.rev rules))
+    ignore (traverse reduce_rules (List.map (fun id -> ([], Jump id)) builtin));
+
+    (* And on the reversed chains *)
+    reverse ();
+    Chain_map.iter (fun id  _ -> map_chain (traverse reduce_rules_rev) id) !chain_map;
+    reverse ();
+
+    (* Yeild the result. We might consider only using maps. Its far easier *)
+    !chain_map
+
 
 (* Remove all return statements, by creating new chains for each return statement *)
 let rec fold_return_statements chains =
-  let rec neg = function
-      (x,b) :: xs -> (x, not b) :: neg xs
-    | [] -> []
-  in
-  let rec fold_return rules = function
+  let rec neg = List.map (fun (x, a) -> (x, not a)) in
+  let rec fold_return acc = function
       (cl, Return) :: xs ->
         printf "F";
-        let chn = Chain.create xs "Return stm inlined" in
-          (rules @ [(neg cl, Jump(chn.id))], [chn])
-    | rle :: xs -> fold_return (rules @ [rle]) xs
-    | [] -> (rules, [])
-  in match chains with
-      chn :: xs ->
-        let (rules, chn') = fold_return [] chn.rules in
-          { id = chn.id; rules = rules; comment = chn.comment } :: fold_return_statements (chn' @ xs)
-    | [] -> []
+        let rls, chns = fold_return [] xs in
+        let chn = Chain.create rls "Return stm inlined" in
+          (acc @ [(neg cl, Jump(chn.id))], chn :: chns)
+    | rle :: xs -> fold_return (acc @ [rle]) xs
+    | [] -> (acc, [])
+  in
+
+  let fold_func _ chn acc =
+    let rls, chns = fold_return [] chn.rules in
+      List.fold_left (fun acc chn -> Chain_map.add chn.id chn acc) acc ( { id = chn.id; rules = rls; comment = chn.comment } :: chns )
+  in
+    Chain_map.fold fold_func chains Chain_map.empty
 
 let remove_unreferenced_chains chains =
-(* This function visits all reachable chains, and removed all unvisited chains. *)
-
-  let rec get_chain_references = function
-      (_, Jump chn_id) :: xs -> chn_id :: get_chain_references xs
-    | x :: xs -> get_chain_references xs
-    | [] -> []
+  let get_referenced_chains chain =
+    List.fold_left (fun acc -> function (_, Jump id) -> (Chain_map.find id chains) :: acc | _ -> acc) [] chain.rules
   in
-  let find_chain_opers id =
-    try
-      let chn = List.find (fun chn -> chn.id = id) chains in
-        chn.rules
-    with Not_found -> []
+  let rec descend acc chain =
+    List.fold_left (fun acc chn -> descend acc chn) (Chain_map.add chain.id chain acc) (get_referenced_chains chain)
   in
-  let rec visit visited = function
-      chn_id :: xs when not (Chain_set.mem chn_id visited) ->
-        let visited = visit (Chain_set.add chn_id visited) (get_chain_references (find_chain_opers chn_id)) in
-          visit visited xs
-    | x :: xs -> visit visited xs
-    | [] -> visited
-  in
-  let build_in_chains = List.map (fun chn -> chn.id) (List.filter (fun chn -> Chain.is_builtin chn.id) chains) in
-  let referenced_chains = visit Chain_set.empty build_in_chains in
-
-    List.filter (fun chn -> Chain_set.mem chn.id referenced_chains) chains
+    Chain_map.fold (fun id chn acc -> match id with Builtin _ -> descend acc chn | _ -> acc) chains Chain_map.empty
 
 (* Remove dublicate chains *)
 let remove_dublicate_chains chains =
-  let replace_chain_ids ids id chains =
-    let replace = function
-        (conds, Jump id') when List.mem id' ids -> (conds, Jump id)
-      | x -> x
-    in
-      map_chain_rules (List.map replace) chains
+  let replace_chain_ids (id, ids) chns =
+      map_chain_rules (List.map (function (c, Jump id') when List.mem id' ids -> (c, Jump id) | x -> x)) chns
   in
   let is_sibling a b = (Ir.eq_rules a.rules b.rules) && not (a.id = b.id) in
-    try
-      let chain = List.find (fun chn -> List.exists (is_sibling chn) chains) chains in
-      let (rem_chains, new_chains) = List.partition (is_sibling chain) chains in
-      let ids = List.map (fun chn -> chn.id) rem_chains in
-        printf "D";
-        replace_chain_ids ids chain.id new_chains
-    with Not_found -> chains
+  let identical_chains chain chains = Chain_map.fold (fun id chn acc -> if is_sibling chain chn then id :: acc else acc) chains [] in
+  let remap_list = Chain_map.fold (fun id chn acc -> (id, identical_chains chn chains) :: acc) chains [] in
+    List.fold_left (fun acc (id, ids) -> if List.length ids > 0 then printf "D"; replace_chain_ids (id, ids) acc) chains remap_list
+
+let a = function
+    5 -> 7
+  | n -> n
 
 (* Move drops to the bottom. This allows improvement to dead code elimination, and helps reduce *)
 let rec reorder rules =
@@ -203,8 +260,8 @@ let rec reorder rules =
   in
     reorder_rules [] rules
 
-(* Inline chains for which expr evaluates true *)
-let rec inline expr chains : Ir.chain list =
+(* Inline chains that satifies p *)
+let rec inline p chains =
   let has_target target rules =
     List.exists (fun (c, t) -> t = target) rules
   in
@@ -221,20 +278,14 @@ let rec inline expr chains : Ir.chain list =
     | x :: xs -> x :: inline_chain chain xs
     | [] -> []
   in
-  let chain_to_inline expr chains chain  =
-    (not (has_target Return chain.rules || Chain.is_builtin chain.id) ) && expr chains chain
-  in
 
-  let rec find_inlineable_chain expr chains =
-    List.find (chain_to_inline expr chains) chains
-  in
+  (* Found one chain that satifies p *)
+  let p' chains chain = (not (has_target Return chain.rules || Chain.is_builtin chain.id) ) && chain_reference_count chain.id chains > 0 && p chains chain in
+    try
+      let chain_to_inline = Chain.find (p' chains) chains in
+        printf "I"; inline p (map_chain_rules (inline_chain chain_to_inline) chains)
+    with Failure _ -> chains
 
-  try
-    let chain = find_inlineable_chain expr chains in
-    let filtered_chains = List.filter (fun chn -> chn.id != chain.id) chains in
-      printf "I";
-      inline expr (map_chain_rules (inline_chain chain) filtered_chains)
-  with not_found -> chains
 
 let rec eliminate_dead_rules = function
     ([], Accept) | ([], Drop) | ([], Return) | ([], Reject _) as rle :: xs ->
@@ -250,29 +301,29 @@ let rec eliminate_dublicate_rules = function
   | rle :: xs -> rle :: eliminate_dublicate_rules xs
   | [] -> []
 
-let rec count_rules = function
-    chain :: xs -> List.length chain.rules + count_rules xs
-  | [] -> 0
+let rec count_rules chains =
+    Chain_map.fold (fun _ chn acc -> acc + List.length chn.rules) chains 0
 
-let optimize_pass chains: Ir.chain list =  printf "Optim: %d " (count_rules chains); flush stdout;
+let optimize_pass chains =
+  printf "Optim: %d " (count_rules chains); flush stdout;
   let chains' = chains in
-  let chains' = remove_dublicate_chains chains' in
   let chains' = fold_return_statements chains' in
+  let chains' = remove_dublicate_chains chains' in
   let chains' = map_chain_rules eliminate_dead_rules chains' in
   let chains' = map_chain_rules eliminate_dublicate_rules chains' in
+  let chains' = map_chain_rules reorder chains' in
+  let chains' = reduce chains' in
   let chains' = inline (fun _ c -> List.length c.rules <= max_inline_size) chains' in
   let chains' = inline (fun cs c -> chain_reference_count c.id cs = 1 && List.length (fst (get_referring_rule c cs)) < 1) chains' in
   let chains' = inline (fun cs c -> chain_reference_count c.id cs < 2 && List.length c.rules < 3) chains' in
-  let chains' = map_chain_rules reorder chains' in
-  let chains' = map_chain_rules reduce chains' in
-  let chains' = map_chain_rules_expand merge_opers chains' in
+  let chains' = map_chain_rules (fun rls -> List.map (fun (opers, tg) -> (merge_opers opers, tg)) rls) chains' in
   let chains' = remove_unreferenced_chains chains' in
   let _ = printf " %d\n" (count_rules chains') in
     chains'
 
-let rec optimize chains : Ir.chain list =
+let rec optimize chains =
   let chains' = optimize_pass chains in
     if not (count_rules chains' = count_rules chains) then optimize chains'
-    else (
+    else  (
       printf "\nOptimization done\n";
       chains')
