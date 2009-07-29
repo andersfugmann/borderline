@@ -3,13 +3,15 @@ import "./zones"
 
 process filter {
         rule {
-             rule { state = invalid; } policy deny;
-             rule { state = related, established; } policy allow;
+             rule { state = related, established; } policy deny;
+             rule { protocol = ipv6-icmp; } policy allow;
+             rule { icmpv6 type = echo-request; } policy allow;
              rule { state = new;
-                 rule { src zone = mars; } policy deny;
                  use common;
+                 rule { src zone = mars; } policy deny;
                  use zones;
              } policy deny;
+             rule { state = invalid; } policy allow;
         } policy deny;
 } policy deny
 

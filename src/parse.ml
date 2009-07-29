@@ -86,9 +86,13 @@ let rec inline_defines defines nodes =
       end
     | Filter (dir, TcpPort ports, neg) -> [ Filter (dir, TcpPort (expand_ints ports), neg) ]
     | Filter (dir, UdpPort ports, neg) -> [ Filter (dir, UdpPort (expand_ints ports), neg) ]
-    | Filter (dir, Address(ips), neg) -> [ Filter (dir, Address (expand_ips ips), neg) ]
+    | Filter (dir, Address ips, neg) -> [ Filter (dir, Address (expand_ips ips), neg) ]
+    | Filter (dir, FZone _, neg) as rle -> [ rle ]
     | Protocol (protos, neg) -> [ Protocol ((expand_ints protos), neg) ]
-    | rle -> [rle]
+    | IcmpType (types, neg) -> [ IcmpType ((expand_ints types), neg) ]
+    | State _ as rle -> [ rle ]
+    | Rule _ as rle -> [ rle ]
+
   in
     Frontend.expand expand_define nodes
 

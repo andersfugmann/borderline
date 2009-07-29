@@ -1,0 +1,10 @@
+zone self {
+     interface = lo;
+     process filter {
+         rule { src zone = int; } policy allow;
+         rule {
+             rule { destination tcp port = smtp, ssmtp, domain, imaps, www, https, ntp } policy allow;
+             rule { destination udp port = domain, ntp } policy allow;
+         } policy deny;
+     } policy deny;
+}

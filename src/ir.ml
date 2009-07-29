@@ -12,6 +12,7 @@ type statetype = NEW | ESTABLISHED | RELATED | INVALID
 
 type zone = id
 type mask = int
+type icmp_type = int
 
 type chain_type = INPUT | OUTPUT | FORWARD
 
@@ -24,10 +25,7 @@ type direction = SOURCE | DESTINATION
 type pol       = bool
 
 
-type icmp_packet_type = ICMP_NET_UNREACHABLE | ICMP_HOST_UNREACHABLE
-                      | ICMP_PORT_UNREACHABLE | ICMP_PROTO_UNREACHABLE
-                      | ICMP_NET_PROHIBITED | ICMP_HOST_PROHIBITED
-                      | ICMP_ADMIN_PROHIBITED | TCP_RESET
+type icmp_packet_type = int
 
 
 type ip_range = (ip_number * ip_number)
@@ -38,6 +36,7 @@ type condition = Interface of direction * id
                | Ports of direction * int list
                | IpRange of direction * ip_range list
                | Protocol of int list
+               | IcmpType of icmp_type list
                | Mark of int * int
 
 type action = Jump of chain_id
@@ -80,6 +79,7 @@ let get_dir = function
   | Ports (direction, _) -> Some direction
   | IpRange (direction, _) -> Some direction
   | Protocol _ -> None
+  | IcmpType _ -> None
   | Mark _ -> None
 
 let enumerate_cond = function
@@ -89,7 +89,8 @@ let enumerate_cond = function
   | Ports _ -> 4
   | IpRange _ -> 5
   | Protocol _ -> 6
-  | Mark _ -> 7
+  | IcmpType _ -> 7
+  | Mark _ -> 8
 
 let cond_type_identical cond1 cond2 =
   (enumerate_cond cond1) = (enumerate_cond cond2)

@@ -59,12 +59,13 @@ let gen_condition = function
       end
   | Interface(direction, name) -> ("", (choose_dir "--in-interface " "--out-interface " direction) ^ (id2str name))
   | State(states) -> "-m conntrack ", ("--ctstate " ^ ( String.concat "," (List.map get_state_name states)))
-  | Zone(dir, id) -> "-m conmark ", "--mark " ^ (gen_zone_mask_str dir id)
+  | Zone(dir, id) -> "-m mark ", "--mark " ^ (gen_zone_mask_str dir id)
   | Ports(direction, ports) -> "-m multiport ",
       ( "--" ^ (choose_dir "source" "destination" direction) ^ "-ports " ^ (String.concat "," (List.map string_of_int ports)) )
 
   | Protocol(protocol) -> ("", sprintf "--protocol %d" (elem protocol))
-  | Mark (value, mask) -> "-m connmark ", sprintf "--mark 0x%04x/0x%04x" value mask
+  | IcmpType(types) -> ("-m icmp6", sprintf "--icmpv6-type %d" (elem types))
+  | Mark (value, mask) -> "-m mark ", sprintf "--mark 0x%04x/0x%04x" value mask
 
 let rec gen_conditions acc = function
     (Ports _ as cond, neg) :: xs -> let pref, postf = gen_condition cond in
@@ -93,6 +94,7 @@ let transform chains =
       | Ports (_, ports) -> 4
       | IpRange (_, ips) -> List.length ips
       | Protocol protocols -> List.length protocols
+      | IcmpType types -> List.length types
       | Mark _ -> 2
     in
       -(Pervasives.compare (value a) (value b))

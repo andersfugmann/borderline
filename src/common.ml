@@ -6,6 +6,7 @@ exception ParseError of (string * id) list
 
 let tcp = 6
 let udp = 17
+let icmp6 = 58
 
 let error2string errors =
   let err2str (err, (id, pos)) = sprintf "File \"%s\", line %d: Error. %s '%s'" pos.Lexing.pos_fname pos.Lexing.pos_lnum err id

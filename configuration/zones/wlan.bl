@@ -1,6 +1,6 @@
 zone wlan {
      interface = wlan0;
-     network = 2001:16d8:dd2d:1:0:0:0:0/64;
+     # network = 2001:16d8:dd2d:1:0:0:0:0/64;
      process filter {
          rule { src zone = int; } policy allow;
          rule { destination udp port = 1234; } policy allow;

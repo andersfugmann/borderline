@@ -24,7 +24,7 @@
 %token SOURCE DESTINATION ADDRESS STATE USE
 %token NEW ESTABLISHED RELATED INVALID
 %token START EQ ENDL SEMI PROTOCOL
-%token TCPPORT UDPPORT
+%token TCPPORT UDPPORT ICMPTYPE
 %token EQ NE
 
 %token <int * Lexing.position> INT
@@ -85,6 +85,7 @@ rule_stm:
                                                                       Filter($1, stm, pol) }
   | STATE oper state_list                                         { State($3, $2) }
   | PROTOCOL oper data_list                                       { Protocol($3, $2) }
+  | ICMPTYPE oper data_list                                       { IcmpType($3, $2) }
 ;
 
 rule_stms:

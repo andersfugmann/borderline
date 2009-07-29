@@ -245,7 +245,8 @@ let rec reorder rules =
     if can_reorder (cl1, act1) (cl2, act2) then
       match order act1 - order act2 with
           n when n > 0 -> true
-        | 0 -> List.length cl1 > List.length cl2
+        | 0 -> if List.length cl1 < List.length cl2 then true
+          else (* Weight the types, and add them. *) false
         | _ -> false
     else
       false

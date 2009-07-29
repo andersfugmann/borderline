@@ -52,6 +52,7 @@ rule token = parse
   | "dst"          { Parser.DESTINATION }
   | "udp port"     { Parser.UDPPORT }
   | "tcp port"     { Parser.TCPPORT }
+  | "icmpv6 type"  { Parser.ICMPTYPE }
   | "state"        { Parser.STATE }
   | "address"      { Parser.ADDRESS }
   | "use"          { Parser.USE }

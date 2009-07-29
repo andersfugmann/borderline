@@ -18,6 +18,7 @@ let rec get_referenced_ids node =
     | Filter (_, TcpPort ports, _) -> List.fold_left (fun acc id -> Id_set.add id acc) acc (get_ids ports)
     | Filter (_, UdpPort ports, _) -> List.fold_left (fun acc id -> Id_set.add id acc) acc (get_ids ports)
     | Protocol (protos, _) -> List.fold_left (fun acc id -> Id_set.add id acc) acc (get_ids protos)
+    | IcmpType (types, _) -> List.fold_left (fun acc id -> Id_set.add id acc) acc (get_ids types)
     | _ -> acc
   in
   match node with

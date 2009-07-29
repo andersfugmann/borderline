@@ -1,0 +1,5 @@
+define common = {
+   rule { src zone = self; } policy allow;
+   rule { destination tcp port = ssh; } policy allow;
+}
+

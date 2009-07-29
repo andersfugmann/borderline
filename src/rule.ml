@@ -7,7 +7,7 @@ open Big_int
 let gen_policy = function
     ALLOW -> Ir.Accept
   | DENY -> Ir.Drop
-  | REJECT -> Ir.Reject(Ir.ICMP_PORT_UNREACHABLE)
+  | REJECT -> Ir.Reject(0)
 
 let rec list2ints = function
     Number (nr, _) :: xs -> nr :: list2ints xs
@@ -21,26 +21,7 @@ let rec list2ips = function
   | Id (_, _) :: xs -> failwith "No all ints have been expanded"
   | [] -> []
 
-let rec process_rule table (rules, target) =
-  let gen_op table target = function
-      State(states, neg) -> [( [ (Ir.State(states), not neg)], target) ]
-    | Filter(dir, TcpPort(ports), neg) -> [ ( [(Ir.Protocol([tcp]), true); (Ir.Ports(dir, list2ints ports), not neg)], target ) ]
-    | Filter(dir, UdpPort(ports), neg) -> [ ( [(Ir.Protocol([udp]), true); (Ir.Ports(dir, list2ints ports), not neg)], target ) ]
-    | Filter(dir, Address(ips), neg) -> [ ( [(Ir.IpRange(dir, List.map Ipv6.to_range (list2ips ips)), not neg)], target ) ]
-    | Filter(dir, FZone(id), neg) -> [ ( [(Ir.Zone(dir, id), not neg)], target ) ]
-    | Rule(rls, tg)  -> let chain = process_rule table (rls, tg) in [([], Ir.Jump(chain.Ir.id))]
-    | Protocol (protos, neg) -> [ ( [(Ir.Protocol(list2ints protos), not neg)], target) ]
-    | Reference _ -> failwith "Reference to definition not expected"
-
-  in
-  let action = gen_policy target in
-
-  let opers = List.flatten (List.map ( gen_op table Ir.Return) rules) in
-  let chain = Chain.create (opers @ [ ([], action) ]) "Rule" in
-    chain
-
-(* New version *)
-let rec process_rule' table (rules, target') =
+let rec process_rule table (rules, target') =
   let rec gen_op target acc = function
       State(states, neg) :: xs -> gen_op target ((Ir.State(states), neg) :: acc) xs
     | Filter(dir, TcpPort(ports), false) :: xs -> gen_op target ( (Ir.Protocol([tcp]), false) :: (Ir.Ports(dir, list2ints ports), false) :: acc ) xs
@@ -64,13 +45,19 @@ let rec process_rule' table (rules, target') =
 
 
     | Protocol (protos, neg) :: xs -> gen_op target ((Ir.Protocol(list2ints protos), neg) :: acc) xs
+    | IcmpType (types, false) :: xs -> gen_op target ( (Ir.Protocol([icmp6]), false) :: (Ir.IcmpType(list2ints types), false) :: acc) xs
+    | IcmpType (types, true) :: xs ->
+        let chain = gen_op target [] xs in
+        let chain = Chain.replace chain.Ir.id (([(Ir.Protocol([icmp6]), false);
+                                                 (Ir.IcmpType(list2ints types), false)], Ir.Return) :: chain.Ir.rules) chain.Ir.comment in
+          Chain.create [ (acc, Ir.Jump chain.Ir.id) ] "Rule"
     | Reference _ :: xs -> failwith "Reference to definition not expected"
     | [] -> Chain.create [ (acc, target) ] "Rule"
 
   in
     gen_op (gen_policy target') [] rules
 
-let process (table, rules, policy) = process_rule' table (rules, policy)
+let process (table, rules, policy) = process_rule table (rules, policy)
 
 let rec filter_process = function
     Process (table, rules, policy) :: xs -> (table, rules, policy) :: filter_process xs

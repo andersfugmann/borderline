@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # Copyright 2009 Anders Fugmann.
 # Distributed under the GNU General Public License v3
@@ -30,6 +30,8 @@ IP6TABLES_RESTORE="/sbin/ip6tables-restore"
 
 BG="/usr/local/sbin/borderline"
 ALL_DONE="false"
+ALL_OK="true"
+
 
 function on_exit() {
     rm -f ${NEW_RULES}
@@ -69,7 +71,6 @@ function main() {
     # Should test for errors here
     ${BG} ${MAIN} | grep "ip6tables" > ${NEW_RULES}
 
-    ALL_OK="true"
     echo "Backup old rules"
     ${IP6TABLES_SAVE} > ${OLD_RULES}
 
@@ -88,20 +89,22 @@ function main() {
     on_exit
 }
 
-main
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+case $1 in
+    "start")
+        echo "Starting borderline"
+        main
+        ;;
+    "stop")
+        echo "Stopping borderline"
+        ALL_OK="true"
+        ip6tables -F
+        ip6tables -X
+        ip6tables -Z
+        ;;
+    "restart")
+        $0 stop
+        $0 start
+        ;;
+    *)
+        echo "Use $0 <start|stop|restart>"
+esac
