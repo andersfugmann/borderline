@@ -4,6 +4,7 @@ open Frontend
 open Chain
 
 let self = ("self", Lexing.dummy_pos)
+let mars = ("mars", Lexing.dummy_pos)
 let all_zones = ("zones", Lexing.dummy_pos)
 
 let rec filter_interface = function
@@ -30,9 +31,20 @@ let create_zone_chain direction (id, nodes) =
     ([(Ir.Interface(direction, interface), false)], Ir.Jump chain.Ir.id)
   in
   let chain = Chain.create [([], Ir.MarkZone(direction, id))] ("Mark zone " ^ (id2str id)) in
-  let chain = Chain.create (List.map (create_network_rule chain) (filter_network nodes)) ("Match netowkrs for zone " ^ (id2str id)) in
-  let chain = Chain.create (List.map (create_interface_rule chain) (filter_interface nodes)) ("Match interfaces for zone " ^ (id2str id)) in
-    chain
+  let network_nodes = filter_network nodes in
+  let interface_nodes = filter_interface nodes in
+
+  let chain =
+    if List.length network_nodes > 0 then
+      Chain.create (List.map (create_network_rule chain) (filter_network nodes)) ("Match networks for zone " ^ (id2str id))
+    else
+      chain
+  in
+    if List.length interface_nodes > 0 then
+      Chain.create (List.map (create_interface_rule chain) (filter_interface nodes)) ("Match interfaces for zone " ^ (id2str id))
+    else
+      chain
+
 
 let rec filter = function
     Zone(id, nodes) :: xs -> (id, nodes) :: filter xs
@@ -51,8 +63,8 @@ let emit_nodes table zones =
 let emit table zones =
   let src_chains = List.map (create_zone_chain Ir.SOURCE) zones in
   let dst_chains = List.map (create_zone_chain Ir.DESTINATION) zones in
-  let src_chain = Chain.create (List.map (fun chn -> ([], Ir.Jump chn.Ir.id)) src_chains) "Mark source zones" in
-  let dst_chain = Chain.create (List.map (fun chn -> ([], Ir.Jump chn.Ir.id)) dst_chains) "Mark destination zones" in
+  let src_chain = Chain.create (([], Ir.MarkZone(Ir.SOURCE, mars)) :: (List.map (fun chn -> ([], Ir.Jump chn.Ir.id)) src_chains)) "Mark source zones" in
+  let dst_chain = Chain.create (([], Ir.MarkZone(Ir.DESTINATION, mars)) :: (List.map (fun chn -> ([], Ir.Jump chn.Ir.id)) dst_chains)) "Mark destination zones" in
   let input_opers = [ [], Ir.MarkZone (Ir.DESTINATION, self); [], Ir.Jump src_chain.Ir.id  ] in
   let output_opers = [ [], Ir.MarkZone (Ir.SOURCE, self); [], Ir.Jump dst_chain.Ir.id ] in
   let forward_opers = [ [], Ir.Jump src_chain.Ir.id ; [], Ir.Jump dst_chain.Ir.id ] in

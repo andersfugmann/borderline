@@ -224,11 +224,12 @@ let a = function
 
 (* Move drops to the bottom. This allows improvement to dead code elimination, and helps reduce *)
 let rec reorder rules =
-  let can_reorder cl1 cl2 =
-    try
-      let _ = merge_opers (cl1 @ cl2) in
-        false (* The rules did not conflict. *)
-    with MergeImpossible -> true
+  let can_reorder (cl1, act1) (cl2, act2) =
+    if act1 = act2 then true else
+      try
+        let _ = merge_opers (cl1 @ cl2) in
+          false (* The rules did not conflict. *)
+      with MergeImpossible -> true
   in
 
   let order = function
@@ -241,10 +242,10 @@ let rec reorder rules =
     | Drop -> 7
   in
   let should_reorder_rules (cl1, act1) (cl2, act2) =
-    if can_reorder cl1 cl2 then
+    if can_reorder (cl1, act1) (cl2, act2) then
       match order act1 - order act2 with
           n when n > 0 -> true
-        | 0 -> List.length cl1 < List.length cl2
+        | 0 -> List.length cl1 > List.length cl2
         | _ -> false
     else
       false

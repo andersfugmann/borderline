@@ -41,6 +41,8 @@ rule token = parse
   | "policy"       { Parser.POLICY }
   | "allow"        { Parser.ALLOW }
   | "deny"         { Parser.DENY }
+  | "accept"       { Parser.ALLOW }
+  | "drop"         { Parser.DENY }
   | "reject"       { Parser.REJECT }
 
 (* filters *)

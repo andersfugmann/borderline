@@ -7,8 +7,8 @@ OCAMLBUILD=ocamlbuild -verbose 1 -cflags -g -lflag -g -quiet -lflag unix.cma -lf
 .PHONY: main
 .PHONY: force
 
-all: force
-	$(MAKE) -C ../configuration main.screen
+all: main
+	./main ../configuration/main.bl
 
 force:
 

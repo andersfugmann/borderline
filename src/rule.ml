@@ -63,7 +63,7 @@ let rec process_rule' table (rules, target') =
           Chain.create [ (acc, Ir.Jump cont.Ir.id) ] "Rule"
 
 
-    | Protocol (protos, neg) :: xs -> gen_op target ((Ir.Protocol(list2ints protos), not neg) :: acc) xs
+    | Protocol (protos, neg) :: xs -> gen_op target ((Ir.Protocol(list2ints protos), neg) :: acc) xs
     | Reference _ :: xs -> failwith "Reference to definition not expected"
     | [] -> Chain.create [ (acc, target) ] "Rule"
 

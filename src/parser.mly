@@ -84,7 +84,7 @@ rule_stm:
   | filter_direction filter_stm                                   { let stm, pol = $2 in
                                                                       Filter($1, stm, pol) }
   | STATE oper state_list                                         { State($3, $2) }
-  | PROTOCOL oper data_list                                        { Protocol($3, $2) }
+  | PROTOCOL oper data_list                                       { Protocol($3, $2) }
 ;
 
 rule_stms:

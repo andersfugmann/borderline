@@ -1,0 +1,4 @@
+zone ext {
+     interface = eth0;
+     process filter { } policy allow;
+}

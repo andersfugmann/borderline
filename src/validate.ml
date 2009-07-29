@@ -42,7 +42,7 @@ let rec detect_cyclic_references id_func defines seen elem =
     List.iter recurse (id_func elem)
 
 let test_unresolved_zone_references nodes =
-  let zone_ids = get_zone_ids Id_set.empty nodes in
+  let zone_ids = get_zone_ids (Id_set.add Zone.mars Id_set.empty) nodes in
   let zone_refs = get_referenced_zones nodes in
     match Id_set.elements (Id_set.diff zone_refs zone_ids) with
         [] -> ()

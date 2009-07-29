@@ -6,26 +6,33 @@ open Lexer
 open Str
 
 (* Precompiled regular expressions *)
-let exlude_regex = [ regexp "^.*[~]$"; regexp "^[.].*$"; regexp "^[Mm]akefile$" ]
+let include_regex = regexp "^.*[.]bl$"
 
-let imported = ref []
+module File_set = Set.Make( String )
+
+let imported = ref File_set.empty
 
 let parse file =
-  prerr_endline (Printf.sprintf "Parse: %s" file);
-  let lexbuf = Lexing.from_channel (open_in file) in
-    lexbuf.Lexing.lex_curr_p <- { lexbuf.Lexing.lex_curr_p with Lexing.pos_fname = file; };
-    Parser.main Lexer.token lexbuf
-
-let exclude_file file =
-  List.exists (fun regex -> string_match regex file 0) exlude_regex
+  let full_path = (Unix.getcwd ()) ^ "/" ^ file in
+  if File_set.mem full_path !imported then []
+  else
+    begin
+      imported := (File_set.add full_path !imported);
+      prerr_endline (Printf.sprintf "Parse: %s" full_path);
+      let lexbuf = Lexing.from_channel (open_in file) in
+        lexbuf.Lexing.lex_curr_p <- { lexbuf.Lexing.lex_curr_p with Lexing.pos_fname = full_path; };
+        Parser.main Lexer.token lexbuf
+    end
 
 let rec parse_file file =
-  let full_path = (Unix.getcwd ()) ^ "/" ^ file in
-  match List.exists ( fun x -> x = full_path ) !imported || exclude_file file with
-      true -> [ ]
-    | false ->
-        imported := full_path :: !imported;
-        expand (parse full_path)
+  if string_match include_regex file 0 then
+    let prev_dir = Unix.getcwd () in
+    let _ = Unix.chdir (Filename.dirname file) in
+    let res = expand (parse (Filename.basename file)) in
+    let _ = Unix.chdir prev_dir in
+      res
+  else
+    []
 
 and include_path dir_handle =
   try
@@ -86,7 +93,7 @@ let rec inline_defines defines nodes =
     Frontend.expand expand_define nodes
 
 let process_files files =
-  let nodes = (* List.flatten (List.map parse_file files) *) parse_file "main.bl" in
+  let nodes = List.flatten (List.map parse_file files) in
   let zones = Zone.filter nodes in
   let nodes' = (Zone.emit_nodes Frontend_types.FILTER zones) @ nodes in
     Validate.validate nodes';

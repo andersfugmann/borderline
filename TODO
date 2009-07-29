@@ -3,13 +3,17 @@ In progress:
 * Move implementation to .ml and types to .mli - Need to figure out
   how to avoid type definition redundancy.
 
+* Set the source and destination zone to "mars" to allow detection of
+   martian packets.
+
 Future:
 
 * Setup wiki page for borderline. Maybe use trac for wiki and tickets.
 
-* Extend ip address notation to include '::'
-
 * Implement tcp option match condition to make validating system
+
+* Add a log target. Allow other rules to be targets (that would allow
+   definition of new policies (home made so to speak)
 
 Planning:
 * Add ipv4 support - Somehow. Maybe by adding a switch, and by using

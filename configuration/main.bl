@@ -1,18 +1,15 @@
 import "./generic"
 import "./zones"
 
-zone self {
-     interface = lo;
-     process filter { rule { source zone = self } policy allow } policy deny
-}
-
 process filter {
         rule {
              rule { state = invalid; } policy deny;
              rule { state = related, established; } policy allow;
-             protocol = tcp, udp, icmp, ipv6-icmp;
-             { state = new };
-             use zones;
-        } policy deny
+             rule { state = new;
+                 rule { src zone = mars; } policy deny;
+                 use common;
+                 use zones;
+             } policy deny;
+        } policy deny;
 } policy deny
 
