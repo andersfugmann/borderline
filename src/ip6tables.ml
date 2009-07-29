@@ -23,7 +23,6 @@ let get_zone_id zone =
     let _ = zone_map := StringMap.add zone id !zone_map in
       incr zone_id; printf "#Zone: %s -> %d\n" zone id; id
 
-
 let gen_neg = function
     true -> "! "
   | _ -> ""
@@ -65,10 +64,12 @@ let gen_condition = function
       ( "--" ^ (choose_dir "source" "destination" direction) ^ "-ports " ^ (String.concat "," (List.map string_of_int ports)) )
 
   | Protocol(protocol) -> ("", sprintf "--protocol %d" (elem protocol))
-  | Mark (value, mask) -> "-m conmark ", sprintf "--mark 0x%04x/0x%04x" value mask
+  | Mark (value, mask) -> "-m connmark ", sprintf "--mark 0x%04x/0x%04x" value mask
 
 let rec gen_conditions acc = function
-    (cond, neg) :: xs ->
+    (Ports _ as cond, neg) :: xs -> let pref, postf = gen_condition cond in
+      (gen_conditions acc xs) ^ pref ^ (gen_neg neg) ^ postf ^ " "
+  | (cond, neg) :: xs ->
       let pref, postf = gen_condition cond in
         gen_conditions (pref ^ (gen_neg neg) ^ postf ^ " " ^ acc) xs
   | [] -> acc
@@ -87,12 +88,12 @@ let transform chains =
   let order a b =
     let value = function
         Interface _ -> 1
-      | Zone _ -> 1
-      | State _ -> 1
-      | Ports (_, ports) -> List.length ports
-      | IpRange _ -> 1
+      | Zone _ -> 2
+      | State _ -> 3
+      | Ports (_, ports) -> 4
+      | IpRange (_, ips) -> List.length ips
       | Protocol protocols -> List.length protocols
-      | Mark _ -> 1
+      | Mark _ -> 2
     in
       -(Pervasives.compare (value a) (value b))
   in
@@ -170,21 +171,25 @@ let transform chains =
     chains
 
 
-let emit (cond_list, action) : string =
+let emit_rule (cond_list, action) : string =
   let conditions = gen_conditions "" cond_list in
   let target = gen_action action in
     conditions ^ "-j " ^ target
 
-let emit_chain chain =
+let emit_rules chain =
   let chain_name = Chain.get_chain_name chain.id in
-  let ops = List.map emit chain.rules in
-  let lines = List.map ( sprintf "ip6tables -A %s %s" chain_name ) ops in
-    match chain.id with
-        Builtin(_) -> lines
-      | _          -> (sprintf "ip6tables -N %s #%s" chain_name chain.comment) :: lines
+  let ops = List.map emit_rule chain.rules in
+    List.map ( sprintf "ip6tables -A %s %s" chain_name ) ops
+
+let create_chain acc chain =
+  match chain.id with
+      Builtin(_) -> acc
+    | _ -> acc @ [sprintf "ip6tables -N %s #%s" (Chain.get_chain_name chain.id) chain.comment]
 
 let emit_chains chains =
   let chains' = transform chains in
-    List.flatten (List.rev (Chain_map.fold (fun _ chn acc -> emit_chain chn :: acc) chains' []))
+    (* Create all chains, with no rules *)
+    Chain_map.fold (fun id chn acc -> create_chain acc chn) chains' []
+    @ List.flatten (List.rev (Chain_map.fold (fun _ chn acc -> emit_rules chn :: acc) chains' []))
 
 

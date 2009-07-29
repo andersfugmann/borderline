@@ -4,7 +4,7 @@ type id = string * Lexing.position
 
 exception ParseError of (string * id) list
 
-let tcp = 4
+let tcp = 6
 let udp = 17
 
 let error2string errors =

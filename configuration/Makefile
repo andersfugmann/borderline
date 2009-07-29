@@ -26,8 +26,15 @@ main.out: main main.bl
 	OCAMLRUNPARAM=b $(BORDERLINE) main.bl > $@
 
 .PHONY: main.screen
+
 main.screen: main.out
 	@cat main.out
+
+main.sh: main.out
+	echo "ip6tables -F;  ip6tables -X; ip6tables -Z" > $@
+	grep "ip6tables" $< >> $@
+	chmod a+x main.sh
+
 
 .PHONY: main
 
