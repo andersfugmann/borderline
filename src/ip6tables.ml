@@ -127,22 +127,46 @@ let transform chains =
       | (IpRange(direction, ips), neg) :: xs when List.length ips > 1 ->
           let chain = expand_cond tg (fun ip -> IpRange(direction, [ip])) ips neg in
             expand_conds (chain :: acc1) acc2 (Ir.Jump chain.id) xs
+      | (IcmpType(types), neg) :: xs when List.length types > 1 ->
+          let chain = expand_cond tg (fun t -> IcmpType([t])) types neg in
+            expand_conds (chain :: acc1) acc2 (Ir.Jump chain.id) xs
       | cond :: xs -> expand_conds acc1 (cond :: acc2) tg xs
       | [] -> (acc1, (acc2, tg))
     in expand_conds [] [] target (List.sort (fun (a, _) (b, _) -> order a b) conds)
   in
-  let fix_multiport (conds, target) =
-    (* If multiport and no protocol spec, then extend into two rules in a new chain *)
-    if not (List.exists (fun (cond, _) -> (cond_type_identical (Protocol []) cond)) conds) then
-      let ports, rest = List.partition (fun (cond, _) -> (cond_type_identical (Ports (SOURCE, [])) cond)) conds in
-      match List.length ports with
-          0 -> ([], (conds, target))
-        | 1 -> let chn = Chain.create [ ([(Protocol [tcp], false); elem ports], target);
-                                        ([(Protocol [udp], false); elem ports], target)] "Fix multiport" in
-            ([chn], (rest, Ir.Jump chn.id))
-        | n -> failwith "Too many port filters in one rule. Denomalization must be broken"
-    else
-      ([], (conds, target))
+    (* Seems to be broken for negated ports *)
+  let add_protocol_to_multiport (conds, target) =
+    let multiports, rest = List.partition (fun (cond, _) -> (cond_type_identical (Ports (SOURCE, [])) cond)) conds in
+    let protocols = List.filter (fun (cond, _) -> (cond_type_identical (Protocol []) cond)) conds in
+      match multiports, protocols with
+          (x, y) when List.length x > 1 or List.length y > 1 -> failwith "Normalization broken"
+        | ([], _) -> ([], (conds, target))
+        | ([(Ports(dir, ports), false) as cond], []) ->
+            let chain = Chain.create [ ([(Protocol([tcp]), false); cond], target); ([(Protocol([udp]), false); cond], target) ] "Expanded" in
+              ([chain], (rest, Ir.Jump chain.id))
+
+        | ([(Ports(dir, ports), true) as cond], []) ->
+            let chain = Chain.create [ ([(Protocol([tcp]), false); cond], Ir.Return); ([(Protocol([udp]), false); cond], Ir.Return); ([], target) ] "Expanded" in
+              ([chain], (rest, Ir.Jump chain.id))
+
+        | (_, [(Protocol(protos), _)]) when not (List.mem (List.hd protos) [tcp; udp]) ->
+            failwith (sprintf "Port has wrong protocol specifier: %s." (ints_to_string protos))
+
+        | _ -> ([], (conds, target)) (* Catch all *)
+  in
+  let add_protocol_to_icmptype (conds, target) =
+    let icmptypes, rest = (List.partition (fun (cond, _) -> (cond_type_identical (IcmpType []) cond)) conds) in
+    let protocols = (List.filter (fun (cond, _) -> (cond_type_identical (Protocol []) cond)) conds) in
+      match (icmptypes, protocols) with
+          (it, p) when List.length it > 1 or List.length p > 1 -> failwith "Normalization broken"
+        | ([], _) -> ([], (conds, target))
+        | ([(IcmpType(types), false)], []) -> ([], ((Protocol([icmp6]), false) :: conds, target))
+        | ([(IcmpType(types), true)], []) ->
+            let chain = Chain.create [ ([(Protocol([icmp6]), false); (IcmpType(types), false)], Ir.Return); ([], target) ] "expanded"
+            in ([chain], (rest,  Ir.Jump chain.id))
+        | (_, [ (Protocol(protos), false)] ) when not (List.hd protos = icmp6) ->
+            failwith (sprintf "IcmpType has wrong protocol specifier: %s." (ints_to_string protos))
+        | _ -> ([], (conds, target)) (* Catch all *)
   in
   let zone_to_mask (conds, target) =
     let rec zone_to_mask' = function
@@ -164,14 +188,10 @@ let transform chains =
           map_chains (Chain_map.add chain'.id chain' acc) func ((List.flatten chains) @ xs)
     | [] -> acc
   in
-  let map func chains = Chain_map.fold (fun _ chn acc -> map_chains acc func [chn]) chains Chain_map.empty in
+  let map chains func = Chain_map.fold (fun _ chn acc -> map_chains acc func [chn]) chains Chain_map.empty in
 
-  let chains = map zone_to_mask chains  in
-  let chains = map expand chains in
-  let chains = map denormalize chains in
-  let chains = map fix_multiport chains in
-    chains
-
+  let transformations = [ zone_to_mask; expand; denormalize; add_protocol_to_multiport; add_protocol_to_icmptype ] in
+    List.fold_left map chains transformations
 
 let emit_rule (cond_list, action) : string =
   let conditions = gen_conditions "" cond_list in

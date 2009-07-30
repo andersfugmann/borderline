@@ -25,6 +25,9 @@ module Id_map = Map.Make (struct
 
 let id2str (str, _) = str
 
+let ints_to_string ints =
+ String.concat "," (List.map string_of_int ints)
+
 let eq_id (a, _) (b, _) = a = b
 
 let combinations a b =
