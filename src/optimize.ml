@@ -129,36 +129,34 @@ let reduce chains =
   (* This function needs an accumulator of all visited
      rules. Only rules which has no commonparts with already
      visited rules are elegiable for deletion.  *)
+  and has_common_part conds = function
+      conds' :: xs -> begin
+        try
+          ignore (merge_opers (conds @ conds')); true
+        with
+            MergeImpossible -> has_common_part conds xs
+      end
+    | [] -> false
 
-  and reduce_rules_rev (conds, target) = function
+  and reduce_rules_rev acc (conds, target) = function
     | (conds', Jump chn_id) as rle :: xs when (chain_reference_count chn_id !chain_map) = 1 -> begin
         try
-          ignore (merge_opers (conds @ conds')); map_chain (reduce_rules_rev (conds, target)) chn_id;
-          rle :: xs
+          if conditions_equal (merge_opers (conds @ conds')) conds' && not (has_common_part conds' acc) then
+            map_chain (reduce_rules_rev [] (conds, target)) chn_id
         with
-          | MergeImpossible -> rle :: reduce_rules_rev (conds, target) xs
-      end
-    | (conds', Return) as rle :: xs -> begin
-        try
-          ignore (merge_opers (conds @ conds')); rle :: xs
-        with MergeImpossible -> rle :: reduce_rules_rev (conds, target) xs
-      end
+          | MergeImpossible -> ()
+      end; rle :: reduce_rules_rev (conds' :: acc) (conds, target) xs
     | (conds', target') as rle :: xs when target = target' -> begin
         try
-          if conditions_equal (merge_opers (conds @ conds')) conds' then
-            (printf "h";
-             reduce_rules_rev (conds, target) xs)
+          if conditions_equal (merge_opers (conds @ conds')) conds' && not (has_common_part conds' acc) then
+            (printf "h"; reduce_rules_rev acc (conds, target) xs)
           else
-            rle :: reduce_rules_rev (conds, target) xs
+            rle :: reduce_rules_rev (conds' :: acc) (conds, target) xs
         with
-          | MergeImpossible -> rle :: reduce_rules_rev (conds, target) xs
+          | MergeImpossible -> rle :: reduce_rules_rev (conds' :: acc) (conds, target) xs
       end
-    | (conds', target') as rle :: xs -> begin
-        try
-          ignore (conditions_equal (merge_opers (conds @ conds')) conds'); rle :: xs
-        with
-          | MergeImpossible -> rle :: reduce_rules_rev (conds, target) xs
-      end
+    | (conds', _) as rle :: xs ->
+        rle :: reduce_rules_rev (conds' :: acc) (conds, target) xs
     | [] -> []
 
   (* Dont find a terminal. For each terminal *)
@@ -174,7 +172,7 @@ let reduce chains =
 
     (* And on the reversed chains *)
     reverse ();
-    Chain_map.iter (fun id  _ -> map_chain (traverse reduce_rules_rev) id) !chain_map;
+    Chain_map.iter (fun id  _ -> map_chain (traverse (reduce_rules_rev [])) id) !chain_map;
     reverse ();
 
     (* Yeild the result. We might consider only using maps. Its far easier *)

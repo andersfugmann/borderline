@@ -1,5 +1,7 @@
 zone int {
      interface = int;
-     # network = 2001:16d8:dd2d:0:0:0:0:0/64;
+     network = 2001:16d8:dd2d:0:0:0:0:0/64;
+     network = fe80::/64;
+     network = ff00::/8;
      process filter { } policy deny;
 }
