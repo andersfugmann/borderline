@@ -30,12 +30,10 @@ module Chain_map = Map.Make (struct
                                let compare = compare
                              end)
 
-(* A little extendtion to map. Find one element that satifies p *)
-let find p chains =
-  List.hd (Chain_map.fold (fun _ chn acc -> if p chn then chn :: acc else acc) chains [])
-
 let chains = ref Chain_map.empty
 
+let filter p chains =
+  Chain_map.fold (fun _ chn acc -> if p chn then chn :: acc else acc) chains []
 
 let set chain =
   chains := Chain_map.add chain.id chain !chains; chain

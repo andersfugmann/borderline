@@ -42,7 +42,6 @@ main:
   | statement                                                     { [ $1 ] }
   | statement main                                                { $1 :: $2 }
   | END                                                           { [] }
-;
 
 process:
   | process_type rule_seq action                                  { ($1, $2, $3) }
@@ -53,20 +52,17 @@ statement:
   | DEFINE ID EQ rule_seq                                         { DefineStms($2, $4) }
   | DEFINE ID EQ data_list                                        { DefineList($2, $4) }
   | PROCESS process                                               { let a, b, c = $2 in Process(a, b, c) }
-;
 
 zone_stm:
   | NETWORK EQ IPv6                                               { let i, p, pos = $3 in Network(Ipv6.to_number i, p) }
   | INTERFACE EQ ID                                               { Interface($3)}
   | PROCESS process                                               { let a, b, c = $2 in ZoneRules(a, b, c) }
-;
 
 zone_stms:
   | zone_seq SEMI zone_stms                                       { $1 @ $3 }
   | zone_seq                                                      { $1 }
   | SEMI                                                          { [] }
   |                                                               { [] }
-;
 
 zone_seq:
   | zone_stm                                                      { [ $1 ] }
@@ -86,14 +82,12 @@ rule_stm:
   | STATE oper state_list                                         { State($3, $2) }
   | PROTOCOL oper data_list                                       { Protocol($3, $2) }
   | ICMPTYPE oper data_list                                       { IcmpType($3, $2) }
-;
 
 rule_stms:
   | rule_seq SEMI rule_stms                                       { $1 @ $3 }
   | rule_seq                                                      { $1 }
   | SEMI                                                          { [] }
   |                                                               { [] }
-;
 
 rule_seq:
   | rule_stm                                                      { [$1] }
@@ -107,19 +101,16 @@ policy:
   | ALLOW                                                         { ALLOW }
   | DENY                                                          { DENY }
   | REJECT                                                        { REJECT }
-;
 
 filter_direction:
   | SOURCE                                                        { Ir.SOURCE }
   | DESTINATION                                                   { Ir.DESTINATION }
-;
 
 filter_stm:
   | TCPPORT oper data_list                                        { (TcpPort($3), $2) }
   | UDPPORT oper data_list                                        { (UdpPort($3), $2) }
   | ADDRESS oper data_list                                        { (Address($3), $2) }
   | ZONE oper ID                                                  { (FZone($3), $2) }
-;
 
 oper:
   | EQ                                                            { false }
@@ -134,7 +125,6 @@ state:
   | ESTABLISHED                                                   { Ir.ESTABLISHED }
   | RELATED                                                       { Ir.RELATED }
   | INVALID                                                       { Ir.INVALID }
-;
 
 data_list:
   | data                                                          { [ $1 ] }
@@ -142,5 +132,5 @@ data_list:
 
 data:
   | INT                                                           { let n, pos = $1 in Number (n, pos) }
-  | ID                                                            { Id     ($1) }
+  | ID                                                            { Id ($1) }
   | IPv6                                                          { let i, p, pos = $1 in Ip ((Ipv6.to_number i, p), pos) }

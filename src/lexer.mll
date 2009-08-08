@@ -105,7 +105,7 @@ rule token = parse
     }
   | ['0'-'9']+ as lxm { INT(int_of_string lxm, lexbuf.Lexing.lex_curr_p) }
   | ['a'-'z''A'-'Z''_']['a'-'z''A'-'Z''0'-'9''_''-''.']* as lxm { ID (lxm, lexbuf.Lexing.lex_curr_p) }
-  | ['"'](['0'-'9''a'-'z''A'-'Z''.''/''_''-']+ as str)['"'] { STRING (str, lexbuf.Lexing.lex_curr_p) }
+  | '"'(['0'-'9' 'a'-'z' 'A'-'Z' '.' '/' '_' '-' ]+ as str)'"' { STRING (str, lexbuf.Lexing.lex_curr_p) }
 
 (* Simple tokens *)
   | '{'            { LBRACE }
@@ -120,7 +120,7 @@ rule token = parse
   | ';'            { SEMI }
   | '#'            { comment lexbuf }
   | eof            { END }
-  | _              { raise (Lexer_error !lineno) }
+  | _ as tok      { prerr_endline (Printf.sprintf "Illegal token in input: %c" tok); raise (Lexer_error !lineno) }
 
 and comment = parse
     '\n'           { new_line lexbuf; token lexbuf }

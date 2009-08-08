@@ -54,7 +54,7 @@ let gen_condition = function
       begin
         let low, high = elem ips in
         match Ipv6.range2mask (low, high) with
-            Some(ip, mask) -> "", sprintf "--%s %s/%d" (choose_dir "src" "dst" direction) (Ipv6.to_string ip) mask
+            Some(ip, mask) -> "", sprintf "--%s %s/%d" (choose_dir "source" "destination" direction) (Ipv6.to_string ip) mask
           | None -> "-m iprange ", sprintf "--%s-range %s-%s" (choose_dir "src" "dst" direction) (Ipv6.to_string low) (Ipv6.to_string high)
       end
   | Interface(direction, name) -> ("", (choose_dir "--in-interface " "--out-interface " direction) ^ (id2str name))

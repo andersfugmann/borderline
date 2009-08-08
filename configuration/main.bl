@@ -3,11 +3,11 @@ import "./zones"
 
 process filter {
         rule {
+             rule { source address = bogon; } policy deny;
+             rule { destination address = bogon; } policy deny;
              rule { state = related, established; } policy allow;
              rule { protocol = ipv6-icmp; } policy allow;
              rule { state = new;
-                 rule { source address = bogon; } policy deny;
-                 rule { destination address = bogon; } policy deny;
                  use common;
                  rule { src zone = mars; } policy deny;
                  use zones;

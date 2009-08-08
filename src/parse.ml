@@ -7,6 +7,7 @@ open Str
 
 (* Precompiled regular expressions *)
 let include_regex = regexp "^.*[.]bl$"
+let exclude_regex = regexp "^[.][#~].*$"
 
 module File_set = Set.Make( String )
 
@@ -25,7 +26,7 @@ let parse file =
     end
 
 let rec parse_file file =
-  if string_match include_regex file 0 then
+  if string_match include_regex file 0 && not (string_match exclude_regex file 0) then
     let prev_dir = Unix.getcwd () in
     let _ = Unix.chdir (Filename.dirname file) in
     let res = expand (parse (Filename.basename file)) in
