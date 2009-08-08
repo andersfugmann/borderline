@@ -19,6 +19,7 @@
  *)
 
 open Parser
+open Parsing
 open Frontend
 open Scanf
 
@@ -136,7 +137,7 @@ rule token = parse
   | ';'            { SEMI }
   | '#'            { comment lexbuf }
   | eof            { END }
-  | _ as tok      { prerr_endline (Printf.sprintf "Illegal token in input: %c" tok); raise (Lexer_error !lineno) }
+  | _ as c         { CHAR(c) }
 
 and comment = parse
     '\n'           { new_line lexbuf; token lexbuf }

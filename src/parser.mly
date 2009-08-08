@@ -23,13 +23,14 @@
   open Scanf
   open Lexing
 
-  let parse_error s =
+  let parse_error s = Printf.printf "%s\n" s
+  let exit_ s =
     let pos_end = Parsing.symbol_end_pos () in
     let pos_start = Parsing.symbol_start_pos () in
     let c_end = pos_end.pos_cnum - pos_end.pos_bol + 1 in
     let c_start = pos_start.pos_cnum - pos_start.pos_bol + 1 in
       printf "File \"%s\", line %d, character %d-%d:\n" pos_end.pos_fname pos_end.pos_lnum c_start c_end;
-      printf "%s after here\n" s
+      exit 1
 %}
 
 %token ZONE PROCESS RULE DEFINE IMPORT
@@ -46,6 +47,7 @@
 %token <string * Lexing.position> ID
 %token <int list * int * Lexing.position> IPv6
 %token <string * Lexing.position> STRING
+%token <char> CHAR
 
 %token LBRACE RBRACE COMMA DOT COLON DCOLON SLASH END
 
@@ -57,9 +59,11 @@ main:
   | statement                                                     { [ $1 ] }
   | statement main                                                { $1 :: $2 }
   | END                                                           { [] }
+  | error                                                         { exit_ "Unexpected token" }
 
 process:
   | process_type rule_seq action                                  { ($1, $2, $3) }
+  | error                                                         { exit_ "Unexpected token" }
 
 statement:
   | IMPORT STRING                                                 { Import($2) }
@@ -72,6 +76,7 @@ zone_stm:
   | NETWORK EQ IPv6                                               { let i, p, pos = $3 in Network(Ipv6.to_number i, p) }
   | INTERFACE EQ ID                                               { Interface($3)}
   | PROCESS process                                               { let a, b, c = $2 in ZoneRules(a, b, c) }
+  | error                                                         { exit_ "Unexpected token" }
 
 zone_stms:
   | zone_seq SEMI zone_stms                                       { $1 @ $3 }
@@ -97,6 +102,7 @@ rule_stm:
   | STATE oper state_list                                         { State($3, $2) }
   | PROTOCOL oper data_list                                       { Protocol($3, $2) }
   | ICMPTYPE oper data_list                                       { IcmpType($3, $2) }
+  | error                                                         { exit_ "Unexpected token" }
 
 rule_stms:
   | rule_seq SEMI rule_stms                                       { $1 @ $3 }
@@ -126,6 +132,7 @@ filter_stm:
   | UDPPORT oper data_list                                        { (UdpPort($3), $2) }
   | ADDRESS oper data_list                                        { (Address($3), $2) }
   | ZONE oper ID                                                  { (FZone($3), $2) }
+  | error                                                         { exit_ "Unexpected token" }
 
 oper:
   | EQ                                                            { false }
