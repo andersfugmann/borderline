@@ -73,7 +73,6 @@ let merge_opers rle =
     | _, _ -> raise MergeImpossible
 
   in
-    (* Return a list of all needed rules *)
   let rec merge_siblings acc = function
       x :: xs -> let acc' = List.flatten ( List.map ( fun sib -> merge_oper (sib, x) ) acc ) in
                  merge_siblings acc' xs
