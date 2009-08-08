@@ -3,12 +3,7 @@ In progress:
 * Move implementation to .ml and types to .mli - Need to figure out
   how to avoid type definition redundancy.
 
-* Set the source and destination zone to "mars" to allow detection of
-   martian packets.
-
 Future:
-
-* Setup wiki page for borderline. Maybe use trac for wiki and tickets.
 
 * Implement tcp option match condition to make validating system
 
@@ -28,5 +23,3 @@ Planning:
   inherit the table info.
 
 * Consider using git for development rather than svn.
-
-* Try applying the rules in a real kernel.

@@ -1,11 +1,3 @@
-The Ir tree must be independant of the iptables rules - It should be possible to make a userspace firewall, disabling the iptables rule generation.
-
-
-Steps:
-Extend the iptables emitter to allow multiple conditions of the same type
-Change inlining to be dumb.
-Change merging to be more efficient - But is must not emit new rules. Still check for impossible rules.
-
 
 
 
