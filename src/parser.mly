@@ -59,11 +59,11 @@ main:
   | statement                                                     { [ $1 ] }
   | statement main                                                { $1 :: $2 }
   | END                                                           { [] }
-  | error                                                         { exit_ "Unexpected token" }
+  | error                                                         { exit_ "Syntax error" }
 
 process:
   | process_type rule_seq action                                  { ($1, $2, $3) }
-  | error                                                         { exit_ "Unexpected token" }
+  | error                                                         { exit_ "Syntax error" }
 
 statement:
   | IMPORT STRING                                                 { Import($2) }
@@ -76,17 +76,17 @@ zone_stm:
   | NETWORK EQ IPv6                                               { let i, p, pos = $3 in Network(Ipv6.to_number i, p) }
   | INTERFACE EQ ID                                               { Interface($3)}
   | PROCESS process                                               { let a, b, c = $2 in ZoneRules(a, b, c) }
-  | error                                                         { exit_ "Unexpected token" }
 
 zone_stms:
   | zone_seq SEMI zone_stms                                       { $1 @ $3 }
   | zone_seq                                                      { $1 }
   | SEMI                                                          { [] }
-  |                                                               { [] }
+  |                                                               { [] } 
 
 zone_seq:
   | zone_stm                                                      { [ $1 ] }
   | LBRACE zone_stms RBRACE                                       { $2 }
+  | error                                                         { exit_ "Syntax error" }
 
 process_type:
   | MANGLE                                                        { MANGLE }
@@ -102,7 +102,6 @@ rule_stm:
   | STATE oper state_list                                         { State($3, $2) }
   | PROTOCOL oper data_list                                       { Protocol($3, $2) }
   | ICMPTYPE oper data_list                                       { IcmpType($3, $2) }
-  | error                                                         { exit_ "Unexpected token" }
 
 rule_stms:
   | rule_seq SEMI rule_stms                                       { $1 @ $3 }
@@ -113,15 +112,18 @@ rule_stms:
 rule_seq:
   | rule_stm                                                      { [$1] }
   | LBRACE rule_stms RBRACE                                       { $2 }
+  | error                                                         { exit_ "Syntax error" }
 
 
 action:
   | POLICY policy                                                 { $2 }
+  | error                                                         { exit_ "Syntax error" }
 
 policy:
   | ALLOW                                                         { ALLOW }
   | DENY                                                          { DENY }
   | REJECT                                                        { REJECT }
+  | error                                                         { exit_ "Syntax error" }
 
 filter_direction:
   | SOURCE                                                        { Ir.SOURCE }
@@ -132,15 +134,17 @@ filter_stm:
   | UDPPORT oper data_list                                        { (UdpPort($3), $2) }
   | ADDRESS oper data_list                                        { (Address($3), $2) }
   | ZONE oper ID                                                  { (FZone($3), $2) }
-  | error                                                         { exit_ "Unexpected token" }
+  | error                                                         { exit_ "Syntax error" }
 
 oper:
   | EQ                                                            { false }
   | NE                                                            { true }
+  | error                                                         { exit_ "Syntax error" }
 
 state_list:
   | state                                                         { [ $1 ] }
   | state COMMA state_list                                        { $1 :: $3 }
+  | error                                                         { exit_ "Syntax error" }
 
 state:
   | NEW                                                           { Ir.NEW }
@@ -156,3 +160,4 @@ data:
   | INT                                                           { let n, pos = $1 in Number (n, pos) }
   | ID                                                            { Id ($1) }
   | IPv6                                                          { let i, p, pos = $1 in Ip ((Ipv6.to_number i, p), pos) }
+
