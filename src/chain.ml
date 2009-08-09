@@ -30,7 +30,7 @@ let cmp_chain_id = function
   | _, _                       -> false
 
 let get_chain_name = function
-    Temporary(id) -> Printf.sprintf "temp_%d" id
+    Temporary(id) -> Printf.sprintf "temp_%04d" id
   | Named(name) -> Printf.sprintf "%s" name
   | Builtin(tpe) -> match tpe with
         INPUT   -> "INPUT"

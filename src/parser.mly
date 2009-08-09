@@ -96,8 +96,7 @@ process_type:
 
 rule_stm:
   | RULE rule_seq action                                          { Rule($2, $3) }
-  | USE ID                                                        { Reference($2) }
-  | filter_direction filter_stm                                   { let stm, pol = $2 in
+  | USE ID                                                        { Reference($2) }  | filter_direction filter_stm                                   { let stm, pol = $2 in
                                                                       Filter($1, stm, pol) }
   | STATE oper state_list                                         { State($3, $2) }
   | PROTOCOL oper data_list                                       { Protocol($3, $2) }
@@ -114,15 +113,23 @@ rule_seq:
   | LBRACE rule_stms RBRACE                                       { $2 }
   | error                                                         { exit_ "Syntax error" }
 
+policy_seq:
+  | policy                                                        { [ $1 ] }
+  | LBRACE policy_stms RBRACE                                     { $2 }
 
-action:
-  | POLICY policy                                                 { $2 }
-  | error                                                         { exit_ "Syntax error" }
+policy_stms:
+  | policy_seq SEMI policy_seq                                    { $1 @ $3 }
+  | policy_seq                                                    { $1 } 
+  | SEMI                                                          { [] } 
+  |                                                               { [] } 
 
 policy:
   | ALLOW                                                         { ALLOW }
   | DENY                                                          { DENY }
   | REJECT                                                        { REJECT }
+
+action:
+  | POLICY policy                                                 { [ $2 ] }
   | error                                                         { exit_ "Syntax error" }
 
 filter_direction:
