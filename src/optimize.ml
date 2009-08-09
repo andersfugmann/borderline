@@ -331,10 +331,11 @@ let should_inline cs c =
 
 
 
-
+let conds chains = 
+  Chain_map.fold (fun _ chn acc -> List.fold_left (fun acc (cl, _) -> List.length cl + acc) (acc + 1) chn.rules) chains 0
 
 let optimize_pass chains =
-  printf "Optim: %d " (count_rules chains); flush stdout;
+  printf "Optim: (%d, %d) " (count_rules chains) (conds chains); flush stdout;
   let chains' = chains in
   let chains' = fold_return_statements chains' in
   let chains' = remove_dublicate_chains chains' in
@@ -343,24 +344,14 @@ let optimize_pass chains =
   let chains' = map_chain_rules reorder chains' in
   let chains' = reduce chains' in
   let chains' = inline should_inline chains' in
-  let chains' = inline should_inline chains' in
-  let chains' = inline should_inline chains' in
-  let chains' = inline should_inline chains' in
-(*
-  let chains' = inline (fun _ c -> List.length c.rules <= max_inline_size) chains' in
-  let chains' = inline (fun cs c -> chain_reference_count c.id cs = 1 && List.length (fst (List.hd (get_referring_rules c cs))) < 1) chains' in
-  let chains' = inline (fun cs c -> chain_reference_count c.id cs < 2 && List.length c.rules < 3) chains' in
-*)
-
   let chains' = map_chain_rules (fun rls -> List.map (fun (opers, tg) -> (merge_opers opers, tg)) rls) chains' in
   let chains' = remove_unreferenced_chains chains' in
-  let _ = printf " %d\n" (count_rules chains') in
+    printf " (%d, %d)\n" (count_rules chains') (conds chains');
     chains'
 
 let rec optimize chains =
-  let conds chains = Chain_map.fold (fun _ chn acc -> List.fold_left (fun acc (cl, _) -> List.length cl + acc) (acc + 1) chn.rules) chains 0 in
   let chains' = optimize_pass chains in
-    if not (conds chains' = conds chains) then optimize chains'
-    else  (
-      printf "Conds: %d\nOptimization done\n" (conds chains');
-      chains')
+    match (conds chains) = (conds chains') with
+        true -> printf "Optimization done\n"; chains'
+      | false -> optimize chains'
+
