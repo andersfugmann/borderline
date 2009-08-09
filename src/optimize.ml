@@ -322,14 +322,20 @@ let rec eliminate_dublicate_rules = function
 let rec count_rules chains =
     Chain_map.fold (fun _ chn acc -> acc + List.length chn.rules) chains 0
 
+
 let should_inline cs c =
-  let chain_conds = List.fold_left (fun acc (cl, t) -> acc + List.length cl + 1) 0 c.rules in
+  (* Number of conditions in the chain to be inlined *)
+  let chain_conds = List.fold_left (fun acc (cl, t) -> acc + List.length cl) 0 c.rules in
+  (* Number of conditions for each reference to the chain to be inlined. *)
   let rule_conds = List.map (fun (cl, t) -> List.length cl) (get_referring_rules c cs) in
-  let new_conds = List.fold_left (fun acc n -> acc + n * List.length c.rules + chain_conds) 0 rule_conds in
-  let old_conds = (List.fold_left (+) 0 rule_conds) + chain_conds in
-    old_conds = 0 || (new_conds - old_conds) * 100 / (old_conds) < 27
-
-
+  (* Current count of conditions + targets *) 
+  let old_conds = (List.fold_left (+) 0 rule_conds) + chain_conds + List.length rule_conds + List.length c.rules in
+  (* Inlined count of conditions + targets *) 
+  let new_conds = List.fold_left (fun acc n -> acc + n * List.length c.rules + chain_conds) 0 rule_conds + (List.length rule_conds * List.length c.rules) in
+(*    if c.id = Temporary(28) then 
+         printf "c, r, n, o: %d %d %d %d\n" chain_conds (List.fold_left (+) 0 rule_conds) new_conds old_conds; 
+*)
+    (new_conds - old_conds) * 100 / (old_conds) < 10
 
 let conds chains = 
   Chain_map.fold (fun _ chn acc -> List.fold_left (fun acc (cl, _) -> List.length cl + acc) (acc + 1) chn.rules) chains 0
