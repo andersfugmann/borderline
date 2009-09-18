@@ -1,20 +1,20 @@
-(* 
+(*
  * Copyright 2009 Anders Fugmann.
- * Distributed under the GNU General Public License v3 
- *  
+ * Distributed under the GNU General Public License v3
+ *
  * This file is part of Borderline - A Firewall Generator
- * 
+ *
  * Borderline is free software: you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 3 as
- * published by the Free Software Foundation. 
- *  
+ * published by the Free Software Foundation.
+ *
  * Borderline is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
- * along with Borderline.  If not, see <http://www.gnu.org/licenses/>. 
+ * along with Borderline.  If not, see <http://www.gnu.org/licenses/>.
  *)
 
 (* Emit iptables commands. Currently we have no interface to the
@@ -79,7 +79,7 @@ let gen_condition = function
       end
   | Interface(direction, name) -> ("", (choose_dir "--in-interface " "--out-interface " direction) ^ (id2str name))
   | State(states) -> "-m conntrack ", ("--ctstate " ^ ( String.concat "," (List.map get_state_name states)))
-  | Zone(dir, id) -> "-m mark ", "--mark " ^ (gen_zone_mask_str dir id)
+  | Zone(dir, id_lst) -> "-m mark ", "--mark " ^ (gen_zone_mask_str dir (elem id_lst))
   | Ports(direction, ports) -> "-m multiport ",
       ( "--" ^ (choose_dir "source" "destination" direction) ^ "-ports " ^ (String.concat "," (List.map string_of_int ports)) )
 
@@ -129,7 +129,7 @@ let transform chains =
             (chn :: chn', (cl, Ir.Jump chn.id))
       | [] -> ([], ([], tg))
     in
-      denorm_rule target (uniq (fun (a, _) (b, _) -> cond_type_identical a b) conds)
+      denorm_rule target (uniq (fun (a, _) (b, _) -> cond_type_identical a b && (get_dir a = None || get_dir a == get_dir b)) conds)
   in
   let expand (conds, target) =
     let expand_cond target cond_func lst = function
@@ -146,6 +146,9 @@ let transform chains =
             expand_conds (chain :: acc1) acc2 (Ir.Jump chain.id) xs
       | (IpRange(direction, ips), neg) :: xs when List.length ips > 1 ->
           let chain = expand_cond tg (fun ip -> IpRange(direction, [ip])) ips neg in
+            expand_conds (chain :: acc1) acc2 (Ir.Jump chain.id) xs
+      | (Zone(direction, zones), neg) :: xs when List.length zones > 1 ->
+          let chain = expand_cond tg (fun zone -> Zone(direction, [zone])) zones neg in
             expand_conds (chain :: acc1) acc2 (Ir.Jump chain.id) xs
       | (IcmpType(types), neg) :: xs when List.length types > 1 ->
           let chain = expand_cond tg (fun t -> IcmpType([t])) types neg in
@@ -190,11 +193,11 @@ let transform chains =
   in
   let zone_to_mask (conds, target) =
     let rec zone_to_mask' = function
-        (Zone (dir, zone), neg) :: (Zone(dir', zone'), neg') :: xs when neg = neg' && not (dir = dir') ->
+        (Zone (dir, zone :: []), neg) :: (Zone(dir', zone' :: []), neg') :: xs when neg = neg' && not (dir = dir') ->
           let v1, m1 = gen_zone_mask dir zone in
           let v2, m2 = gen_zone_mask dir' zone' in
             (Mark (v1 + v2, m1 + m2), neg) :: zone_to_mask' xs
-      | (Zone (dir, zone), neg) :: xs ->
+      | (Zone (dir, zone :: []), neg) :: xs ->
           let v, m = gen_zone_mask dir zone in (Mark (v, m), neg) :: zone_to_mask' xs
       | x :: xs -> x :: zone_to_mask' xs
       | [] -> []
@@ -210,7 +213,7 @@ let transform chains =
   in
   let map chains func = Chain_map.fold (fun _ chn acc -> map_chains acc func [chn]) chains Chain_map.empty in
 
-  let transformations = [ zone_to_mask; expand; denormalize; add_protocol_to_multiport; add_protocol_to_icmptype ] in
+  let transformations = [ expand; zone_to_mask; denormalize; add_protocol_to_multiport; add_protocol_to_icmptype ] in
     List.fold_left map chains transformations
 
 let emit_rule (cond_list, action) : string =

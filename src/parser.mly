@@ -1,20 +1,20 @@
-/* 
+/*
  * Copyright 2009 Anders Fugmann.
- * Distributed under the GNU General Public License v3 
- *  
+ * Distributed under the GNU General Public License v3
+ *
  * This file is part of Borderline - A Firewall Generator
- * 
+ *
  * Borderline is free software: you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 3 as
- * published by the Free Software Foundation. 
- *  
+ * published by the Free Software Foundation.
+ *
  * Borderline is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
- * along with Borderline.  If not, see <http://www.gnu.org/licenses/>. 
+ * along with Borderline.  If not, see <http://www.gnu.org/licenses/>.
  */
 %{
   open Frontend
@@ -59,7 +59,6 @@ main:
   | statement                                                     { [ $1 ] }
   | statement main                                                { $1 :: $2 }
   | END                                                           { [] }
-  | error                                                         { exit_ "Syntax error" }
 
 process:
   | process_type rule_seq action                                  { ($1, $2, $3) }
@@ -81,7 +80,7 @@ zone_stms:
   | zone_seq SEMI zone_stms                                       { $1 @ $3 }
   | zone_seq                                                      { $1 }
   | SEMI                                                          { [] }
-  |                                                               { [] } 
+  |                                                               { [] }
 
 zone_seq:
   | zone_stm                                                      { [ $1 ] }
@@ -119,9 +118,9 @@ policy_seq:
 
 policy_stms:
   | policy_seq SEMI policy_seq                                    { $1 @ $3 }
-  | policy_seq                                                    { $1 } 
-  | SEMI                                                          { [] } 
-  |                                                               { [] } 
+  | policy_seq                                                    { $1 }
+  | SEMI                                                          { [] }
+  |                                                               { [] }
 
 policy:
   | ALLOW                                                         { ALLOW }
@@ -140,7 +139,7 @@ filter_stm:
   | TCPPORT oper data_list                                        { (TcpPort($3), $2) }
   | UDPPORT oper data_list                                        { (UdpPort($3), $2) }
   | ADDRESS oper data_list                                        { (Address($3), $2) }
-  | ZONE oper ID                                                  { (FZone($3), $2) }
+  | ZONE oper ID                                                  { (FZone([$3]), $2) }
   | error                                                         { exit_ "Syntax error" }
 
 oper:

@@ -1,20 +1,20 @@
-(* 
+(*
  * Copyright 2009 Anders Fugmann.
- * Distributed under the GNU General Public License v3 
- *  
+ * Distributed under the GNU General Public License v3
+ *
  * This file is part of Borderline - A Firewall Generator
- * 
+ *
  * Borderline is free software: you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 3 as
- * published by the Free Software Foundation. 
- *  
+ * published by the Free Software Foundation.
+ *
  * Borderline is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
- * along with Borderline.  If not, see <http://www.gnu.org/licenses/>. 
+ * along with Borderline.  If not, see <http://www.gnu.org/licenses/>.
  *)
 
 open Common
@@ -87,8 +87,8 @@ let merge_opers rle =
         [ (IpRange (dir, Ipv6.list_difference ips ips'), false) ]
     | (IpRange (dir, ips), neg), (IpRange (dir', ips'), neg') when dir = dir' && neg = neg' ->
         [ (IpRange (dir, Ipv6.list_intersection ips ips'), neg) ]
-    | (Zone (dir, zone), neg), (Zone (dir', zone'), neg') when dir = dir' ->
-        let (zone'', neg'') = merge_elem (zone, neg) (zone', neg') in [(Zone (dir, zone''), neg'')]
+    | (Zone (dir, zones), neg), (Zone (dir', zones'), neg') when dir = dir' ->
+        let (zones'', neg'') = merge_list (zones, neg) (zones', neg') in [(Zone (dir, zones''), neg'')]
     | _, _ -> raise MergeImpossible
 
   in
@@ -328,16 +328,16 @@ let should_inline cs c =
   let chain_conds = List.fold_left (fun acc (cl, t) -> acc + List.length cl) 0 c.rules in
   (* Number of conditions for each reference to the chain to be inlined. *)
   let rule_conds = List.map (fun (cl, t) -> List.length cl) (get_referring_rules c cs) in
-  (* Current count of conditions + targets *) 
+  (* Current count of conditions + targets *)
   let old_conds = (List.fold_left (+) 0 rule_conds) + chain_conds + List.length rule_conds + List.length c.rules in
-  (* Inlined count of conditions + targets *) 
+  (* Inlined count of conditions + targets *)
   let new_conds = List.fold_left (fun acc n -> acc + n * List.length c.rules + chain_conds) 0 rule_conds + (List.length rule_conds * List.length c.rules) in
-(*    if c.id = Temporary(28) then 
-         printf "c, r, n, o: %d %d %d %d\n" chain_conds (List.fold_left (+) 0 rule_conds) new_conds old_conds; 
+(*    if c.id = Temporary(28) then
+         printf "c, r, n, o: %d %d %d %d\n" chain_conds (List.fold_left (+) 0 rule_conds) new_conds old_conds;
 *)
     (new_conds - old_conds) * 100 / (old_conds) < 10
 
-let conds chains = 
+let conds chains =
   Chain_map.fold (fun _ chn acc -> List.fold_left (fun acc (cl, _) -> List.length cl + acc) (acc + 1) chn.rules) chains 0
 
 let optimize_pass chains =

@@ -1,20 +1,20 @@
-(* 
+(*
  * Copyright 2009 Anders Fugmann.
- * Distributed under the GNU General Public License v3 
- *  
+ * Distributed under the GNU General Public License v3
+ *
  * This file is part of Borderline - A Firewall Generator
- * 
+ *
  * Borderline is free software: you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 3 as
- * published by the Free Software Foundation. 
- *  
+ * published by the Free Software Foundation.
+ *
  * Borderline is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
- * along with Borderline.  If not, see <http://www.gnu.org/licenses/>. 
+ * along with Borderline.  If not, see <http://www.gnu.org/licenses/>.
  *)
 
 open Common
@@ -47,7 +47,7 @@ let rec get_referenced_ids node =
 
 let rec get_referenced_zones nodes =
   let rec get_id acc = function
-      Filter (_, FZone id, _) -> Id_set.add id acc
+      Filter (_, FZone ids, _) -> List.fold_left (fun acc id -> Id_set.add id acc) acc ids
     | _ -> acc
   in
     fold get_id nodes Id_set.empty
@@ -62,7 +62,7 @@ let rec detect_cyclic_references id_func defines seen elem =
     List.iter recurse (id_func elem)
 
 let test_unresolved_zone_references nodes =
-  let zone_ids = get_zone_ids (Id_set.add Zone.mars Id_set.empty) nodes in
+  let zone_ids = get_zone_ids (idset_from_list [Zone.mars; Zone.ext_zones]) nodes in
   let zone_refs = get_referenced_zones nodes in
     match Id_set.elements (Id_set.diff zone_refs zone_ids) with
         [] -> ()

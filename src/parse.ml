@@ -1,20 +1,20 @@
-(* 
+(*
  * Copyright 2009 Anders Fugmann.
- * Distributed under the GNU General Public License v3 
- *  
+ * Distributed under the GNU General Public License v3
+ *
  * This file is part of Borderline - A Firewall Generator
- * 
+ *
  * Borderline is free software: you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 3 as
- * published by the Free Software Foundation. 
- *  
+ * published by the Free Software Foundation.
+ *
  * Borderline is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
- * along with Borderline.  If not, see <http://www.gnu.org/licenses/>. 
+ * along with Borderline.  If not, see <http://www.gnu.org/licenses/>.
  *)
 
 open Common
@@ -107,7 +107,8 @@ let rec inline_defines defines nodes =
     | Filter (dir, TcpPort ports, neg) -> [ Filter (dir, TcpPort (expand_ints ports), neg) ]
     | Filter (dir, UdpPort ports, neg) -> [ Filter (dir, UdpPort (expand_ints ports), neg) ]
     | Filter (dir, Address ips, neg) -> [ Filter (dir, Address (expand_ips ips), neg) ]
-    | Filter (dir, FZone _, neg) as rle -> [ rle ]
+    | Filter (dir, FZone _, neg) as rle -> [ rle ] (* Expand here *)
+        Break
     | Protocol (protos, neg) -> [ Protocol ((expand_ints protos), neg) ]
     | IcmpType (types, neg) -> [ IcmpType ((expand_ints types), neg) ]
     | State _ as rle -> [ rle ]

@@ -1,20 +1,20 @@
-(* 
+(*
  * Copyright 2009 Anders Fugmann.
- * Distributed under the GNU General Public License v3 
- *  
+ * Distributed under the GNU General Public License v3
+ *
  * This file is part of Borderline - A Firewall Generator
- * 
+ *
  * Borderline is free software: you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 3 as
- * published by the Free Software Foundation. 
- *  
+ * published by the Free Software Foundation.
+ *
  * Borderline is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
- * along with Borderline.  If not, see <http://www.gnu.org/licenses/>. 
+ * along with Borderline.  If not, see <http://www.gnu.org/licenses/>.
  *)
 
 open Common
@@ -24,6 +24,7 @@ open Chain
 
 let self = ("self", Lexing.dummy_pos)
 let mars = ("mars", Lexing.dummy_pos)
+let ext_zones = ("external", Lexing.dummy_pos)
 let all_zones = ("zones", Lexing.dummy_pos)
 
 let rec filter_interface = function
@@ -74,7 +75,7 @@ let rec filter = function
 let emit_nodes table zones =
   let rec gen_rule_stems (zone_id, nodes) =
     List.map (
-      fun (rules, policy) -> Rule( [ Filter(Ir.DESTINATION, FZone(zone_id), false) ] @ rules, policy )
+      fun (rules, policy) -> Rule( [ Filter(Ir.DESTINATION, FZone([zone_id]), false) ] @ rules, policy )
     ) (filter_zonerules table nodes)
   in
     [ DefineStms (all_zones, List.flatten (List.map gen_rule_stems zones)) ]

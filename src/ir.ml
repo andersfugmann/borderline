@@ -1,28 +1,26 @@
-(* 
+(*
  * Copyright 2009 Anders Fugmann.
- * Distributed under the GNU General Public License v3 
- *  
+ * Distributed under the GNU General Public License v3
+ *
  * This file is part of Borderline - A Firewall Generator
- * 
+ *
  * Borderline is free software: you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 3 as
- * published by the Free Software Foundation. 
- *  
+ * published by the Free Software Foundation.
+ *
  * Borderline is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
- * along with Borderline.  If not, see <http://www.gnu.org/licenses/>. 
+ * along with Borderline.  If not, see <http://www.gnu.org/licenses/>.
  *)
 
 (* File containing intermidiate types and representation *)
 (* These command can be translated into real code by the backend *)
 
 (* The current IR can only hold rules valid for the filter table - Not Mangle or Nat. *)
-
-(* There is no guard for conditions that only apply on tcp/udp or ICMP *)
 
 open Common
 open Ipv6
@@ -31,7 +29,7 @@ type statetype = NEW | ESTABLISHED | RELATED | INVALID
 
 type zone = id
 type mask = int
-type icmp_type = int
+type icmp_type = int (* This seems to be missing a sub-type *)
 
 type chain_type = INPUT | OUTPUT | FORWARD
 
@@ -50,7 +48,7 @@ type icmp_packet_type = int
 type ip_range = (ip_number * ip_number)
 
 type condition = Interface of direction * id
-               | Zone of direction * zone
+               | Zone of direction * zone list
                | State of statetype list
                | Ports of direction * int list
                | IpRange of direction * ip_range list
@@ -78,7 +76,7 @@ let eq_cond (x, n) (y, m) =
             try d = d' && List.for_all2 (fun (x, y) (x', y') -> Ipv6.eq x x' && Ipv6.eq y y') r r'
             with Invalid_argument _ -> false
           end
-      | Zone(dir, id), Zone (dir', id') -> dir = dir' && (eq_id id id')
+      | Zone(dir, id_lst), Zone (dir', id_lst') -> dir = dir' && (List.for_all2 (fun id id' -> eq_id id id') id_lst id_lst')
       | Interface(dir, id), Interface(dir', id') -> dir = dir' && (eq_id id id')
       | x, y -> x = y
   )
