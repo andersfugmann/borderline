@@ -74,42 +74,34 @@ and expand = function
   | x :: xs -> x :: expand xs
   | [ ] -> [ ]
 
-let rec inline_defines defines nodes =
-  let rec expand_ints = function
-      Number _ as num :: xs -> num :: expand_ints xs
-    | Ip (_, pos) :: xs -> raise (ParseError [("Cannot use ip address in int list", ("", pos))])
-    | Id id :: xs -> begin
-          match Id_map.find id defines with
-              DefineList(_, list) -> expand_ints list
-            | DefineStms(id', _) -> raise (ParseError [("List definition required", id); ("But found rule definition", id')])
-            | _ -> failwith "Unexpected node type"
-        end @ expand_ints xs
-    | [] -> []
-  in
-  let rec expand_ips = function
-    | Ip _ as ip :: xs -> ip :: expand_ips xs
-    | Number _ :: xs -> raise (ParseError [("Cannot use int in ip address list", ("", Lexing.dummy_pos))])
-    | Id id :: xs -> begin
-          match Id_map.find id defines with
-              DefineList(_, list) -> expand_ips list
-            | DefineStms(id', _) -> raise (ParseError [("List definition required", id); ("But found rule definition", id')])
-            | _ -> failwith "Unexpected node type"
-        end @ expand_ips xs
+let rec inline_defines defines zones nodes =
+
+  let rec expand_list = function
+    | Id id as _id :: xs when Id_set.mem id zones -> _id :: expand_list xs
+    | Id id :: xs -> begin try
+        begin match Id_map.find id defines with
+          | DefineList(_, list) -> expand_list list
+          | DefineStms(id', _) -> raise (ParseError [("List definition required", id); ("But found rule definition", id')])
+          | _ -> failwith "Unexpected node type"
+        end @ expand_list xs
+      with _ -> raise (ParseError [("Undefined id", id)])
+      end
+    | Number _ as num :: xs -> num :: expand_list xs
+    | Ip _ as ip :: xs -> ip :: expand_list xs
     | [] -> []
   in
   let rec expand_define = function
-      Reference id -> begin
-        match Id_map.find id defines with
-            DefineStms(_, stm) -> expand_rules expand_define stm
-          | DefineList(id', _) -> raise (ParseError [("Rule definition required", id); ("But found port definition", id')])
-          | _ -> failwith "Unexpected node type"
+    | Reference id -> begin match Id_map.find id defines with
+        | DefineStms(_, stm) -> expand_rules expand_define stm
+        | DefineList(id', _) -> raise (ParseError [("Rule definition required", id); ("But found a reference to a list", id')])
+        | _ -> failwith "Unexpected node type"
       end
-    | Filter (dir, TcpPort ports, neg) -> [ Filter (dir, TcpPort (expand_ints ports), neg) ]
-    | Filter (dir, UdpPort ports, neg) -> [ Filter (dir, UdpPort (expand_ints ports), neg) ]
-    | Filter (dir, Address ips, neg) -> [ Filter (dir, Address (expand_ips ips), neg) ]
-    | Filter (dir, FZone _, neg) as rle -> [ rle ] (* Expand here *)
-    | Protocol (protos, neg) -> [ Protocol ((expand_ints protos), neg) ]
-    | IcmpType (types, neg) -> [ IcmpType ((expand_ints types), neg) ]
+    | Filter (dir, TcpPort ports, neg) -> [ Filter (dir, TcpPort (expand_list ports), neg) ]
+    | Filter (dir, UdpPort ports, neg) -> [ Filter (dir, UdpPort (expand_list ports), neg) ]
+    | Filter (dir, Address ips, neg) -> [ Filter (dir, Address (expand_list ips), neg) ]
+    | Filter (dir, FZone zones, neg) -> [ Filter (dir, FZone (expand_list zones), neg) ]
+    | Protocol (protos, neg) -> [ Protocol ((expand_list protos), neg) ]
+    | IcmpType (types, neg) -> [ IcmpType ((expand_list types), neg) ]
     | State _ as rle -> [ rle ]
     | Rule _ as rle -> [ rle ]
 
@@ -121,5 +113,5 @@ let process_files files =
   let zones = Zone.filter nodes in
   let nodes' = (Zone.emit_nodes Frontend_types.FILTER zones) @ nodes in
     Validate.validate nodes';
-    (zones, Rule.filter_process (inline_defines (create_define_map nodes') nodes'))
+    (zones, Rule.filter_process (inline_defines (create_define_map nodes') (Zone.create_zone_set Id_set.empty zones) nodes'))
 

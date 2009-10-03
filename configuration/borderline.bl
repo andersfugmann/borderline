@@ -25,21 +25,14 @@ process filter {
              # Bogons are only for "global" interfaces. All packets comming from, or destined to.
              # All zones with no network classifiers are per se global, and given that zone name?
 
-             rule { source address != fe80::/64;
-                    source address = bogon; } policy deny;
-             rule { destination address != fe80::/64;
-                    destination address = bogon; } policy deny;
+             # For internal zones allow fe80::/64.
+             # For external zones test for bogons.
 
-             # This is no good. I need to allow this specificly for internal zones.
-             rule { source address = fe80::/64;
-                    destination address = fe80::/64;
-                    icmptype = router-solicitation, router-advertisement, neighbor-solicitation, neighbor-advertisement, redirect;
-                  } policy allow;
+             #rule { source address = fe80::/64;
+             #       destination address = fe80::/64;
+             #       icmptype = router-solicitation, router-advertisement, neighbor-solicitation, neighbor-advertisement, redirect;
+             #     } policy allow;
              rule { state = new;
-                    rule { source address != fe80::/64;
-                           source address = bogon; } policy deny;
-                    rule { destination address != fe80::/64;
-                           destination address = bogon; } policy deny;
                     rule { src zone = mars; } policy deny;
                     rule { dst zone = mars; } policy deny;
                     use common;

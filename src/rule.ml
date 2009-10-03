@@ -40,6 +40,12 @@ let rec list2ips = function
   | Id (_, _) :: xs -> failwith "No all ints have been expanded"
   | [] -> []
 
+let rec list2zones = function
+  | Number (_, _) :: xs -> failwith "Unexpected int in zone list"
+  | Ip (_, _) :: xs -> failwith "Unexpected ip in zone list"
+  | Id id :: xs -> id :: list2zones xs
+  | [] -> []
+
 let rec process_rule table (rules, targets') =
   let rec gen_op targets acc = function
       State(states, neg) :: xs -> gen_op targets ((Ir.State(states), neg) :: acc) xs
@@ -54,7 +60,7 @@ let rec process_rule table (rules, targets') =
         let chain = Chain.replace chain.Ir.id (([(Ir.Protocol([udp]), false); (Ir.Ports(dir, list2ints ports), false)], Ir.Return) :: chain.Ir.rules) chain.Ir.comment in
           Chain.create [ (acc, Ir.Jump chain.Ir.id) ] "Rule"
     | Filter(dir, Address(ips), neg) :: xs -> gen_op targets ( (Ir.IpRange(dir, List.map Ipv6.to_range (list2ips ips)), neg) :: acc ) xs
-    | Filter(dir, FZone(ids), neg) :: xs -> gen_op targets ((Ir.Zone(dir, ids), neg) :: acc) xs
+    | Filter(dir, FZone(ids), neg) :: xs -> gen_op targets ((Ir.Zone(dir, list2zones ids), neg) :: acc) xs
 
     | Rule(rls, tgs) :: xs ->
         let rule_chain = gen_op tgs [] rls in

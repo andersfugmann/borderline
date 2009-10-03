@@ -37,7 +37,7 @@ and zone_stm = Interface of id
 and filter_stm = Address of data list
                | TcpPort of data list
                | UdpPort of data list
-               | FZone of id list
+               | FZone of data list
 
 and rule_stm = Filter of Ir.direction * filter_stm * Ir.pol
              | State of Ir.statetype list * Ir.pol

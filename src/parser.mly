@@ -139,7 +139,7 @@ filter_stm:
   | TCPPORT oper data_list                                        { (TcpPort($3), $2) }
   | UDPPORT oper data_list                                        { (UdpPort($3), $2) }
   | ADDRESS oper data_list                                        { (Address($3), $2) }
-  | ZONE oper ID                                                  { (FZone([$3]), $2) }
+  | ZONE oper data_list                                           { (FZone($3), $2) }
   | error                                                         { exit_ "Syntax error" }
 
 oper:

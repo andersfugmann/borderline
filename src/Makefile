@@ -28,12 +28,23 @@ USE_CAMLP4 = yes
 
 OCAMLMAKEFILE = /usr/share/ocamlmakefile/OCamlMakefile
 
-all: byte-code
-	./borderline ../configuration/main.bl
+all: dc
+	OCAMLRUNPARAM=b ./borderline ../configuration/borderline.bl
 
+.PHONY: borderline
+borderline: dc
+
+
+borderline.ps: $(SOURCES)
+	ocamlweb $^ --ps -o $@
+
+.PHONY: web
+web: borderline.ps
 
 
 # Keep at the bottom.
 include /usr/share/ocamlmakefile/OCamlMakefile
+
+
 
 

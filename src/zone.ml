@@ -65,17 +65,20 @@ let create_zone_chain direction (id, nodes) =
     else
       chain
 
-
 let rec filter = function
     Zone(id, nodes) :: xs -> (id, nodes) :: filter xs
   | x :: xs -> filter xs
   | [] -> []
 
-(* Create auto_defines based on zones *)
+(* Utility function to create an id_set of zone id's *)
+let rec create_zone_set acc = function
+  | (id, _) :: xs -> create_zone_set (Id_set.add id acc) xs
+  | [] -> Id_set.union (idset_from_list [self; mars; ext_zones; all_zones ]) acc
+
 let emit_nodes table zones =
   let rec gen_rule_stems (zone_id, nodes) =
     List.map (
-      fun (rules, policy) -> Rule( [ Filter(Ir.DESTINATION, FZone([zone_id]), false) ] @ rules, policy )
+      fun (rules, policy) -> Rule( [ Filter(Ir.DESTINATION, FZone([Id zone_id]), false) ] @ rules, policy )
     ) (filter_zonerules table nodes)
   in
     [ DefineStms (all_zones, List.flatten (List.map gen_rule_stems zones)) ]
