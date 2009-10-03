@@ -72,7 +72,7 @@ let rec test_shadow_defines acc nodes =
       | [] -> ()
 
 let validate nodes =
-  let zones = get_zone_ids (idset_from_list [Zone.mars; Zone.ext_zones]) nodes in
+  let zones = Zone.create_zone_set nodes in
   let defines = create_define_map nodes in
   let entries = List.map (fun (t, r, p) -> Process(t, r, p)) (Rule.filter_process nodes) in
     test_shadow_defines Id_set.empty nodes;

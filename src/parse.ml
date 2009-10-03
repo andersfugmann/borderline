@@ -113,5 +113,5 @@ let process_files files =
   let zones = Zone.filter nodes in
   let nodes' = (Zone.emit_nodes Frontend_types.FILTER zones) @ nodes in
     Validate.validate nodes';
-    (zones, Rule.filter_process (inline_defines (create_define_map nodes') (Zone.create_zone_set Id_set.empty zones) nodes'))
+    (zones, Rule.filter_process (inline_defines (create_define_map nodes') (Zone.create_zone_set nodes) nodes'))
 

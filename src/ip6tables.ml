@@ -101,7 +101,8 @@ let gen_action = function
   | Return -> "RETURN"
   | Accept -> "ACCEPT"
   | Drop   -> "DROP"
-  | _ -> "#### Unsupported action"
+  | Reject _ -> "REJECT"
+  | Notrack -> "NOTRACK" (* The NoTrack will not work, as it must be placed in the 'raw' table *)
 
 (* Transform rules into something emittable. This may introduce new chains. *)
 let transform chains =

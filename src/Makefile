@@ -31,9 +31,11 @@ OCAMLMAKEFILE = /usr/share/ocamlmakefile/OCamlMakefile
 all: dc
 	OCAMLRUNPARAM=b ./borderline ../configuration/borderline.bl
 
-.PHONY: borderline
+.PHONY: borderline borderline-native
 borderline: dc
 
+borderline-native: nc
+	mv borderline borderline-native
 
 borderline.ps: $(SOURCES)
 	ocamlweb $^ --ps -o $@
