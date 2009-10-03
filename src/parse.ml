@@ -108,7 +108,6 @@ let rec inline_defines defines nodes =
     | Filter (dir, UdpPort ports, neg) -> [ Filter (dir, UdpPort (expand_ints ports), neg) ]
     | Filter (dir, Address ips, neg) -> [ Filter (dir, Address (expand_ips ips), neg) ]
     | Filter (dir, FZone _, neg) as rle -> [ rle ] (* Expand here *)
-        Break
     | Protocol (protos, neg) -> [ Protocol ((expand_ints protos), neg) ]
     | IcmpType (types, neg) -> [ IcmpType ((expand_ints types), neg) ]
     | State _ as rle -> [ rle ]

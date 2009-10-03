@@ -15,27 +15,25 @@
 # You should have received a copy of the GNU General Public License
 # along with Borderline.  If not, see <http://www.gnu.org/licenses/>.
 
-OCAMLBUILD=ocamlbuild -verbose 1 -cflags -g -lflag -g -quiet -lflag unix.cma -lflag str.cma -lflag nums.cma
 
-.PHONY: main
-.PHONY: force
+SOURCES = common.ml ipv6.ml parser.mly lexer.mll frontend.mli chain.ml frontend.mli \
+	  frontend_types.ml ir.ml optimize.ml zone.ml \
+	  frontend.ml ip6tables.ml rule.ml validate.ml parse.ml borderline.ml
 
-all: main
-	./main ../configuration/main.bl
+LIBS    = unix str nums
 
-force:
+RESULT  = main
 
-%.byte: force
-	$(OCAMLBUILD) $@
+USE_CAMLP4 = yes
 
-main: main.byte
-	@ln -fs main.byte main
+OCAMLMAKEFILE = /usr/share/ocamlmakefile/OCamlMakefile
 
-.PHONY: clean
-clean:
-	@$(RM) -f main.native main
-	@$(RM) -fr _build
-	@$(RM) -f *~
+all: borderline
+	./borderline ../configuration/main.bl
 
+
+
+# Keep at the bottom.
+include /usr/share/ocamlmakefile/OCamlMakefile
 
 
