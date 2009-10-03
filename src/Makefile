@@ -16,19 +16,19 @@
 # along with Borderline.  If not, see <http://www.gnu.org/licenses/>.
 
 
-SOURCES = common.ml ipv6.ml parser.mly lexer.mll frontend.mli chain.ml frontend.mli \
+SOURCES = common.ml ipv6.ml parser.mly lexer.mll frontend.mli chain.ml \
 	  frontend_types.ml ir.ml optimize.ml zone.ml \
 	  frontend.ml ip6tables.ml rule.ml validate.ml parse.ml borderline.ml
 
 LIBS    = unix str nums
 
-RESULT  = main
+RESULT  = borderline
 
 USE_CAMLP4 = yes
 
 OCAMLMAKEFILE = /usr/share/ocamlmakefile/OCamlMakefile
 
-all: borderline
+all: byte-code
 	./borderline ../configuration/main.bl
 
 
