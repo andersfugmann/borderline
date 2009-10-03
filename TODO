@@ -1,25 +1,33 @@
-In progress:
+* In progress
 
-* Move implementation to .ml and types to .mli - Need to figure out
-  how to avoid type definition redundancy.
+- Move implementation to .ml and types to .mli -
+  Need to figure out how to avoid type definition redundancy.
 
-Future:
+* Future
 
-* Implement tcp option match condition to make validating system
+- Make sure that all chains are closed while applying the firewall.
+  This should be done by setting input, output and drop to policy
+  deny, and then make sure they are the last rules to be applied.
 
-* Add a log target. Allow other rules to be targets (that would allow
+- Add a true, false statement, for easy enabling of rules. Test for bogons.
+
+- Implement tcp option match condition to make validating system
+
+- Add a log target. Allow other rules to be targets (that would allow
    definition of new policies (home made so to speak)
 
-Planning:
-* Add ipv4 support - Somehow. Maybe by adding a switch, and by using
+* Planning
+
+- Add ipv4 support - Somehow.
+  Maybe by adding a switch, and by using
   the same framework but disallowing ipv6 constructs. The validation
   pass must validate the all rules to be allowed. Also a mangle filter
   must be present for ipv4 firewalling.
 
-* Define strategy about Mangle and Nat tables. It may require a
-  seperate tree, with special validation and optimization passes. It
+- Define strategy about Mangle and Nat tables.
+  It may require a seperate tree, with special validation and optimization passes. It
   will also require cha ins to be locked to a specific table, which it
   is currently not. Table creation could take a parent table and
   inherit the table info.
 
-* Consider using git for development rather than svn.
+- Consider using git for development rather than svn.

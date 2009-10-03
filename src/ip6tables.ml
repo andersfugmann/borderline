@@ -84,7 +84,7 @@ let gen_condition = function
       ( "--" ^ (choose_dir "source" "destination" direction) ^ "-ports " ^ (String.concat "," (List.map string_of_int ports)) )
 
   | Protocol(protocol) -> ("", sprintf "--protocol %d" (elem protocol))
-  | IcmpType(types) -> ("-m icmp6", sprintf "--icmpv6-type %d" (elem types))
+  | IcmpType(types) -> ("-m icmp6 ", sprintf "--icmpv6-type %d" (elem types))
   | Mark (value, mask) -> "-m mark ", sprintf "--mark 0x%04x/0x%04x" value mask
 
 let rec gen_conditions acc = function
@@ -236,6 +236,7 @@ let emit_chains chains =
   let chains' = transform chains in
     (* Create all chains, with no rules *)
     Chain_map.fold (fun id chn acc -> create_chain acc chn) chains' []
+      (* Order the rules to make sure that buildin chains are emitted last. *)
     @ List.flatten (List.rev (Chain_map.fold (fun _ chn acc -> emit_rules chn :: acc) chains' []))
 
 
