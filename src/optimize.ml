@@ -322,7 +322,9 @@ let rec eliminate_dublicate_rules = function
 let rec count_rules chains =
     Chain_map.fold (fun _ chn acc -> acc + List.length chn.rules) chains 0
 
-
+(* Determine if a chain should be linined. The algorithm is based on
+   number of conditions before and after the merge, with a slight
+   tendency to inline *)
 let should_inline cs c =
   (* Number of conditions in the chain to be inlined *)
   let chain_conds = List.fold_left (fun acc (cl, t) -> acc + List.length cl) 0 c.rules in
@@ -332,9 +334,6 @@ let should_inline cs c =
   let old_conds = (List.fold_left (+) 0 rule_conds) + chain_conds + List.length rule_conds + List.length c.rules in
   (* Inlined count of conditions + targets *)
   let new_conds = List.fold_left (fun acc n -> acc + n * List.length c.rules + chain_conds) 0 rule_conds + (List.length rule_conds * List.length c.rules) in
-(*    if c.id = Temporary(28) then
-         printf "c, r, n, o: %d %d %d %d\n" chain_conds (List.fold_left (+) 0 rule_conds) new_conds old_conds;
-*)
     (new_conds - old_conds) * 100 / (old_conds) < 10
 
 let conds chains =
@@ -350,7 +349,7 @@ let optimize_pass chains =
   let chains' = map_chain_rules reorder chains' in
   let chains' = reduce chains' in
   let chains' = inline should_inline chains' in
-  let chains' = map_chain_rules (fun rls -> List.map (fun (opers, tg) -> (merge_opers opers, tg)) rls) chains' in
+  let chains' = map_chain_rules (fun rls -> Common.map_filter_exceptions (fun (opers, tg) -> (merge_opers opers, tg)) rls) chains' in
   let chains' = remove_unreferenced_chains chains' in
     printf " (%d, %d)\n" (count_rules chains') (conds chains');
     chains'

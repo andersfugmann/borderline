@@ -1,0 +1,2 @@
+define bogons = false
+define link_address = true

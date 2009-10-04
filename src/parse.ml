@@ -75,27 +75,30 @@ and expand = function
   | [ ] -> [ ]
 
 let rec inline_defines defines zones nodes =
-
+  (* Resolve single defines. A single define is really just an alias *)
+  let rec resolve id = match Id_map.find id defines with
+    | DefineList(_, [Id id']) when Id_map.mem id' defines -> resolve id'
+    | define -> define
+  in
   let rec expand_list = function
     | Id id as _id :: xs when Id_set.mem id zones -> _id :: expand_list xs
-    | Id id :: xs -> begin try
-        begin match Id_map.find id defines with
-          | DefineList(_, list) -> expand_list list
-          | DefineStms(id', _) -> raise (ParseError [("List definition required", id); ("But found rule definition", id')])
-          | _ -> failwith "Unexpected node type"
-        end @ expand_list xs
-      with _ -> raise (ParseError [("Undefined id", id)])
-      end
+    | Id id :: xs when Id_map.mem id defines -> begin match resolve id with
+        | DefineList(_, list) -> expand_list list
+        | DefineStms(id', _) -> raise (ParseError [("List definition required", id); ("But found rule definition", id')])
+        | _ -> failwith "Unexpected node type"
+      end @ expand_list xs
+    | Id id :: xs -> raise (ParseError [("Undefined id", id)])
     | Number _ as num :: xs -> num :: expand_list xs
     | Ip _ as ip :: xs -> ip :: expand_list xs
     | [] -> []
   in
   let rec expand_define = function
-    | Reference id -> begin match Id_map.find id defines with
+    | Reference id when Id_map.mem id defines -> begin match resolve id with
         | DefineStms(_, stm) -> expand_rules expand_define stm
         | DefineList(id', _) -> raise (ParseError [("Rule definition required", id); ("But found a reference to a list", id')])
         | _ -> failwith "Unexpected node type"
       end
+    | Reference id -> raise (ParseError[("Unresolved reference", id)])
     | Filter (dir, TcpPort ports, neg) -> [ Filter (dir, TcpPort (expand_list ports), neg) ]
     | Filter (dir, UdpPort ports, neg) -> [ Filter (dir, UdpPort (expand_list ports), neg) ]
     | Filter (dir, Address ips, neg) -> [ Filter (dir, Address (expand_list ips), neg) ]

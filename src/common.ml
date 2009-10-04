@@ -89,7 +89,14 @@ let uniq eq_oper lst =
   in
   uniq' [] [] (group eq_oper [] lst)
 
-
-
+(* Like a regular map, but filter exceptions *)
+let map_filter_exceptions func list =
+  let rec map acc = function
+    | x :: xs -> begin
+        try map ((func x) :: acc) xs
+        with _ -> map acc xs
+      end
+    | [] -> List.rev acc
+  in map [] list
 
 

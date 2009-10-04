@@ -16,6 +16,7 @@
 # along with Borderline.  If not, see <http://www.gnu.org/licenses/>.
 
 CP=cp
+
 .PHONY: autogen install
 
 default: borderline autogen
@@ -35,7 +36,7 @@ install: borderline autogen /etc/default/borderline
 	mkdir -p /etc/borderline /etc/borderline/zones /etc/borderline/generic
 	$(CP) borderline /usr/local/sbin/
 	$(CP) borderline.sh /etc/init.d/
-	$(CP) configuration/main.bl /etc/borderline
+	$(CP) configuration/*.bl /etc/borderline
 	$(CP) -av configuration/zones/*.bl /etc/borderline/zones/
 	$(CP) -av configuration/generic/*.bl /etc/borderline/generic/
 
