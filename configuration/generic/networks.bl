@@ -1,0 +1,5 @@
+define link_local = fe80::/64
+define neighbor_discovery = ff02:0:0:0:0:1:ff00::/104, ff02::1, ff02::2
+define local = link_local, neighbor_discovery
+
+
