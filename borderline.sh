@@ -54,12 +54,11 @@ function ip6tables () {
     if [ "${ALL_OK}" != "true" ]; then
         return
     fi
-    args="$*"
-    ${IP6TABLES} ${args}
+    ${IP6TABLES} "$@"
     res=$?
     if [ $res != 0 ]; then
         echo "iptables returned exit code ${res}"
-        echo "    ${IP6TABLES} ${ARGS}"
+        echo "    ${IP6TABLES} "$@""
         ALL_OK="false"
     fi
 }

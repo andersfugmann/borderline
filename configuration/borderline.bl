@@ -29,7 +29,7 @@ process filter {
 
              # All bogons to and from external zones are filtered
              rule {
-                 use bogons;
+                 use bogons; #if
                  rule {
                    src zone = external;
                    source address = bogon;
@@ -42,7 +42,7 @@ process filter {
              };
 
              # Allow roulter information for fe80 networks
-             rule { use link_address;
+             rule { use link_address; #if
                     src zone != external;
                     dst zone != external;
                     source address = fe80::/64;

@@ -103,7 +103,7 @@ let gen_action = function
   | Drop   -> "DROP"
   | Reject _ -> "REJECT"
   | Notrack -> "NOTRACK" (* The NoTrack will not work, as it must be placed in the 'raw' table *)
-  | Log prefix -> "LOG --prefix " ^ prefix
+  | Log prefix -> "LOG --log-prefix \"" ^ prefix ^ ":\""
 
 (* Transform rules into something emittable. This may introduce new chains. *)
 let transform chains =
