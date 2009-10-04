@@ -9,7 +9,7 @@
   This should be done by setting input, output and drop to policy
   deny, and then make sure they are the last rules to be applied.
 
-- Add a true, false statement, for easy enabling of rules. Test for bogons.
+- Allow empty policies. (Rules with no target)
 
 - Implement tcp option match condition to make validating system
 

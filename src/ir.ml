@@ -30,6 +30,7 @@ type statetype = NEW | ESTABLISHED | RELATED | INVALID
 type zone = id
 type mask = int
 type icmp_type = int (* This seems to be missing a sub-type *)
+type prefix = string
 
 type chain_type = INPUT | OUTPUT | FORWARD
 
@@ -63,6 +64,7 @@ type action = Jump of chain_id
             | Return
             | Reject of icmp_packet_type
             | Notrack
+            | Log of prefix
 
 type oper = (condition * bool) list * action
 

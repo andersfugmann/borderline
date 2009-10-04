@@ -69,6 +69,7 @@ statement:
   | ZONE ID zone_seq                                              { Zone($2, $3) }
   | DEFINE ID EQ rule_seq                                         { DefineStms($2, $4) }
   | DEFINE ID EQ data_list                                        { DefineList($2, $4) }
+  | DEFINE ID EQ POLICY policy_seq                                { DefinePolicy($2, $5) }
   | PROCESS process                                               { let a, b, c = $2 in Process(a, b, c) }
 
 zone_stm:
@@ -128,7 +129,7 @@ policy:
   | REJECT                                                        { REJECT }
 
 action:
-  | POLICY policy                                                 { [ $2 ] }
+  | POLICY policy_seq                                             { $2 }
   | error                                                         { exit_ "Syntax error" }
 
 filter_direction:

@@ -27,6 +27,8 @@ let gen_policy = function
     ALLOW -> Ir.Accept
   | DENY -> Ir.Drop
   | REJECT -> Ir.Reject(0)
+  | LOG prefix -> Ir.Log(prefix)
+  | Ref _ -> failwith "Not all ids have been expanded"
 
 let rec list2ints = function
     Number (nr, _) :: xs -> nr :: list2ints xs

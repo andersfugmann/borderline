@@ -108,7 +108,7 @@ let reduce chains =
     chain_map := Chain_map.map (fun c -> { id = c.id; rules = List.rev c.rules; comment = c.comment }) !chain_map
   in
   let is_terminal = function
-      Jump _ | MarkZone _ | Notrack | Return -> false
+    | Jump _ | MarkZone _ | Notrack | Return | Log _ -> false
     | Accept | Drop | Reject _ -> true
   in
   let conditions_equal conds conds' =
@@ -250,7 +250,8 @@ let rec reorder rules =
   in
 
   let order = function
-      Notrack -> 1
+    | Log _ -> 0
+    | Notrack -> 1
     | Accept -> 2
     | MarkZone _ -> 3
     | Jump _ -> 4

@@ -20,14 +20,17 @@
 open Common
 open Ipv6
 
+type prefix = string
+
 type processtype = MANGLE | FILTER | NAT
-type policytype = ALLOW | DENY | REJECT
+type policytype = ALLOW | DENY | REJECT | LOG of prefix | Ref of id
 
 
 and node = Import of id
          | Zone of id * zone_stm list
          | DefineStms of id * rule_stm list
          | DefineList of id * data list
+         | DefinePolicy of id * policytype list
          | Process of processtype * rule_stm list * policytype list
 
 and zone_stm = Interface of id
