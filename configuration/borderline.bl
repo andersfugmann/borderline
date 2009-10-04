@@ -22,8 +22,8 @@ import "./zones"
 process filter {
         rule {
              # Drop any martian packets
-             rule { src zone = mars; } policy log_deny;
-             rule { dst zone = mars; } policy log_deny;
+             rule { src zone = mars; } policy { log "martian"; deny };
+             rule { dst zone = mars; } policy { log "martian"; deny };
 
              rule { state = related, established; } policy log_allow;
 
@@ -33,28 +33,29 @@ process filter {
                  rule {
                    src zone = external;
                    source address = bogon;
-                 } policy log_deny;
-
+                 } policy { log "bogon"; deny };
                  rule {
                      dst zone = external;
                      dst address = bogon;
-                 } policy log_deny;
+                 } policy { log "bogon"; deny };
              };
 
-             # Allow roulter information for fe80 networks
+             # Allow router information for fe80 networks, and Neighbor Discovery (rfc 2461)
              rule { use link_address; #if
                     src zone != external;
                     dst zone != external;
-                    source address = fe80::/64;
-                    destination address = fe80::/64;
-                    icmptype = router-solicitation, router-advertisement, neighbor-solicitation, neighbor-advertisement, redirect;
+                    #source address = local;
+                    #destination address = local;
+                    icmptype = router-solicitation, router-advertisement, neighbor-solicitation, 
+                               neighbor-advertisement, redirect;
              } policy log_allow;
+             
              rule { state = new;
                     use common;
                     use zones;
-             } policy log_deny;
-             rule { state = invalid; } policy log_deny;
-        } policy log_deny;
+             } policy { log "unmatched"; deny; };
+             rule { state = invalid; } policy { log "invalid"; deny; }
+        } policy { log "filter"; deny; };
 } policy { log "Missed packet"; deny; }
 
 

@@ -1,8 +1,7 @@
 zone self {
      interface = lo;
-     network = fe80::/64;
-     network = ff00::/8;
-     network = ::1;
+     # No networks plz.
+     network = ::/0;
 
      process filter {
          rule { src zone = int; } policy allow;
