@@ -27,10 +27,8 @@ exception MergeImpossible
 let max_inline_size = 1
 
 let rec chain_reference_count id chains =
-  let rec count_references = function
-      (_, Jump chn_id) :: xs when chn_id = id -> 1 + count_references xs
-    | x :: xs -> count_references xs
-    | [] -> 0
+  let count_references rules =
+    List.fold_left (fun acc -> function (_, Jump id') when id = id' -> acc + 1 | _ -> acc) 0 rules
   in
     Chain_map.fold (fun _ chn acc -> acc + (count_references chn.rules)) chains 0
 

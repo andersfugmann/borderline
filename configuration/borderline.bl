@@ -14,31 +14,32 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with Borderline.  If not, see <http://www.gnu.org/licenses/>.
+
 import "./configuration.bl"
 import "./generic"
 import "./zones"
 
-# Packets from and to ext must not be a bogon.
 process filter {
         rule {
              # Drop any martian packets
-             rule { src zone = mars; } policy deny;
-             rule { dst zone = mars; } policy deny;
+             rule { src zone = mars; } policy log_deny;
+             rule { dst zone = mars; } policy log_deny;
 
-             rule { state = related, established; } policy allow;
+             rule { state = related, established; } policy log_allow;
 
-             # All bogons from external zones are filtered
-             rule { use bogons;
-                    src zone = external;
-                    source address = bogon;
-             } policy drop;
+             # All bogons to and from external zones are filtered
+             rule {
+                 use bogons;
+                 rule {
+                   src zone = external;
+                   source address = bogon;
+                 } policy log_deny;
 
-             # All bogons to external zones are filtered
-             rule { use bogons;
-                    dst zone = external;
-                    dst address = bogon;
-             } policy drop;
-
+                 rule {
+                     dst zone = external;
+                     dst address = bogon;
+                 } policy log_deny;
+             };
 
              # Allow roulter information for fe80 networks
              rule { use link_address;
@@ -47,12 +48,13 @@ process filter {
                     source address = fe80::/64;
                     destination address = fe80::/64;
                     icmptype = router-solicitation, router-advertisement, neighbor-solicitation, neighbor-advertisement, redirect;
-             } policy allow;
+             } policy log_allow;
              rule { state = new;
                     use common;
                     use zones;
-             } policy deny;
-             rule { state = invalid; } policy drop;
-        } policy deny;
-} policy deny
+             } policy log_deny;
+             rule { state = invalid; } policy log_deny;
+        } policy log_deny;
+} policy { log "Missed packet"; deny; }
+
 

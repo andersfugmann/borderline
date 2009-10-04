@@ -1,20 +1,20 @@
-(* 
+(*
  * Copyright 2009 Anders Fugmann.
- * Distributed under the GNU General Public License v3 
- *  
+ * Distributed under the GNU General Public License v3
+ *
  * This file is part of Borderline - A Firewall Generator
- * 
+ *
  * Borderline is free software: you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 3 as
- * published by the Free Software Foundation. 
- *  
+ * published by the Free Software Foundation.
+ *
  * Borderline is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
- * along with Borderline.  If not, see <http://www.gnu.org/licenses/>. 
+ * along with Borderline.  If not, see <http://www.gnu.org/licenses/>.
  *)
 
 open Common
@@ -26,6 +26,7 @@ let lineno = ref 1
 let rec create_define_map_rec acc = function
     DefineStms (id, _) as def :: xs -> create_define_map_rec (Id_map.add id def acc) xs
   | DefineList (id, _) as def :: xs -> create_define_map_rec (Id_map.add id def acc) xs
+  | DefinePolicy (id, _) as def :: xs -> create_define_map_rec (Id_map.add id def acc) xs
   | _ :: xs -> create_define_map_rec acc xs
   | [] -> acc
 let create_define_map = create_define_map_rec Id_map.empty
@@ -39,7 +40,7 @@ let node_type id = function
 
 let rec fold_rules func rules acc =
   match rules with
-    | Rule (rules, _) :: xs -> fold_rules func xs (fold_rules func rules acc)
+    | Rule (rules, _) as x :: xs -> fold_rules func xs (fold_rules func rules (func acc x))
     | x :: xs -> fold_rules func xs (func acc x)
     | [] -> acc
 
@@ -54,19 +55,19 @@ let rec fold func nodes acc =
   in
     fold_nodes node_func nodes acc
 
-let rec expand_rules func = function
-  | Rule (rules, p) :: xs -> Rule ((expand_rules func rules), p) :: expand_rules func xs
-  | x :: xs -> (func x) @ expand_rules func xs
+let rec expand_rules node_func pol_func = function
+  | Rule (rules, p) :: xs -> Rule ((expand_rules node_func pol_func rules), pol_func p) :: expand_rules node_func pol_func xs
+  | x :: xs -> (node_func x) @ expand_rules node_func pol_func xs
   | [] -> []
 
 let rec expand_nodes func = function
     x :: xs -> (func x) @ (expand_nodes func xs)
   | [] -> []
 
-let expand func nodes =
+let expand node_func pol_func nodes =
   let node_map = function
-      DefineStms (id, rules) -> [ DefineStms (id, expand_rules func rules) ]
-    | Process (t, rules, p) -> [ Process (t, expand_rules func rules, p) ]
+      DefineStms (id, rules) -> [ DefineStms (id, expand_rules node_func pol_func rules) ]
+    | Process (t, rules, p) -> [ Process (t, expand_rules node_func pol_func rules, pol_func p) ]
     | x -> [ x ]
   in
     expand_nodes node_map nodes

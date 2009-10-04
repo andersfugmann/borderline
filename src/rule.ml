@@ -28,18 +28,18 @@ let gen_policy = function
   | DENY -> Ir.Drop
   | REJECT -> Ir.Reject(0)
   | LOG prefix -> Ir.Log(prefix)
-  | Ref _ -> failwith "Not all ids have been expanded"
+  | Ref (id, _) -> failwith ("Not all ids have been expanded: " ^ id)
 
 let rec list2ints = function
     Number (nr, _) :: xs -> nr :: list2ints xs
   | Ip (_, _) :: xs -> failwith "Unexpected ip in int list"
-  | Id (_, _) :: xs -> failwith "No all ints have been expanded"
+  | Id (id, _) :: xs -> failwith ("No all ints have been expanded: " ^ id)
   | [] -> []
 
 let rec list2ips = function
   | Number (_, _) :: xs -> failwith "Unexpected int in ip list"
   | Ip (ip, _) :: xs -> ip :: list2ips xs
-  | Id (_, _) :: xs -> failwith "No all ints have been expanded"
+  | Id (id, _) :: xs -> failwith ("No all ints have been expanded: " ^ id)
   | [] -> []
 
 let rec list2zones = function

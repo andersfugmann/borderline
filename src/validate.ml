@@ -1,10 +1,10 @@
-(*
+(*i
  * Copyright 2009 Anders Fugmann.
  * Distributed under the GNU General Public License v3
  *
  * This file is part of Borderline - A Firewall Generator
  *
- * Borderline is free software: you can redistribute it and/or modify it
+ * Borerline is free software: you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 3 as
  * published by the Free Software Foundation.
  *
@@ -15,11 +15,16 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with Borderline.  If not, see <http://www.gnu.org/licenses/>.
- *)
+i*)
 
 open Common
 open Frontend_types
 open Frontend
+
+let rec get_policy_ids acc = function
+    Ref id :: xs -> get_policy_ids (Id_set.add id acc) xs
+  | _ :: xs -> get_policy_ids acc xs
+  | [] -> acc
 
 let rec get_zone_ids acc = function
     Zone (id, _) :: xs -> get_zone_ids (Id_set.add id acc) xs
@@ -39,11 +44,14 @@ let rec get_referenced_ids node =
     | Filter (_, FZone zone_ids, _) -> List.fold_left (fun acc id -> Id_set.add id acc) acc (get_ids zone_ids)
     | Protocol (protos, _) -> List.fold_left (fun acc id -> Id_set.add id acc) acc (get_ids protos)
     | IcmpType (types, _) -> List.fold_left (fun acc id -> Id_set.add id acc) acc (get_ids types)
+    | Rule (rls, pols) -> get_policy_ids acc pols
     | _ -> acc
   in
   match node with
     | DefineStms _ as x -> fold get_id [ x ] Id_set.empty
     | DefineList (id, items) -> List.fold_left (fun acc id -> Id_set.add id acc) Id_set.empty (get_ids items)
+    | DefinePolicy (id, pols) -> get_policy_ids Id_set.empty pols
+    | Process (_, _, pols) as x -> fold get_id [ x ] (get_policy_ids Id_set.empty pols)
     | x -> fold get_id [ x ] Id_set.empty
 
 let rec detect_cyclic_references zones id_func defines seen elem =
@@ -68,6 +76,7 @@ let rec test_shadow_defines acc nodes =
     match nodes with
         DefineStms (id, _) :: xs -> test id; test_shadow_defines (Id_set.add id acc) xs
       | DefineList (id, _) :: xs -> test id; test_shadow_defines (Id_set.add id acc) xs
+      | DefinePolicy (id, _) :: xs -> test id; test_shadow_defines (Id_set.add id acc) xs
       | _ :: xs -> test_shadow_defines acc xs
       | [] -> ()
 

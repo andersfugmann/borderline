@@ -80,11 +80,22 @@ let rec inline_defines defines zones nodes =
     | DefineList(_, [Id id']) when Id_map.mem id' defines -> resolve id'
     | define -> define
   in
+  let rec expand_policy = function
+    | Ref id :: xs when Id_map.mem id defines -> begin match resolve id with
+        | DefineList(id', _) -> raise (ParseError [("Policy definition required", id); ("But found a reference to a list", id')])
+        | DefineStms(id', _) -> raise (ParseError [("Policy definition required", id); ("But found rule definition", id')])
+        | DefinePolicy(_, pol) -> expand_policy pol
+        | _ -> failwith "Unexpected node type"
+      end @ expand_policy xs
+    | x :: xs -> x :: expand_policy xs
+    | [] -> []
+  in
   let rec expand_list = function
     | Id id as _id :: xs when Id_set.mem id zones -> _id :: expand_list xs
     | Id id :: xs when Id_map.mem id defines -> begin match resolve id with
         | DefineList(_, list) -> expand_list list
         | DefineStms(id', _) -> raise (ParseError [("List definition required", id); ("But found rule definition", id')])
+        | DefinePolicy(id', _) -> raise (ParseError [("List definition required", id); ("But found policy definition", id')])
         | _ -> failwith "Unexpected node type"
       end @ expand_list xs
     | Id id :: xs -> raise (ParseError [("Undefined id", id)])
@@ -92,10 +103,14 @@ let rec inline_defines defines zones nodes =
     | Ip _ as ip :: xs -> ip :: expand_list xs
     | [] -> []
   in
+    (* Expand all defined in the given tree of nodes. Expansion is
+       recursive - The expanded parts is expanded again until no
+       unresolved defines exists *)
   let rec expand_define = function
     | Reference id when Id_map.mem id defines -> begin match resolve id with
-        | DefineStms(_, stm) -> expand_rules expand_define stm
+        | DefineStms(_, stm) -> expand_rules expand_define identity stm
         | DefineList(id', _) -> raise (ParseError [("Rule definition required", id); ("But found a reference to a list", id')])
+        | DefinePolicy(id', _) -> raise (ParseError [("Rule definition required", id); ("But found policy definition", id')])
         | _ -> failwith "Unexpected node type"
       end
     | Reference id -> raise (ParseError[("Unresolved reference", id)])
@@ -105,11 +120,10 @@ let rec inline_defines defines zones nodes =
     | Filter (dir, FZone zones, neg) -> [ Filter (dir, FZone (expand_list zones), neg) ]
     | Protocol (protos, neg) -> [ Protocol ((expand_list protos), neg) ]
     | IcmpType (types, neg) -> [ IcmpType ((expand_list types), neg) ]
-    | State _ as rle -> [ rle ]
-    | Rule _ as rle -> [ rle ]
-
+    | State _ as state -> [ state ]
+    | Rule (rls, pol)  -> failwith "Rules should be expanded by Frontend.expand"
   in
-    Frontend.expand expand_define nodes
+    Frontend.expand expand_define expand_policy nodes
 
 let process_files files =
   let nodes = List.flatten (List.map parse_file files) in
