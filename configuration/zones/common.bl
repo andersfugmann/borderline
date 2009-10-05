@@ -1,7 +1,8 @@
 define common = {
-   rule { src zone = self; } policy allow;
-   rule { destination tcp port = ssh; } policy allow;
-   rule { icmptype = echo-request, echo-reply } policy { log "ping"; allow; };
+   rule { src zone = self; } policy log_allow;
+   rule { destination tcp port = ssh; } policy log_allow;
+   rule { icmptype = echo-request, echo-reply } policy { log_allow; };
 }
+
 
 
