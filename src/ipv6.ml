@@ -1,4 +1,4 @@
-(* 
+(*i 
  * Copyright 2009 Anders Fugmann.
  * Distributed under the GNU General Public License v3 
  *  
@@ -15,8 +15,7 @@
  * 
  * You should have received a copy of the GNU General Public License
  * along with Borderline.  If not, see <http://www.gnu.org/licenses/>. 
- *)
-
+i*)
 open Printf
 open Big_int
 
@@ -89,7 +88,7 @@ let set_bits ip bits =
     add_big_int (pred_big_int mask) (clear_bits ip bits)
 
 let to_range (ip, mask) =
-(*
+(*i
   let rec build_range low high mask = function
       x :: xs when mask = 0 -> build_range (x :: low) (x :: high) mask xs
     | x :: xs when mask < 16 -> let mask' = get_mask (mask) in
@@ -98,7 +97,7 @@ let to_range (ip, mask) =
     | [] -> (to_number low, to_number high)
 
   in build_range [] [] mask (List.rev ip)
-*)
+i*)
   (clear_bits ip mask, set_bits ip mask)
 
 let range2mask (low, high) =
@@ -124,7 +123,7 @@ let rec list_difference a b =
       y :: ys -> list_difference (List.flatten (List.map (fun x -> difference x y) a)) ys
     | [] -> a
 
-(*
+(*i
 let () =
   let marvin = (to_number [0x2001;0x16d8;0xdd2d;0x0;0x2e0;0x4cff;0xfe69;0x103d], 128) in
   let network = (to_number [0x2001;0x16d8;0xdd2d;0x0;0x2e0;0x4cff;0xfe69;0x103d], 64) in
@@ -139,4 +138,4 @@ let () =
   match intersection (to_range marvin) (to_range network) with
       Some range -> Printf.printf "Intersection: %s\n" (range_to_string range)
     | None -> Printf.printf "No intersection\n"
-*)
+i*)

@@ -47,7 +47,6 @@ let gen_neg = function
     true -> "! "
   | _ -> ""
 
-(* val choose_dir : direction * string * string -> string *)
 let choose_dir a b = function
     SOURCE      -> a
   | DESTINATION -> b

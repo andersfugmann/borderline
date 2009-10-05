@@ -1,5 +1,5 @@
 {
-(*
+(*i
  * Copyright 2009 Anders Fugmann.
  * Distributed under the GNU General Public License v3
  *
@@ -16,7 +16,7 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with Borderline.  If not, see <http://www.gnu.org/licenses/>.
- *)
+i*)
 
 open Parser
 open Parsing
