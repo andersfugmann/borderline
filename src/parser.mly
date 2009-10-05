@@ -23,7 +23,6 @@
   open Scanf
   open Lexing
 
-  let parse_error s = Printf.printf "%s\n" s
   let exit_ s =
     let pos_end = Parsing.symbol_end_pos () in
     let pos_start = Parsing.symbol_start_pos () in
@@ -32,6 +31,8 @@
       prerr_string (s ^ "\n");
       prerr_string (sprintf "File \"%s\", line %d, character %d-%d:\n" pos_end.pos_fname pos_end.pos_lnum c_start c_end);
       exit 1
+  let parse_error s = (* Printf.printf "%s\n" s *) exit_ s
+
 %}
 
 %token ZONE PROCESS RULE DEFINE IMPORT

@@ -55,21 +55,5 @@ let rec fold func nodes acc =
   in
     fold_nodes node_func nodes acc
 
-let rec expand_rules node_func pol_func = function
-  | Rule (rules, p) :: xs -> Rule ((expand_rules node_func pol_func rules), pol_func p) :: expand_rules node_func pol_func xs
-  | x :: xs -> (node_func x) @ expand_rules node_func pol_func xs
-  | [] -> []
-
-let rec expand_nodes func = function
-    x :: xs -> (func x) @ (expand_nodes func xs)
-  | [] -> []
-
-let expand node_func pol_func nodes =
-  let node_map = function
-      DefineStms (id, rules) -> [ DefineStms (id, expand_rules node_func pol_func rules) ]
-    | Process (t, rules, p) -> [ Process (t, expand_rules node_func pol_func rules, pol_func p) ]
-    | x -> [ x ]
-  in
-    expand_nodes node_map nodes
 
 

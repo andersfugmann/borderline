@@ -79,40 +79,37 @@ let rec inline_defines defines zones nodes =
   let rec resolve id = match Id_map.find id defines with
     | DefineList(_, [Id id']) when Id_map.mem id' defines -> resolve id'
     | define -> define
-  in
-  let rec expand_policy = function
-    | Ref id :: xs when Id_map.mem id defines -> begin match resolve id with
-        | DefineList(id', _) -> raise (ParseError [("Policy definition required", id); ("But found a reference to a list", id')])
-        | DefineStms(id', _) -> raise (ParseError [("Policy definition required", id); ("But found rule definition", id')])
-        | DefinePolicy(_, pol) -> expand_policy pol
-        | _ -> failwith "Unexpected node type"
-      end @ expand_policy xs
+  and expand_policy = function
+    | Ref id :: xs when Id_map.mem id defines ->
+        begin match resolve id with
+          | DefineList(id', _) -> raise (ParseError [("Policy definition required", id); ("But found a reference to a list", id')])
+          | DefineStms(id', _) -> raise (ParseError [("Policy definition required", id); ("But found rule definition", id')])
+          | DefinePolicy(_, pol) -> expand_policy pol
+          | _ -> failwith "Unexpected node type"
+        end @ expand_policy xs
     | x :: xs -> x :: expand_policy xs
     | [] -> []
-  in
-  let rec expand_list = function
+  and expand_list = function
     | Id id as _id :: xs when Id_set.mem id zones -> _id :: expand_list xs
-    | Id id :: xs when Id_map.mem id defines -> begin match resolve id with
-        | DefineList(_, list) -> expand_list list
-        | DefineStms(id', _) -> raise (ParseError [("List definition required", id); ("But found rule definition", id')])
-        | DefinePolicy(id', _) -> raise (ParseError [("List definition required", id); ("But found policy definition", id')])
-        | _ -> failwith "Unexpected node type"
-      end @ expand_list xs
+    | Id id :: xs when Id_map.mem id defines ->
+        begin match resolve id with
+          | DefineList(_, list) -> expand_list list
+          | DefineStms(id', _) -> raise (ParseError [("List definition required", id); ("But found rule definition", id')])
+          | DefinePolicy(id', _) -> raise (ParseError [("List definition required", id); ("But found policy definition", id')])
+          | _ -> failwith "Unexpected node type"
+        end @ expand_list xs
     | Id id :: xs -> raise (ParseError [("Undefined id", id)])
     | Number _ as num :: xs -> num :: expand_list xs
     | Ip _ as ip :: xs -> ip :: expand_list xs
     | [] -> []
-  in
-    (* Expand all defined in the given tree of nodes. Expansion is
-       recursive - The expanded parts is expanded again until no
-       unresolved defines exists *)
-  let rec expand_define = function
-    | Reference id when Id_map.mem id defines -> begin match resolve id with
-        | DefineStms(_, stm) -> expand_rules expand_define identity stm
-        | DefineList(id', _) -> raise (ParseError [("Rule definition required", id); ("But found a reference to a list", id')])
-        | DefinePolicy(id', _) -> raise (ParseError [("Rule definition required", id); ("But found policy definition", id')])
-        | _ -> failwith "Unexpected node type"
-      end
+  and expand_rule = function
+    | Reference id when Id_map.mem id defines ->
+        begin match resolve id with
+          | DefineStms(_, stm) -> expand_rules stm
+          | DefineList(id', _) -> raise (ParseError [("Rule definition required", id); ("But found a reference to a list", id')])
+          | DefinePolicy(id', _) -> raise (ParseError [("Rule definition required", id); ("But found policy definition", id')])
+          | _ -> failwith "Unexpected node type"
+        end
     | Reference id -> raise (ParseError[("Unresolved reference", id)])
     | Filter (dir, TcpPort ports, neg) -> [ Filter (dir, TcpPort (expand_list ports), neg) ]
     | Filter (dir, UdpPort ports, neg) -> [ Filter (dir, UdpPort (expand_list ports), neg) ]
@@ -121,14 +118,23 @@ let rec inline_defines defines zones nodes =
     | Protocol (protos, neg) -> [ Protocol ((expand_list protos), neg) ]
     | IcmpType (types, neg) -> [ IcmpType ((expand_list types), neg) ]
     | State _ as state -> [ state ]
-    | Rule (rls, pol)  -> failwith "Rules should be expanded by Frontend.expand"
+    | Rule (rls, pol)  -> [ Rule ( expand_rules rls, expand_policy pol) ]
+  and expand_rules rules = List.fold_left (fun acc rle -> acc @ (expand_rule rle)) [] rules
+  and expand_zone_node = function
+    | ZoneRules (t, rules, pol) -> ZoneRules (t, expand_rules rules, expand_policy pol)
+    | x -> x
+  and expand_zone_nodes nodes = List.map expand_zone_node nodes
+  and expand = function
+    | Process (t, rules, p) -> Process (t, expand_rules rules, expand_policy p)
+    | Zone(id, nodes) -> Zone(id, expand_zone_nodes nodes)
+    | x -> x
   in
-    Frontend.expand expand_define expand_policy nodes
+    List.map expand nodes
 
 let process_files files =
   let nodes = List.flatten (List.map parse_file files) in
-  let zones = Zone.filter nodes in
-  let nodes' = (Zone.emit_nodes Frontend_types.FILTER zones) @ nodes in
-    Validate.validate nodes';
-    (zones, Rule.filter_process (inline_defines (create_define_map nodes') (Zone.create_zone_set nodes) nodes'))
+  let nodes' = (Zone.emit_nodes Frontend_types.FILTER (Zone.filter nodes)) @ nodes in
+  let () = Validate.validate nodes' in
+  let nodes' = inline_defines (create_define_map nodes') (Zone.create_zone_set nodes) nodes' in
+    (Zone.filter nodes', Rule.filter_process nodes')
 

@@ -30,8 +30,5 @@ val fold_rules : ('a -> rule_stm -> 'a) -> rule_stm list -> 'a -> 'a
 val fold_nodes : ('a -> node -> 'a) -> node list -> 'a -> 'a
 val fold : ('a -> rule_stm -> 'a) -> node list -> 'a -> 'a
 
-val expand_rules : (rule_stm -> rule_stm list) -> (policytype list -> policytype list) -> rule_stm list -> rule_stm list
-val expand_nodes : (node -> node list) -> node list -> node list
-val expand : (rule_stm -> rule_stm list) -> (policytype list -> policytype list) -> node list -> node list
 
 
