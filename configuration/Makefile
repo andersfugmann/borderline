@@ -37,6 +37,7 @@ generic/services.bl: /etc/services
                               fi; \
                            done | uniq > $@
 
+# MAybe we should use this instead: http://www.iana.org/assignments/ipv6-unicast-address-assignments/
 generic/bogon.bl: LINES=$(shell wget -q -O- $(BOGON_URL) | egrep ".*:.*:.*")
 generic/bogon.bl: force
 	@echo "#Extracted from $(BOGON_URL)" > $@

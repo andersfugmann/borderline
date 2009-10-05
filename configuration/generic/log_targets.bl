@@ -1,0 +1,7 @@
+define log_allow    = policy { allow; }
+define log_deny     = policy { log "deny"; deny; }
+define log_reject   = policy { log "reject"; reject; }
+define log_martian  = policy { log "martian"; deny; }
+define log_invalid  = policy { log "invalid"; deny; }
+define log_missed   = policy { log "missed"; deny; }
+define log_bogon    = policy { log "bogon"; deny; }

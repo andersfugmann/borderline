@@ -1,4 +1,4 @@
 zone ext {
      interface = sixxs;
-     process filter { } policy allow;
+     process filter { } policy log_allow;
 }

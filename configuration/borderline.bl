@@ -21,11 +21,13 @@ import "./zones"
 
 process filter {
         rule {
-             # Drop any martian packets
-             rule { src zone = mars; } policy { log "martian"; deny };
-             rule { dst zone = mars; } policy { log "martian"; deny };
-
              rule { state = related, established; } policy log_allow;
+
+             # Drop any martian packets
+             rule { src zone = mars; } policy log_martian;
+             rule { dst zone = mars; } policy log_martian;
+
+             rule { state = invalid; } policy log_martian;
 
              # All bogons to and from external zones are filtered
              rule {
@@ -33,29 +35,28 @@ process filter {
                  rule {
                    src zone = external;
                    source address = bogon;
-                 } policy { log "bogon"; deny };
+                 } policy { log_bogon };
                  rule {
                      dst zone = external;
                      dst address = bogon;
-                 } policy { log "bogon"; deny };
+                 } policy { log_bogon };
              };
 
              # Allow router information for fe80 networks, and Neighbor Discovery (rfc 2461)
              rule { use link_address; #if
                     src zone != external;
                     dst zone != external;
-                    #source address = local;
-                    #destination address = local;
-                    icmptype = router-solicitation, router-advertisement, neighbor-solicitation, 
-                               neighbor-advertisement, redirect;
-             } policy log_allow;
-             
-             rule { state = new;
-                    use common;
-                    use zones;
-             } policy { log "unmatched"; deny; };
-             rule { state = invalid; } policy { log "invalid"; deny; }
-        } policy { log "filter"; deny; };
-} policy { log "Missed packet"; deny; }
+                    icmptype = router-solicitation,
+                               router-advertisement,
+                               neighbor-solicitation,
+                               neighbor-advertisement,
+                               redirect;
+             } policy allow;
+
+             # State new and "stateless"
+             use common;
+             use zones;
+        } policy log_missed;
+} policy { log "Impossibe state"; deny; }
 
 

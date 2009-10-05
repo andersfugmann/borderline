@@ -4,8 +4,8 @@ zone wlan {
      network = fe80::/64;
      network = ff00::/8;
      process filter {
-         rule { src zone = int; } policy allow;
-         rule { destination udp port = 1234; } policy allow;
-     } policy deny
+         rule { src zone = int; } policy log_allow;
+         rule { destination udp port = 1234; } policy log_allow;
+     } policy log_deny
 }
 
