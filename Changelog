@@ -1,4 +1,9 @@
-Version 0.1
+Version 0.2 (2009-10-07)
+* Fix parser bug.
+* Improve rules
+* Change Linux backend to match both new and 'stateless' packets for state NEW.
+
+Version 0.1 
 * Initial release
 
 
