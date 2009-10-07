@@ -1,4 +1,4 @@
-zone self {
+zone self { 
      interface = lo;
      network = ::/0;
      process filter {

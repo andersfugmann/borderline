@@ -29,9 +29,9 @@ i*/
   (* Define a function to be called whenever a syntax error is
      encountered. The function prints line number along with a
      description. *)
-  let exit_ s =
-    let pos_end = Parsing.symbol_end_pos () in
+  let exit_ s =    
     let pos_start = Parsing.symbol_start_pos () in
+    let pos_end = Parsing.symbol_end_pos () in
     let c_end = pos_end.pos_cnum - pos_end.pos_bol + 1 in
     let c_start = pos_start.pos_cnum - pos_start.pos_bol + 1 in
       prerr_string (s ^ "\n");
@@ -78,7 +78,7 @@ process:
 
 statement:
   | IMPORT STRING                         { Import($2) }
-  | ZONE ID zone_stms                     { Zone($2, $3) }
+  | ZONE ID LBRACE zone_stms RBRACE       { Zone($2, $4) }
   | DEFINE ID EQ rule_seq                 { DefineStms($2, $4) }
   | DEFINE ID EQ data_list                { DefineList($2, $4) }
   | DEFINE ID EQ action                   { DefinePolicy($2, $4) }
