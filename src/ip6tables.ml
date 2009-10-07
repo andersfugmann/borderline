@@ -1,4 +1,4 @@
-(*
+(*i
  * Copyright 2009 Anders Fugmann.
  * Distributed under the GNU General Public License v3
  *
@@ -15,11 +15,12 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with Borderline.  If not, see <http://www.gnu.org/licenses/>.
- *)
+i*)
 
-(* Emit iptables commands. Currently we have no interface to the
-   iptables library, so we use a shell script as an intermediate
-   step. *)
+(* 
+   Emit iptables commands. Currently we have no interface to the
+   iptables library, so we use a shell script as an intermediate step.
+*)
 
 open Common
 open Ir
@@ -60,9 +61,9 @@ let get_state_name = function
 
 let gen_zone_mask dir zone =
   let zone_id = get_zone_id (id2str zone) in
-  match dir with
-      SOURCE -> zone_id, 0x00ff
-    | DESTINATION -> zone_id * 0x100, 0xff00
+    match dir with
+        SOURCE -> zone_id, 0x00ff
+      | DESTINATION -> zone_id * 0x100, 0xff00
 
 let gen_zone_mask_str dir zone =
   let id, mask = gen_zone_mask dir zone in sprintf "0x%04x/0x%04x" id mask
@@ -104,9 +105,12 @@ let gen_action = function
   | Notrack -> "NOTRACK" (* The NoTrack will not work, as it must be placed in the 'raw' table *)
   | Log prefix -> "LOG --log-prefix \"" ^ prefix ^ ":\""
 
-(* Transform rules into something emittable. This may introduce new chains. *)
+(* To make a direct mapping to iptables rules, the IR tree needs to be
+   denormalized. The transform pass does excatly this. It expands
+   constructs into something trivially convertible to netfilter rules. *)
 let transform chains =
-  (* Order of conditions. This is used when expanding the conditions, in order to move expanding conditions to the back *)
+  (* Order of conditions. This is used when expanding the conditions,
+     in order to move expanding conditions to the back *)
   let order a b =
     let value = function
         Interface _ -> 1
@@ -118,9 +122,10 @@ let transform chains =
       | IcmpType types -> List.length types
       | Mark _ -> 2
     in
+      (* Reverse the order given above, by making the value negative *)
       -(Pervasives.compare (value a) (value b))
   in
-  (* Return a list of chains, and a single rule *)
+    (* Return a list of chains, and a single rule *)
   let denormalize (conds, target) =
     let rec denorm_rule tg = function
         cl :: [] -> ([], (cl, tg))
@@ -158,7 +163,7 @@ let transform chains =
       | [] -> (acc1, (acc2, tg))
     in expand_conds [] [] target (List.sort (fun (a, _) (b, _) -> order a b) conds)
   in
-    (* Seems to be broken for negated ports *)
+    (* Multiport needs a protocol specificer. Add it here *)
   let add_protocol_to_multiport (conds, target) =
     let multiports, rest = List.partition (fun (cond, _) -> (cond_type_identical (Ports (SOURCE, [])) cond)) conds in
     let protocols = List.filter (fun (cond, _) -> (cond_type_identical (Protocol []) cond)) conds in
@@ -178,6 +183,7 @@ let transform chains =
 
         | _ -> ([], (conds, target)) (* Catch all *)
   in
+    (* ICMP type match needs a protocol specifier. Add it here *)
   let add_protocol_to_icmptype (conds, target) =
     let icmptypes, rest = (List.partition (fun (cond, _) -> (cond_type_identical (IcmpType []) cond)) conds) in
     let protocols = (List.filter (fun (cond, _) -> (cond_type_identical (Protocol []) cond)) conds) in
@@ -192,6 +198,9 @@ let transform chains =
             failwith (sprintf "IcmpType has wrong protocol specifier: %s." (ints_to_string protos))
         | _ -> ([], (conds, target)) (* Catch all *)
   in
+    (* Netfilter does not support the notion of zones. By marking the
+       packets and matching the mark on the packet, the functionality can
+       be emulated. *)
   let zone_to_mask (conds, target) =
     let rec zone_to_mask' = function
         (Zone (dir, zone :: []), neg) :: (Zone(dir', zone' :: []), neg') :: xs when neg = neg' && not (dir = dir') ->
@@ -212,9 +221,24 @@ let transform chains =
           map_chains (Chain_map.add chain'.id chain' acc) func ((List.flatten chains) @ xs)
     | [] -> acc
   in
+    (* Some packets are 'stateless', and thus not regarded as 'new' by
+       netfilter. Fix this by using negated states:
+       new => ! related, established, invalid
+       new, related => !established, invalid
+       new, established => !related, invalid              
+    *)
+  let fix_state_match (conds, target) = 
+    (* Transform the list of state so the 'new' state is avoided *)
+    let tranform = function
+        (State states, neg) when List.mem NEW states -> 
+          (State (difference (=) [INVALID; RELATED; ESTABLISHED] states), not neg)
+      | x -> x
+    in
+      ([], (List.map tranform conds, target))
+  in
   let map chains func = Chain_map.fold (fun _ chn acc -> map_chains acc func [chn]) chains Chain_map.empty in
 
-  let transformations = [ expand; zone_to_mask; denormalize; add_protocol_to_multiport; add_protocol_to_icmptype ] in
+  let transformations = [ expand; zone_to_mask; denormalize; add_protocol_to_multiport; add_protocol_to_icmptype; fix_state_match ] in
     List.fold_left map chains transformations
 
 let emit_rule (cond_list, action) : string =
