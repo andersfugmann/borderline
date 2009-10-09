@@ -23,9 +23,9 @@ open Frontend
 
 
 (* To make sure the graph does not contain any cycles, a list of
-   visited nodes (id's) is maintained. The mark_seen function either
-   lists the cyclic reference or adds the new node to the list of visited
-   nodes.
+   visited nodes (id's) is maintained. The \verb|mark_seen| function
+   either lists the cyclic reference or adds the new node to the list
+   of visited nodes.
 *)
 let mark_seen id seen =
   match List.mem id seen with
@@ -36,7 +36,7 @@ let mark_seen id seen =
    defines are shadowed by other defines (defines with the same map,
    the function only adds a new id to the map if the id was not there
    already. If the id was present, a ParseError exception is raised in
-   order to stop processing.)
+   order to stop processing).
 *)
 let add_id_to_map id def map =
   match Id_map.mem id map with
@@ -52,10 +52,12 @@ let rec create_define_map_rec acc = function
       
 (* As the recursive version of the fuction needs an accumulator, add a
    function to hide this to users. *)
+
 let create_define_map = create_define_map_rec Id_map.empty
   
-(* Expand and validation is the same problem, and should be solved as such.
-   We need to have a system that eases the task of describing the allowed constructs. *)
+(* Expand and validation is the same problem, and should be solved as
+   such.  We need to have a system that eases the task of describing
+   the allowed constructs. *)
 
 let expand nodes =
   let zones = Zone.create_zone_set nodes in
@@ -63,7 +65,17 @@ let expand nodes =
 
   let rec expand_rules id =
     try begin match Id_map.find id defines with
-        (* Expand a single id reference *)
+
+        (* Expand single id reference into something sematically
+           corect. This allows simple definitions to work as aliases
+           for other types of definitions. It is important that the
+           function does not resolve the id here, as the system would
+           then end up in a infinite loop on recursive aliases (e.g
+           \verb|define a = a|. Returning a virtual node allows the id
+           to be inserted into the list of visited nodes, and cyclic
+           reference dectection will prevent infinite loops, and allow
+           error reporting to the users. *)
+
         DefineList (_, [ Id id ]) -> [ Reference id ]
       | DefineStms (_, x) -> x
       | _ -> raise (ParseError [("Reference to Id of wrong type", id)])
@@ -79,7 +91,8 @@ let expand nodes =
   in
   let expand_policy id =
     try begin match Id_map.find id defines with
-        (* Expand a single id reference *)
+
+        (* As before; allow simple defines work as aliases. *)
         DefineList (_, [ Id id ]) -> [ Ref id ]
       | DefinePolicy (id', x) -> x
       | _ -> raise (ParseError [("Reference to Id of wrong type", id)])
@@ -89,7 +102,7 @@ let expand nodes =
 
   (* As part of expanding the rules, a set of function to expand a
      list into more concreete data (such as list of ints, or list of
-     addresses are defined *)
+     addresses) are defined. *)
 
   let rec expand_int_list seen = function
       Id id :: xs -> (expand_int_list (mark_seen id seen) (expand_list id)) @ (expand_int_list seen xs)
@@ -132,8 +145,10 @@ let expand nodes =
         | x :: xs -> expand_rule x :: expand_rule_list seen xs
         | [] -> []
   in
+
     (* When expanding zone definitions, there is no need to carry a
     seen list, as zone stems are not recursive types. *)
+
   let rec expand_zone_stms = function
       Interface _ as i :: xs -> i :: expand_zone_stms xs 
     | Network _ as i :: xs -> i :: expand_zone_stms xs
