@@ -22,13 +22,9 @@ open Ipv6
 open Frontend_types
 
 val lineno : int ref
-val create_define_map : node list -> ( node Id_map.t)
 
 val node_type : int -> node -> bool
 
 val fold_rules : ('a -> rule_stm -> 'a) -> rule_stm list -> 'a -> 'a
 val fold_nodes : ('a -> node -> 'a) -> node list -> 'a -> 'a
 val fold : ('a -> rule_stm -> 'a) -> node list -> 'a -> 'a
-
-
-

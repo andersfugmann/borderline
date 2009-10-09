@@ -23,14 +23,6 @@ open Frontend_types
 
 let lineno = ref 1
 
-let rec create_define_map_rec acc = function
-    DefineStms (id, _) as def :: xs -> create_define_map_rec (Id_map.add id def acc) xs
-  | DefineList (id, _) as def :: xs -> create_define_map_rec (Id_map.add id def acc) xs
-  | DefinePolicy (id, _) as def :: xs -> create_define_map_rec (Id_map.add id def acc) xs
-  | _ :: xs -> create_define_map_rec acc xs
-  | [] -> acc
-let create_define_map = create_define_map_rec Id_map.empty
-
 let node_type id = function
     Zone _ -> 1 = id
   | Process _ -> 2 = id
