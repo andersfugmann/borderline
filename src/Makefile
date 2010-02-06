@@ -43,6 +43,15 @@ borderline.ps: $(SOURCES)
 .PHONY: web
 web: borderline.ps
 
+.PHONY: configure
+configure: configure.ml
+	ocamlc unix.cma $< -o $@ 
+	./configure
+
+clean::
+	$(RM) configure
+
+
 
 # Keep at the bottom.
 include /usr/share/ocamlmakefile/OCamlMakefile

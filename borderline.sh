@@ -32,8 +32,6 @@ BG="/usr/local/sbin/borderline"
 ALL_DONE="false"
 ALL_OK="true"
 
-WATCH_STATE="false"
-
 function on_exit() {
     rm -f ${NEW_RULES}
 
@@ -78,22 +76,6 @@ function main() {
     ip6tables -F
     ip6tables -X
     ip6tables -Z
-
-    if [ "${WATCH_STATE}" = "true" ]; then 
-        ip6tables -N state
-        ip6tables -A state -m conntrack --ctstate NEW -j LOG --log-prefix 'NEW:'
-        ip6tables -A state -m conntrack --ctstate NEW -j RETURN
-        ip6tables -A state -m conntrack --ctstate RELATED -j LOG --log-prefix 'RELATED:'
-        ip6tables -A state -m conntrack --ctstate RELATED -j RETURN
-        ip6tables -A state -m conntrack --ctstate ESTABLISHED -j LOG --log-prefix 'ESTABLISHED:'
-        ip6tables -A state -m conntrack --ctstate ESTABLISHED -j RETURN
-        ip6tables -A state -m conntrack --ctstate INVALID -j LOG --log-prefix 'INVALID:'
-        ip6tables -A state -m conntrack --ctstate INVALID -j RETURN
-        ip6tables -A state -j LOG --log-prefix 'STATELESS:'
-        ip6tables -A INPUT -j state
-        ip6tables -A OUTPUT -j state
-        ip6tables -A FORWARD -j state
-    fi
 
     . ${NEW_RULES}
 

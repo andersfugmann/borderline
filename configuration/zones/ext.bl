@@ -1,3 +1,4 @@
+# External zone. We allow all packets to go to the internet. 
 zone ext {
      interface = sixxs;
      process filter { } policy log_allow;
