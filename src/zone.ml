@@ -34,9 +34,6 @@ let mars = ("mars", Lexing.dummy_pos)
 (* Reference to all zone chains. This build in rule traverses all zone rules *)
 let all_zones = ("zones", Lexing.dummy_pos)
 
-(* List of zones that are external. External zones are defined by zones without network specification *)
-let ext_zones = ("external", Lexing.dummy_pos)
-
 (* List of build in zones. *)
 let buildin_zones = [ mars ]
 
@@ -98,13 +95,12 @@ let emit_nodes table zones =
     | _ :: xs -> has_network xs
     | [] -> false
   in
-  let external_zones = List.map (fun (id,_) -> Id(id))  (List.filter (fun (id, zone_stms) -> not (has_network zone_stms)) zones) in
   let rec gen_rule_stems (zone_id, nodes) =
     List.map (
       fun (rules, policy) -> Rule( [ Filter(Ir.DESTINATION, FZone([Id zone_id]), false) ] @ rules, policy )
     ) (filter_zonerules table nodes)
   in
-    [ DefineStms (all_zones, List.flatten (List.map gen_rule_stems zones)) ; DefineList (ext_zones, external_zones) ]
+    [ DefineStms (all_zones, List.flatten (List.map gen_rule_stems zones)) ]
 
 let emit table zones =
   let src_chains = List.map (create_zone_chain Ir.SOURCE) zones in
