@@ -1,2 +1,17 @@
+# Filter illegal addresses (unallocated and rfrom external interface
 define bogons = true
+
+#Allow router information for fe80 networks, and Neighbor Discovery (rfc 2461) 
 define link_address = true
+
+# List of ports available for all zones. 
+define common_tcp_ports = ssh
+define common_udp_ports = 
+
+# List of external ports (incoming connections to the firewall itself.)
+define external_tcp_ports = smtp, ssmtp, domain, imaps, www, https, ntp
+define external_udp_ports = domain, ntp
+
+#Define the external zone. 
+define external = ext
+

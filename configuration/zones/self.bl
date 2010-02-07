@@ -1,11 +1,10 @@
 zone self { 
      interface = lo;
-     network = ::/0;
      process filter {
-         rule { src zone = int; } policy log_allow;
-         rule {
-             rule { destination tcp port = smtp, ssmtp, domain, imaps, www, https, ntp } policy log_allow;
-             rule { destination udp port = domain, ntp } policy log_allow;
+         rule { 
+             src zone = external; 
+             rule { destination tcp port = external_tcp_ports } policy log_allow;
+             rule { destination udp port = external_udp_ports } policy log_allow;
          } policy log_deny;
-     } policy log_deny;
+     } policy log_allow;
 }
