@@ -15,6 +15,7 @@
 # You should have received a copy of the GNU General Public License
 # along with Borderline.  If not, see <http://www.gnu.org/licenses/>.
 
+import "./common.bl"
 import "./configuration.bl"
 import "./generic"
 import "./zones"
@@ -54,7 +55,6 @@ process filter {
                                    neighbor-advertisement,
                                    redirect;
                  } policy allow;
-
                  use common;
                  use zones;
             }
