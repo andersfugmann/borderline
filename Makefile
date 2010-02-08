@@ -36,7 +36,7 @@ bl-configure:
 /etc/default/borderline:
 	echo "MAIN=/etc/borderline/borderline.bl" > $@
 
-install: borderline bl-conf autogen /etc/default/borderline
+install: borderline bl-configure autogen /etc/default/borderline
 
 	mkdir -p /etc/borderline /etc/borderline/zones /etc/borderline/generic
 	$(CP) borderline /usr/local/sbin/
