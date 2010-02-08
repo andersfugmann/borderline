@@ -40,7 +40,8 @@ i*/
   let parse_error s = (* Printf.printf "%s\n" s *) exit_ s
 
 %}
-%token ZONE PROCESS RULE DEFINE IMPORT
+%token ZONE PROCESS RULE IMPORT
+%token DEFINE 
 %token NETWORK INTERFACE
 %token MANGLE FILTER NAT
 %token POLICY ALLOW DENY REJECT LOG
@@ -80,8 +81,8 @@ statement:
   | IMPORT STRING                         { Import($2) }
   | ZONE ID LBRACE zone_stms RBRACE       { Zone($2, $4) }
   | DEFINE ID EQ rule_seq                 { DefineStms($2, $4) }
+  | DEFINE ID EQ POLICY policy_seq        { DefinePolicy($2, $5) }
   | DEFINE ID EQ data_list                { DefineList($2, $4) }
-  | DEFINE ID EQ action                   { DefinePolicy($2, $4) }
   | PROCESS process                       { let a, b, c = $2 in Process(a, b, c) }
 ;
 
@@ -186,7 +187,7 @@ oper:
 state_list:
   | state                                 { [ $1 ] }
   | state COMMA state_list                { $1 :: $3 }
-  | error                                 { exit_ "Expected state name" }
+  |                                       { [] }
 ;
 
 state:
@@ -200,8 +201,9 @@ state:
    validated when mapping the frontend language to the Ir tree */
 
 data_list:
-  | data                                  { [ $1 ] }
   | data COMMA data_list                  { $1 :: $3 }
+  | data                                  { [ $1 ] }
+  |                                       { [ ] }
 ;
 
 data:

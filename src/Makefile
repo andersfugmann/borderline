@@ -28,8 +28,7 @@ USE_CAMLP4 = yes
 
 OCAMLMAKEFILE = /usr/share/ocamlmakefile/OCamlMakefile
 
-all: dc
-	OCAMLRUNPARAM=b ./borderline ../configuration/borderline.bl
+default: test
 
 .PHONY: borderline borderline-native
 borderline: dc
@@ -46,15 +45,21 @@ web: borderline.ps
 .PHONY: configure
 configure: configure.ml
 	ocamlc unix.cma $< -o $@ 
-	./configure
+
+test: configure borderline
+	./configure --force --output ../configuration/zones 
+	OCAMLRUNPARAM=b ./borderline ../configuration/borderline.bl
+
+.PHONY: tests
+tests: borderline
+	for f in ../tests/*.bl; do ./borderline ../tests/$$f || exit; done
 
 clean::
 	$(RM) configure
 
 
-
 # Keep at the bottom.
-include /usr/share/ocamlmakefile/OCamlMakefile
+-include $(OCAMLMAKEFILE)
 
 
 
