@@ -17,7 +17,10 @@
 # You should have received a copy of the GNU General Public License
 # along with Borderline.  If not, see <http://www.gnu.org/licenses/>.
 
-. /etc/default/borderline
+MAIN=/etc/borderline/borderline.bl
+if [ -f /etc/default/borderline ]; then 
+    . /etc/default/borderline
+fi
 
 if [ \! -f "${MAIN}" ]; then
     echo "Invalid or not input file given: ${MAIN}"
@@ -28,6 +31,7 @@ IP6TABLES="/sbin/ip6tables"
 IP6TABLES_SAVE="/sbin/ip6tables-save"
 IP6TABLES_RESTORE="/sbin/ip6tables-restore"
 
+EGREP=/bin/egrep
 BG="/usr/local/sbin/borderline"
 ALL_DONE="false"
 ALL_OK="true"
@@ -37,9 +41,6 @@ function on_exit() {
         ${IP6TABLES_RESTORE} < ${OLD_RULES}
     fi
     rm -f ${OLD_RULES} ${NEW_RULES} ${TEMP_FILE}
-    
-    echo "On_exit called"
-
 }
 
 function on_init() {
@@ -65,22 +66,22 @@ function ip6tables () {
 
 function main() {
     on_init
-    echo "Generating Firewall form file: ${MAIN}"
+    echo "Applying firewall..."
 
-    ${BG} ${MAIN} > ${TEMP_FILE}
+    ${BG} ${MAIN} > ${TEMP_FILE} 2>&1
     if [ $? != 0 ]; then
         ALL_DONE="false"
         exit -1
     fi
-    egrep "$iptables" ${TEMP_FILE} > ${NEW_RULES} 
+    ${EGREP} '^ip6tables' ${TEMP_FILE} > ${NEW_RULES}
 
     echo "Backup old rules"
     ${IP6TABLES_SAVE} > ${OLD_RULES}
 
     echo "Apply new rules."
-    ip6tables -F
-    ip6tables -X
-    ip6tables -Z
+    ${IP6TABLES} -F
+    ${IP6TABLES} -X
+    ${IP6TABLES} -Z
 
     . ${NEW_RULES}
 
