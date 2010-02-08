@@ -25,3 +25,5 @@ define public_udp_ports = domain, ntp
 # The 'configure' program will automatically set this variable in the 
 # extgernal zone.
 #define external = <name of external zone>
+
+# Further configuration is best made in the zone files, where access to zones can be individually defined.

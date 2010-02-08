@@ -3,8 +3,8 @@ zone self {
      process filter {
          rule { 
              src zone = external; 
-             rule { destination tcp port = external_tcp_ports } policy log_allow;
-             rule { destination udp port = external_udp_ports } policy log_allow;
+             rule { destination tcp port = public_tcp_ports } policy log_allow;
+             rule { destination udp port = public_udp_ports } policy log_allow;
          } policy log_deny;
      } policy log_allow;
 }

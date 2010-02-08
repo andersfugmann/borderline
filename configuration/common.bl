@@ -1,8 +1,8 @@
 # Rules for all zones.
 define common = {
    rule { src zone = self; } policy log_allow;
-   rule { destination tcp port = common_tcp_ports; } policy log_allow;
-   rule { destination udp port =  common_udp_ports; } policy log_allow;
+   rule { destination tcp port = global_tcp_ports; } policy log_allow;
+   rule { destination udp port = global_udp_ports; } policy log_allow;
    rule { icmptype = echo-request, echo-reply } policy { log_allow; };
 }
 

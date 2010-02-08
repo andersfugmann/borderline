@@ -32,7 +32,7 @@ borderline:
 bl-configure:
 	$(MAKE) -C src configure
 	$(CP) -L src/configure bl-configure
- 
+
 /etc/default/borderline:
 	echo "MAIN=/etc/borderline/borderline.bl" > $@
 
