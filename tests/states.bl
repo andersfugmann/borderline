@@ -1,0 +1,9 @@
+# Test empty state lists
+process filter {
+        rule { 
+                rule { state != ; } policy { log "OK" };
+                rule { state = } policy { log "ERROR 1" };
+                state = ;
+                rule { } policy { log "ERROR 2" } 
+                } policy { log "ERROR 3" }  
+} policy deny
