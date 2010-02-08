@@ -49,7 +49,9 @@ let rec list2zones = function
   | [] -> []
 
 let rec process_rule table (rules, targets') =
-  (* Generate the result of a rules that does not depend on the packet. *) 
+  (* Generate the result of a rules that does not depend on the
+     packet.  If the packet must match some element in an empty list,
+     the filter can never be satisfied. *)
   let rec const_rule targets acc xs = function
       false -> Chain.create [ ] "Unreachable"
     | true -> gen_op targets acc xs  
