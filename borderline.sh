@@ -33,20 +33,21 @@ ALL_DONE="false"
 ALL_OK="true"
 
 function on_exit() {
-    rm -f ${NEW_RULES}
-
     if [ "${ALL_DONE}" != "true" ]; then
         ${IP6TABLES_RESTORE} < ${OLD_RULES}
     fi
-    rm -f ${OLD_RULES}
+    rm -f ${OLD_RULES} ${NEW_RULES} ${TEMP_FILE}
+    
+    echo "On_exit called"
+
 }
 
 function on_init() {
+    TEMP_FILE=$(mktemp)
     NEW_RULES=$(mktemp)
-    chmod 600 ${NEW_RULES}
     OLD_RULES=$(mktemp)
-    chmod 600 ${OLD_RULES}
-    trap 'on_exit' TERM KILL
+    chmod 600 ${OLD_RULES} ${NEW_RULES} ${TEMP_FILE}
+    trap 'on_exit' TERM QUIT KILL EXIT
 }
 
 function ip6tables () {
@@ -66,8 +67,12 @@ function main() {
     on_init
     echo "Generating Firewall form file: ${MAIN}"
 
-    # Should test for errors here
-    ${BG} ${MAIN} | grep "ip6tables" > ${NEW_RULES}
+    ${BG} ${MAIN} > ${TEMP_FILE}
+    if [ $? != 0 ]; then
+        ALL_DONE="false"
+        exit -1
+    fi
+    egrep "$iptables" ${TEMP_FILE} > ${NEW_RULES} 
 
     echo "Backup old rules"
     ${IP6TABLES_SAVE} > ${OLD_RULES}
@@ -83,8 +88,6 @@ function main() {
         echo "Firewall applied with no errors."
         ALL_DONE="true"
     fi
-
-    on_exit
 }
 
 case $1 in
