@@ -6,7 +6,7 @@ define link_address = true
 
 # List of ports available for all zones. 
 define common_tcp_ports = ssh
-define common_udp_ports = ssh
+define common_udp_ports = 
 
 # List of external ports (incoming connections to the firewall itself.)
 define external_tcp_ports = smtp, ssmtp, domain, imaps, www, https, ntp
