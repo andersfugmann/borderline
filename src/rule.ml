@@ -49,11 +49,19 @@ let rec list2zones = function
   | [] -> []
 
 let rec process_rule table (rules, targets') =
-  let rec gen_op targets acc = function
-      State(states, neg) :: xs -> gen_op targets ((Ir.State(states), neg) :: acc) xs
+  (* Generate the result of a rules that does not depend on the packet. *) 
+  let rec const_rule targets acc xs = function
+      false -> Chain.create [ ] "Unreachable"
+    | true -> gen_op targets acc xs  
+
+  and gen_op targets acc = function
+    | State([], neg) :: xs -> const_rule targets acc xs neg
+    | State(states, neg) :: xs -> gen_op targets ((Ir.State(states), neg) :: acc) xs
+    | Filter(dir, TcpPort([]), neg) :: xs -> const_rule targets acc xs neg
+    | Filter(dir, UdpPort([]), neg) :: xs -> const_rule targets acc xs neg
     | Filter(dir, TcpPort(ports), false) :: xs -> gen_op targets ( (Ir.Protocol([tcp]), false) :: (Ir.Ports(dir, list2ints ports), false) :: acc ) xs
     | Filter(dir, UdpPort(ports), false) :: xs-> gen_op targets ( (Ir.Protocol([udp]), false) :: (Ir.Ports(dir, list2ints ports), false) :: acc ) xs
-    | Filter(dir, TcpPort(ports), true) :: xs ->
+    | Filter(dir, TcpPort(ports), true) :: xs -> 
         let chain = gen_op targets [] xs in
         let chain = Chain.replace chain.Ir.id (([(Ir.Protocol([tcp]), false); (Ir.Ports(dir, list2ints ports), false)], Ir.Return) :: chain.Ir.rules) chain.Ir.comment in
           Chain.create [ (acc, Ir.Jump chain.Ir.id) ] "Rule"
@@ -61,22 +69,24 @@ let rec process_rule table (rules, targets') =
         let chain = gen_op targets [] xs in
         let chain = Chain.replace chain.Ir.id (([(Ir.Protocol([udp]), false); (Ir.Ports(dir, list2ints ports), false)], Ir.Return) :: chain.Ir.rules) chain.Ir.comment in
           Chain.create [ (acc, Ir.Jump chain.Ir.id) ] "Rule"
+    | Filter(dir, Address([]), neg) :: xs -> const_rule targets acc xs neg
     | Filter(dir, Address(ips), neg) :: xs -> gen_op targets ( (Ir.IpRange(dir, List.map Ipv6.to_range (list2ips ips)), neg) :: acc ) xs
+    | Filter(dir, FZone([]), neg) :: xs -> const_rule targets acc xs neg
     | Filter(dir, FZone(ids), neg) :: xs -> gen_op targets ((Ir.Zone(dir, list2zones ids), neg) :: acc) xs
-
-    | Rule(rls, tgs) :: xs ->
-        let rule_chain = gen_op tgs [] rls in
-        let cont = gen_op targets [] xs in
-        let cont = Chain.replace cont.Ir.id (([], Ir.Jump rule_chain.Ir.id) :: cont.Ir.rules) cont.Ir.comment in
-          Chain.create [ (acc, Ir.Jump cont.Ir.id) ] "Rule"
-
+    | Protocol ([], neg) :: xs -> const_rule targets acc xs neg
     | Protocol (protos, neg) :: xs -> gen_op targets ((Ir.Protocol(list2ints protos), neg) :: acc) xs
+    | IcmpType ([], neg) :: xs -> const_rule targets acc xs neg 
     | IcmpType (types, false) :: xs -> gen_op targets ( (Ir.Protocol([icmp6]), false) :: (Ir.IcmpType(list2ints types), false) :: acc) xs
     | IcmpType (types, true) :: xs ->
         let chain = gen_op targets [] xs in
         let chain = Chain.replace chain.Ir.id (([(Ir.Protocol([icmp6]), false);
                                                  (Ir.IcmpType(list2ints types), false)], Ir.Return) :: chain.Ir.rules) chain.Ir.comment in
           Chain.create [ (acc, Ir.Jump chain.Ir.id) ] "Rule"
+    | Rule(rls, tgs) :: xs ->
+        let rule_chain = gen_op tgs [] rls in
+        let cont = gen_op targets [] xs in
+        let cont = Chain.replace cont.Ir.id (([], Ir.Jump rule_chain.Ir.id) :: cont.Ir.rules) cont.Ir.comment in
+          Chain.create [ (acc, Ir.Jump cont.Ir.id) ] "Rule"
     | Reference _ :: xs -> failwith "Reference to definition not expected"
     | [] -> let tg_chain = Chain.create (List.map (fun tg -> ([], gen_policy tg)) targets) "Target" in
         Chain.create [ (acc, Ir.Jump tg_chain.Ir.id) ] "Rule"
