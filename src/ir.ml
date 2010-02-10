@@ -118,3 +118,19 @@ let compare (cond1, neg1) (cond2, neg2) =
   let res = compare (enumerate_cond cond1) (enumerate_cond cond2) in
     if res = 0 then compare neg1 neg2 else res
 
+(* Test is a rule is at all satisfiable *)
+let is_always value = function
+  | Zone (_, []), neg 
+  | State [], neg
+  | Ports (_, []), neg
+  | Protocol [], neg
+  | IcmpType [], neg -> neg = value 
+
+  | Interface _, _ 
+  | Zone _, _ 
+  | State _, _
+  | Ports _, _ 
+  | IpRange _, _
+  | Protocol _, _
+  | IcmpType _, _ 
+  | Mark _, _ -> false

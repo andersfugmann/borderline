@@ -233,10 +233,6 @@ let remove_dublicate_chains chains =
   let remap_list = Chain_map.fold (fun id chn acc -> (id, identical_chains chn chains) :: acc) chains [] in
     List.fold_left (fun acc (id, ids) -> if List.length ids > 0 then printf "D"; replace_chain_ids (id, ids) acc) chains remap_list
 
-let a = function
-    5 -> 7
-  | n -> n
-
 (* Move drops to the bottom. This allows improvement to dead code elimination, and helps reduce *)
 let rec reorder rules =
   let can_reorder (cl1, act1) (cl2, act2) =
@@ -318,6 +314,17 @@ let rec eliminate_dublicate_rules = function
   | rle :: xs -> rle :: eliminate_dublicate_rules xs
   | [] -> []
 
+(* For each rule in a chain, tests is the conditions are satisfiable. 
+   All rules which contains an unsatisfiable rule are removed (including its target)
+*)
+let remove_unsatisfiable_rules rules = 
+  let is_satisfiable conds = List.fold_left (fun acc cond -> acc && not (is_always false cond)) true conds in
+    List.filter (fun (conds, _) -> is_satisfiable conds) rules
+      
+(*   All conditions which a tautologically true are removed *)
+let remove_true_rules rules = 
+  List.map (fun (conds, target) -> (List.filter (fun cond -> not (is_always true cond)) conds, target)) rules
+  
 let rec count_rules chains =
     Chain_map.fold (fun _ chn acc -> acc + List.length chn.rules) chains 0
 
@@ -340,16 +347,19 @@ let conds chains =
 
 let optimize_pass chains =
   printf "Optim: (%d, %d) " (count_rules chains) (conds chains); flush stdout;
-  let chains' = chains in
-  let chains' = fold_return_statements chains' in
-  let chains' = remove_dublicate_chains chains' in
-  let chains' = map_chain_rules eliminate_dead_rules chains' in
-  let chains' = map_chain_rules eliminate_dublicate_rules chains' in
-  let chains' = map_chain_rules reorder chains' in
-  let chains' = reduce chains' in
-  let chains' = inline should_inline chains' in
-  let chains' = map_chain_rules (fun rls -> Common.map_filter_exceptions (fun (opers, tg) -> (merge_opers opers, tg)) rls) chains' in
-  let chains' = remove_unreferenced_chains chains' in
+  let optimize_functions = [
+    fold_return_statements;
+    remove_dublicate_chains;
+    map_chain_rules remove_unsatisfiable_rules;
+    map_chain_rules remove_true_rules;
+    map_chain_rules eliminate_dead_rules;
+    map_chain_rules eliminate_dublicate_rules;
+    map_chain_rules reorder;
+    reduce;
+    inline should_inline;
+    map_chain_rules (fun rls -> Common.map_filter_exceptions (fun (opers, tg) -> (merge_opers opers, tg)) rls);
+    remove_unreferenced_chains ] in
+  let chains' = List.fold_left (fun chains' optim_func -> optim_func chains') chains optimize_functions in
     printf " (%d, %d)\n" (count_rules chains') (conds chains');
     chains'
 

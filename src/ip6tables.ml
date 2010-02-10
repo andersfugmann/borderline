@@ -83,13 +83,24 @@ let gen_condition = function
   | Ports(direction, ports) -> "-m multiport ",
       ( "--" ^ (choose_dir "source" "destination" direction) ^ "-ports " ^ (String.concat "," (List.map string_of_int ports)) )
 
-  | Protocol(protocol) -> ("", sprintf "--protocol %d" (elem protocol))
+  | Protocol(protocols) -> ("", sprintf "--protocol %d" (elem protocols))
   | IcmpType(types) -> ("-m icmp6 ", sprintf "--icmpv6-type %d" (elem types))
   | Mark (value, mask) -> "-m mark ", sprintf "--mark 0x%04x/0x%04x" value mask
 
 let rec gen_conditions acc = function
-    (Ports _ as cond, neg) :: xs -> let pref, postf = gen_condition cond in
-      (gen_conditions acc xs) ^ pref ^ (gen_neg neg) ^ postf ^ " "
+    (Ports (_, []), true) :: xs 
+  | (State [], true) :: xs 
+  | (Zone (_, []), true) :: xs 
+  | (Protocol [], true) :: xs 
+  | (IcmpType [], true) :: xs -> gen_conditions acc xs
+  | (Ports (_, []), false) :: xs 
+  | (State [], false) :: xs 
+  | (Zone (_, []), false) :: xs 
+  | (Protocol [], false) :: xs 
+  | (IcmpType [], false) :: xs -> failwith "Unsatifiable rule in code-gen"
+  | (Ports _ as cond, neg) :: xs -> 
+      let pref, postf = gen_condition cond in
+        (gen_conditions acc xs) ^ pref ^ (gen_neg neg) ^ postf ^ " "
   | (cond, neg) :: xs ->
       let pref, postf = gen_condition cond in
         gen_conditions (pref ^ (gen_neg neg) ^ postf ^ " " ^ acc) xs
@@ -108,6 +119,7 @@ let gen_action = function
 (* To make a direct mapping to iptables rules, the IR tree needs to be
    denormalized. The transform pass does excatly this. It expands
    constructs into something trivially convertible to netfilter rules. *)
+
 let transform chains =
   (* Order of conditions. This is used when expanding the conditions,
      in order to move expanding conditions to the back *)
@@ -251,16 +263,27 @@ let emit_rules chain =
   let ops = List.map emit_rule chain.rules in
     List.map ( sprintf "ip6tables -A %s %s" chain_name ) ops
 
+let filter chains =
+  (* Filter rules must take a condition as argument, and return true
+     for rules to be kepts, and false for rules to be removed *)
+  let is_tautologically_false (conds, _) =
+      List.fold_left (fun acc cond -> acc && not (is_always false cond)) true conds 
+  in
+  let filter func chain = { id = chain.id; rules = List.filter func chain.rules; comment = chain.comment } in
+    Chain_map.map (filter is_tautologically_false) chains
+      
 let create_chain acc chain =
   match chain.id with
       Builtin(_) -> acc
     | _ -> acc @ [sprintf "ip6tables -N %s #%s" (Chain.get_chain_name chain.id) chain.comment]
 
+
+(* Main entrypoint. *)
 let emit_chains chains =
-  let chains' = transform chains in
+  let funcs = [ transform; filter ] in
+  let chains' = List.fold_left (fun acc func -> func acc) chains funcs in
     (* Create all chains, with no rules *)
     Chain_map.fold (fun id chn acc -> create_chain acc chn) chains' []
-      (* Order the rules to make sure that buildin chains are emitted last. *)
+    (* Order the rules to make sure that buildin chains are emitted last. *)
     @ List.flatten (List.rev (Chain_map.fold (fun _ chn acc -> emit_rules chn :: acc) chains' []))
-
-
+  
