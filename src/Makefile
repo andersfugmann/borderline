@@ -50,6 +50,10 @@ test: configure borderline
 	./configure --force --output ../configuration/zones 
 	OCAMLRUNPARAM=b ./borderline ../configuration/borderline.bl
 
+.PHONY: %.sig
+%.sig: %.ml
+	@ocamlc -i $<
+
 .PHONY: tests
 tests: borderline
 	for f in ../tests/*.bl; do ./borderline ../tests/$$f || exit; done
