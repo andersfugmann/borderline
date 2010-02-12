@@ -1,14 +1,12 @@
-module StringMap: Map.S
+module StringMap: Map.S with type key = string
 
-val zone_id : int ref
-val zone_map : int StringMap.t ref
 val elem : 'a list -> 'a
 val get_zone_id : StringMap.key -> int
 val gen_neg : bool -> string
 val choose_dir : string -> string -> Ir.direction -> string
 val get_state_name : Ir.statetype -> string
-val gen_zone_mask : Ir.direction -> StringMap.key * Ir.zone -> int * int
-val gen_zone_mask_str : Ir.direction -> StringMap.key * Ir.zone -> string
+val gen_zone_mask : Ir.direction -> Common.id -> int * int
+val gen_zone_mask_str : Ir.direction -> Common.id -> string
 val gen_condition : Ir.condition -> string * string
 val gen_conditions : string -> (Ir.condition * bool) list -> string
 val gen_action : Ir.action -> string

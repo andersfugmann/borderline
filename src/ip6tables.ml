@@ -33,8 +33,9 @@ module StringMap = Map.Make(String)
 let zone_id = ref 1
 let zone_map = ref StringMap.empty
 
-let elem lst =
-  assert (List.length lst = 1); List.hd lst
+let elem = function
+    x :: [] -> x
+  | xs -> failwith "One and jsut one element required in list"
 
 let get_zone_id zone =
   try

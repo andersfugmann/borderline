@@ -80,6 +80,3 @@ let emit emitter =
 
 let optimize opt  =
   chains := opt !chains
-
-let fold func acc =
-  Chain_map.fold (fun _ chn acc -> func acc chn) !chains

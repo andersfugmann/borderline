@@ -100,5 +100,5 @@ let map_filter_exceptions func list =
   in map [] list
 
 
-(* SImple identity function *)
+(* Simple identity function *)
 let identity a = a
