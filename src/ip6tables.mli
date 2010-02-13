@@ -1,7 +1,3 @@
-module StringMap: Map.S with type key = string
-
-val elem : 'a list -> 'a
-val get_zone_id : StringMap.key -> int
 val gen_neg : bool -> string
 val choose_dir : string -> string -> Ir.direction -> string
 val get_state_name : Ir.statetype -> string

@@ -26,10 +26,12 @@ type ip = ip_number * mask
 
 let eq a b = eq_big_int a b
 
-let rec get_mask_rec acc = function
-    0 -> acc
-  | n -> get_mask_rec (2 * acc + 1) (n - 1)
-let get_mask = get_mask_rec 0
+let get_mask = 
+  let rec get_mask_rec acc = function
+      0 -> acc
+    | n -> get_mask_rec (2 * acc + 1) (n - 1)
+  in
+    get_mask_rec 0
 
 let to_number ip : big_int =
   List.fold_left (fun acc num -> add_int_big_int num (mult_int_big_int 0x10000 acc)) zero_big_int ip
