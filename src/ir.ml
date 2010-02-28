@@ -48,7 +48,7 @@ type icmp_packet_type = int
 
 type ip_range = (ip_number * ip_number)
 
-type condition = Interface of direction * id
+type condition = Interface of direction * id list
                | Zone of direction * zone list
                | State of statetype list
                | Ports of direction * int list
@@ -56,6 +56,7 @@ type condition = Interface of direction * id
                | Protocol of int list
                | IcmpType of icmp_type list
                | Mark of int * int
+               | TcpFlags of int list * int list
 
 type action = Jump of chain_id
             | MarkZone of direction * zone
@@ -78,8 +79,8 @@ let eq_cond (x, n) (y, m) =
             try d = d' && List.for_all2 (fun (x, y) (x', y') -> Ipv6.eq x x' && Ipv6.eq y y') r r'
             with Invalid_argument _ -> false
           end
-      | Zone(dir, id_lst), Zone (dir', id_lst') -> dir = dir' && (List.for_all2 (fun id id' -> eq_id id id') id_lst id_lst')
-      | Interface(dir, id), Interface(dir', id') -> dir = dir' && (eq_id id id')
+      | Zone(dir, id_lst), Zone (dir', id_lst') -> dir = dir' && eq_id_list id_lst id_lst' 
+      | Interface(dir, id_lst), Interface(dir', id_lst') -> dir = dir' && eq_id_list id_lst id_lst'
       | x, y -> x = y
   )
 
@@ -100,6 +101,7 @@ let get_dir = function
   | Protocol _ -> None
   | IcmpType _ -> None
   | Mark _ -> None
+  | TcpFlags _ -> None
 
 let enumerate_cond = function
     Interface _ -> 1
@@ -109,7 +111,8 @@ let enumerate_cond = function
   | IpRange _ -> 5
   | Protocol _ -> 6
   | IcmpType _ -> 7
-  | Mark _ -> 8
+  | TcpFlags _ -> 8
+  | Mark _ -> 9
 
 let cond_type_identical cond1 cond2 =
   (enumerate_cond cond1) = (enumerate_cond cond2)
@@ -125,6 +128,8 @@ let is_always value = function
   | Ports (_, []), neg
   | Protocol [], neg
   | IcmpType [], neg -> neg = value 
+  | TcpFlags ([], x :: xs), neg -> neg = value 
+  | TcpFlags (_, []), neg -> neg != value 
 
   | Interface _, _ 
   | Zone _, _ 
@@ -133,4 +138,5 @@ let is_always value = function
   | IpRange _, _
   | Protocol _, _
   | IcmpType _, _ 
+  | TcpFlags _, _
   | Mark _, _ -> false

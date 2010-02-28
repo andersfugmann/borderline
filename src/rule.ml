@@ -73,6 +73,7 @@ let rec process_rule table (rules, targets') =
         let chain = Chain.replace chain.Ir.id (([(Ir.Protocol([icmp6]), false);
                                                  (Ir.IcmpType(list2ints types), false)], Ir.Return) :: chain.Ir.rules) chain.Ir.comment in
           Chain.create [ (acc, Ir.Jump chain.Ir.id) ] "Rule"
+    | TcpFlags((flags, mask), neg) :: xs -> gen_op targets ((Ir.TcpFlags(list2ints flags, list2ints mask), neg) :: acc) xs
     | Rule(rls, tgs) :: xs ->
         let rule_chain = gen_op tgs [] rls in
         let cont = gen_op targets [] xs in

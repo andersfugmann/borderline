@@ -17,6 +17,7 @@
 
 import "./common.bl"
 import "./configuration.bl"
+import "./validate.bl"
 import "./generic"
 import "./zones"
 
@@ -30,21 +31,9 @@ process filter {
 
              rule { state = invalid; } policy log_martian;
 
+             use validate;
              rule { 
-                 state = new; 
-                 # All bogons to and from external zones are filtered
-                 rule {
-                     use bogons; #if
-                     rule {
-                         source zone = external;
-                         source address = bogon;
-                     } policy { log_bogon };
-                     rule {
-                         destination zone = external;
-                         destination address = bogon;
-                     } policy { log_bogon };
-                 };
-
+                 state = new;
                  # Allow router information for fe80 networks, and Neighbor Discovery (rfc 2461)
                  rule { use link_address; #if
                         source zone != external;

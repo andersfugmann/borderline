@@ -1,23 +1,4 @@
-/*i
-* Copyright 2009 Anders Fugmann.
-* Distributed under the GNU General Public License v3
-*
-* This file is part of Borderline - A Firewall Generator
-  *
-  * Borderline is free software: you can redistribute it and/or modify it
-* under the terms of the GNU General Public License version 3 as
-  * published by the Free Software Foundation.
-  *
-  * Borderline is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with Borderline.  If not, see <http://www.gnu.org/licenses/>.
-i*/
 %{
-
   (* Include commonly used modules *)
 
   open Frontend
@@ -29,6 +10,7 @@ i*/
   (* Define a function to be called whenever a syntax error is
      encountered. The function prints line number along with a
      description. *)
+
   let exit_ s =    
     let pos_start = Parsing.symbol_start_pos () in
     let pos_end = Parsing.symbol_end_pos () in
@@ -45,10 +27,10 @@ i*/
 %token NETWORK INTERFACE
 %token MANGLE FILTER NAT
 %token POLICY ALLOW DENY REJECT LOG
-%token SOURCE DESTINATION ADDRESS STATE USE
+%token SOURCE DESTINATION ADDRESS STATE USE 
 %token NEW ESTABLISHED RELATED INVALID
 %token START EQ ENDL SEMI PROTOCOL
-%token TCPPORT UDPPORT ICMPTYPE
+%token TCP_PORT UDP_PORT ICMPTYPE TCPFLAGS
 %token EQ NE
 
 
@@ -110,12 +92,13 @@ process_type:
    of rules enclosed in curly braces, seperated by semicolon. */
 
 rule_stm:
-  | RULE rule_seq action                  { Rule($2, $3) }
-  | USE ID                                { Reference($2) }
-  | filter_direction filter_stm           { Filter($1, fst $2, snd $2) }
-  | STATE oper state_list                 { State($3, $2) }
-  | PROTOCOL oper data_list               { Protocol($3, $2) }
-  | ICMPTYPE oper data_list               { IcmpType($3, $2) }
+  | RULE rule_seq action                  { Rule ($2, $3) }
+  | USE ID                                { Reference ($2) }
+  | filter_direction filter_stm           { Filter ($1, fst $2, snd $2) }
+  | STATE oper state_list                 { State ($3, $2) }
+  | PROTOCOL oper data_list               { Protocol ($3, $2) }
+  | ICMPTYPE oper data_list               { IcmpType ($3, $2) }
+  | TCPFLAGS oper data_list SLASH data_list { TcpFlags (($3, $5), $2) }
 ;
 
 rule_stms:
@@ -171,10 +154,10 @@ filter_direction:
 ;
 
 filter_stm:
-  | TCPPORT oper data_list                { (TcpPort($3), $2) }
-  | UDPPORT oper data_list                { (UdpPort($3), $2) }
-  | ADDRESS oper data_list                { (Address($3), $2) }
-  | ZONE oper data_list                   { (FZone($3), $2) }
+  | TCP_PORT oper data_list               { (TcpPort $3, $2) }
+  | UDP_PORT oper data_list               { (UdpPort $3, $2) }
+  | ADDRESS oper data_list                { (Address $3, $2) }
+  | ZONE oper data_list                   { (FZone $3, $2) }
   | error                                 { exit_ "Expected filter" }
 ;
 
@@ -208,7 +191,7 @@ data_list:
 
 data:
   | INT                                   { let n, pos = $1 in Number (n, pos) }
-  | ID                                    { Id ($1) }
+  | ID                                    { Id $1 }
   | IPv6                                  { let i, p, pos = $1 in Ip ((Ipv6.to_number i, p), pos) }
 ;
 

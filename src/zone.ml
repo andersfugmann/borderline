@@ -58,7 +58,7 @@ let create_zone_chain direction (id, nodes) =
     ([(Ir.IpRange(direction, [ Ipv6.to_range ip ] ), false)], Ir.Jump chain.Ir.id)
   in
   let create_interface_rule chain interface =
-    ([(Ir.Interface(direction, interface), false)], Ir.Jump chain.Ir.id)
+    ([(Ir.Interface(direction, [interface]), false)], Ir.Jump chain.Ir.id)
   in
   let chain = Chain.create [([], Ir.MarkZone(direction, id))] ("Mark zone " ^ (id2str id)) in
   let network_nodes = filter_network nodes in

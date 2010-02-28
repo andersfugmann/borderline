@@ -1,21 +1,4 @@
-(*i
- * Copyright 2009 Anders Fugmann.
- * Distributed under the GNU General Public License v3
- *
- * This file is part of Borderline - A Firewall Generator
- *
- * Borerline is free software: you can redistribute it and/or modify it
- * under the terms of the GNU General Public License version 3 as
- * published by the Free Software Foundation.
- *
- * Borderline is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with Borderline.  If not, see <http://www.gnu.org/licenses/>.
-i*)
+(* Function for validating the AST *)
 
 open Common
 open Frontend_types
@@ -139,6 +122,7 @@ let expand nodes =
       | IcmpType (types, pol) -> IcmpType (expand_int_list seen types, pol)
       | State _ as state -> state
       | Rule (rls, pols) -> Rule (expand_rule_list seen rls, expand_policy_list seen pols)
+      | TcpFlags ((flags, mask), pol) -> TcpFlags ((expand_int_list seen flags, expand_int_list seen mask), pol) 
     in
       match rules with
           Reference id :: xs -> (expand_rule_list (mark_seen id seen) (expand_rules id)) @ (expand_rule_list seen xs)

@@ -56,46 +56,43 @@ let merge_opers rle =
   let is_sibling (a, _) (b, _) =
     (cond_type_identical a b) && (get_dir a = get_dir b)
   in
-  let test = function
-      (x :: xs, _) as res -> res
-    | ([], _) -> raise MergeImpossible
-  in
   let merge_list (s, neg) (s', neg') =
     match neg, neg' with
-        (true, true) | (false, false) -> test (intersection (=) s s', neg)
-      | (false, true) -> test (difference (=) s s', false)
-      | (true, false) -> test (difference (=) s' s, false)
+        (false, false) -> (intersection (=) s s', false)
+      | (true, true) -> (union (=) s s', true)
+      | (false, true) -> (difference (=) s s', false)
+      | (true, false) -> (difference (=) s' s, false)
   in
-  let merge_elem (i, neg) (i', neg') =
-    let (i'', neg'') = merge_list ([i], neg) ([i'], neg') in
-      (List.hd i'', neg'')
-  in
-  let rec merge_oper = function
-      (Interface (dir, i), neg), (Interface (dir', i'), neg') when dir = dir' ->
-        let (i'', neg'') = merge_elem (i, neg) (i', neg') in [(Interface (dir, i''), neg'')]
-    | (State s, neg), (State s', neg') ->
-        let (s'', neg'') = merge_list (s, neg) (s', neg') in [(State s'', neg'')]
-    | (Ports (dir, ports), neg), (Ports (dir', ports'), neg') when dir = dir' ->
-        let (ports'', neg'') = merge_list (ports, neg) (ports', neg') in [(Ports (dir, ports''), neg'')]
-    | (Protocol proto, neg), (Protocol proto', neg') ->
-        let (proto'', neg'') = merge_list (proto, neg) (proto', neg') in [(Protocol (proto''), neg'')]
-    | ((IpRange (dir, ips), true) as a), ((IpRange (dir', ips'), false) as b) when dir = dir' ->
-        printf "X\n"; flush stdout; merge_oper (b,a)
-    | (IpRange (dir, ips), false), (IpRange (dir', ips'), true) when dir = dir' ->
-        [ (IpRange (dir, Ipv6.list_difference ips ips'), false) ]
-    | (IpRange (dir, ips), neg), (IpRange (dir', ips'), neg') when dir = dir' && neg = neg' ->
-        [ (IpRange (dir, Ipv6.list_intersection ips ips'), neg) ]
-    | (Zone (dir, zones), neg), (Zone (dir', zones'), neg') when dir = dir' ->
-        let (zones'', neg'') = merge_list (zones, neg) (zones', neg') in [(Zone (dir, zones''), neg'')]
-    | _, _ -> raise MergeImpossible
+  let rec merge_oper a b = 
+    print_string "M";
+    match a, b with       
+        (Interface (dir, il), neg), (Interface (dir', il'), neg') when dir = dir' ->
+          let (il'', neg'') = merge_list (il, neg) (il', neg') in (Interface (dir, il''), neg'')
+      | (State s, neg), (State s', neg') ->
+          let (s'', neg'') = merge_list (s, neg) (s', neg') in (State s'', neg'')
+      | (Ports (dir, ports), neg), (Ports (dir', ports'), neg') when dir = dir' ->
+          let (ports'', neg'') = merge_list (ports, neg) (ports', neg') in (Ports (dir, ports''), neg'')
+      | (Protocol proto, neg), (Protocol proto', neg') ->
+          let (proto'', neg'') = merge_list (proto, neg) (proto', neg') in (Protocol (proto''), neg'')
+      | (IcmpType types, neg), (IcmpType types', neg') -> 
+          let (types'', neg'') = merge_list (types, neg) (types', neg') in (IcmpType types'', neg'')          
+      | ((IpRange (dir, ips), true) as a), ((IpRange (dir', ips'), false) as b) when dir = dir' ->
+          merge_oper b a
+      | (IpRange (dir, ips), false), (IpRange (dir', ips'), true) when dir = dir' ->
+          (IpRange (dir, Ipv6.list_difference ips ips'), false)
+      | (IpRange (dir, ips), neg), (IpRange (dir', ips'), neg') when dir = dir' && neg = neg' ->
+          (IpRange (dir, Ipv6.list_intersection ips ips'), neg)
+      | (Zone (dir, zones), neg), (Zone (dir', zones'), neg') when dir = dir' ->
+          let (zones'', neg'') = merge_list (zones, neg) (zones', neg') in (Zone (dir, zones''), neg'')
+      | (cond, _), (cond', _) -> failwith ("is_sibling failed: " ^ string_of_int (enumerate_cond cond) ^ ", " ^ string_of_int (enumerate_cond cond')) 
 
   in
   let rec merge_siblings acc = function
-      x :: xs -> let acc' = List.flatten ( List.map ( fun sib -> merge_oper (sib, x) ) acc ) in
-                 merge_siblings acc' xs
+      x :: xs -> let siblings, rest = List.partition (is_sibling x) xs in
+        merge_siblings ( (List.fold_left merge_oper x siblings) :: acc ) rest 
     | [] -> acc
-  in
-    List.sort Ir.compare (List.flatten (List.map (fun lst -> merge_siblings [List.hd lst] (List.tl lst)) (group is_sibling [] rle)))
+  in 
+    merge_siblings [] rle
 
 let reduce chains =
   (* Find the build-in chains *)

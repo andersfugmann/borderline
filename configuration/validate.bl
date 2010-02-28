@@ -1,0 +1,21 @@
+define validate =
+       rule { 
+            rule {
+                 state = new;
+                 rule {
+                     tcpflags != SYN / SYN,ACK,FIN,RST
+                 } policy { log_invalid };
+ 
+                 rule {
+                     use bogons; #if
+                     rule {
+                         source zone = external;
+                         source address = bogon;
+                     } policy { log_bogon };
+                     rule {
+                         destination zone = external;
+                         destination address = bogon;
+                     } policy { log_bogon };
+                 };
+            };
+      }

@@ -1,21 +1,4 @@
-(*
- * Copyright 2009 Anders Fugmann.
- * Distributed under the GNU General Public License v3
- *
- * This file is part of Borderline - A Firewall Generator
- *
- * Borderline is free software: you can redistribute it and/or modify it
- * under the terms of the GNU General Public License version 3 as
- * published by the Free Software Foundation.
- *
- * Borderline is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with Borderline.  If not, see <http://www.gnu.org/licenses/>.
- *)
+(* Geneal functions *)
 
 open Printf
 
@@ -26,6 +9,11 @@ exception ParseError of (string * id) list
 let tcp = 6
 let udp = 17
 let icmp6 = 58
+
+let rec join sep = function
+    x :: [] -> x
+  | x :: xs -> x ^ sep ^ (join sep xs) 
+  | [] -> "" 
 
 let error2string errors =
   let err2str (err, (id, pos)) = sprintf "File \"%s\", line %d: Error. %s '%s'" pos.Lexing.pos_fname pos.Lexing.pos_lnum err id
@@ -52,6 +40,9 @@ let eq_id (a, _) (b, _) = a = b
 let idset_from_list lst =
   List.fold_left (fun acc id -> Id_set.add id acc) Id_set.empty lst
 
+let eq_id_list lst lst' = 
+  Id_set.equal (idset_from_list lst) (idset_from_list lst')
+
 let combinations a b =
   List.flatten (List.map (fun x -> List.map (fun y -> (x, y)) b) a)
 
@@ -63,6 +54,9 @@ let difference eq_oper a b =
 
 let intersection eq_oper a b =
   List.filter ( fun x -> member eq_oper x b ) a
+
+let union eq_oper a b = 
+  a @ (difference eq_oper b a)
 
 (* Determine if a is a true subset of b *)
 let is_subset eq_oper a b =

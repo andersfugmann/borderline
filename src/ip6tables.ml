@@ -69,6 +69,20 @@ let gen_zone_mask dir zone =
 let gen_zone_mask_str dir zone =
   let id, mask = gen_zone_mask dir zone in sprintf "0x%04x/0x%04x" id mask
 
+let tcp_flags flags = 
+  let val2str = function
+      1 -> "SYN"
+    | 2 -> "ACK"
+    | 3 -> "FIN"
+    | 4 -> "RST" 
+    | 5 -> "URG" 
+    | 6 -> "PSH"
+    | flag -> failwith "Unknown tcp flag: " ^ (string_of_int flag)
+  in
+    match flags with
+        [] -> "NONE"
+      | xs -> Common.join "," (List.map val2str xs)
+
 (* Return a prefix and condition, between which a negation can be inserted *)
 let gen_condition = function
     IpRange(direction, ips) ->
@@ -78,7 +92,7 @@ let gen_condition = function
             Some(ip, mask) -> "", sprintf "--%s %s/%d" (choose_dir "source" "destination" direction) (Ipv6.to_string ip) mask
           | None -> "-m iprange ", sprintf "--%s-range %s-%s" (choose_dir "src" "dst" direction) (Ipv6.to_string low) (Ipv6.to_string high)
       end
-  | Interface(direction, name) -> ("", (choose_dir "--in-interface " "--out-interface " direction) ^ (id2str name))
+  | Interface(direction, iface_list) -> ("", (choose_dir "--in-interface " "--out-interface " direction) ^ (id2str (elem iface_list)))
   | State(states) -> "-m conntrack ", ("--ctstate " ^ ( String.concat "," (List.map get_state_name states)))
   | Zone(dir, id_lst) -> "-m mark ", "--mark " ^ (gen_zone_mask_str dir (elem id_lst))
   | Ports(direction, ports) -> "-m multiport ",
@@ -87,6 +101,7 @@ let gen_condition = function
   | Protocol(protocols) -> ("", sprintf "--protocol %d" (elem protocols))
   | IcmpType(types) -> ("-m icmp6 ", sprintf "--icmpv6-type %d" (elem types))
   | Mark (value, mask) -> "-m mark ", sprintf "--mark 0x%04x/0x%04x" value mask
+  | TcpFlags (flags, mask) -> "-m tcp ", sprintf "--tcp-flags " ^ (tcp_flags mask) ^ " " ^ (tcp_flags flags)
 
 let rec gen_conditions acc = function
     (Ports (_, []), true) :: xs 
@@ -134,6 +149,7 @@ let transform chains =
       | Protocol protocols -> List.length protocols
       | IcmpType types -> List.length types
       | Mark _ -> 2
+      | TcpFlags _ -> 2
     in
       (* Reverse the order given above, by making the value negative *)
       -(Pervasives.compare (value a) (value b))
