@@ -84,6 +84,8 @@ let eq_cond (x, n) (y, m) =
       | x, y -> x = y
   )
 
+let eq_conds a b = List.length a == List.length b && List.for_all2 (fun c1 c2 -> eq_cond c1 c2) a b
+
 let eq_oper (conds, action) (conds', action') =
   try action = action' && (List.for_all2 (fun c1 c2 -> eq_cond c1 c2) conds conds')
   with Invalid_argument _ -> false

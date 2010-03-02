@@ -26,3 +26,4 @@ val group : ('a -> 'a -> bool) -> 'a list list -> 'a list -> 'a list list
 val uniq : ('a -> 'a -> bool) -> 'a list -> 'a list list
 val map_filter_exceptions : ('a -> 'a) -> 'a list -> 'a list
 val identity : 'a -> 'a
+val keys : 'a Id_map.t -> Id_map.key list

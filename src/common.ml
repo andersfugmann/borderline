@@ -96,3 +96,6 @@ let map_filter_exceptions func list =
 
 (* Simple identity function *)
 let identity a = a
+
+let keys map =
+ Id_map.fold (fun key _ acc -> key :: acc) map [] 
