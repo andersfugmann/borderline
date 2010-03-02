@@ -324,7 +324,7 @@ let optimize_pass chains =
     map_chain_rules eliminate_dublicate_rules;
     map_chain_rules reorder;
     reduce;
-    (* reduce_rev;  *)
+    reduce_rev; 
     inline should_inline;
     map_chain_rules (fun rls -> Common.map_filter_exceptions (fun (opers, tg) -> (merge_opers opers, tg)) rls);
     remove_unreferenced_chains ] in
