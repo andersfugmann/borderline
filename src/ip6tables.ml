@@ -95,9 +95,10 @@ let gen_condition = function
   | Interface(direction, iface_list) -> ("", (choose_dir "--in-interface " "--out-interface " direction) ^ (id2str (elem iface_list)))
   | State(states) -> "-m conntrack ", ("--ctstate " ^ ( String.concat "," (List.map get_state_name states)))
   | Zone(dir, id_lst) -> "-m mark ", "--mark " ^ (gen_zone_mask_str dir (elem id_lst))
+  | Ports(direction, port :: []) -> "",
+      ( "--" ^ (choose_dir "source" "destination" direction) ^ "-port " ^ (string_of_int port))
   | Ports(direction, ports) -> "-m multiport ",
       ( "--" ^ (choose_dir "source" "destination" direction) ^ "-ports " ^ (String.concat "," (List.map string_of_int ports)) )
-
   | Protocol(protocols) -> ("", sprintf "--protocol %d" (elem protocols))
   | IcmpType(types) -> ("-m icmp6 ", sprintf "--icmpv6-type %d" (elem types))
   | Mark (value, mask) -> "-m mark ", sprintf "--mark 0x%04x/0x%04x" value mask

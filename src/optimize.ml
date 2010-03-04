@@ -104,60 +104,74 @@ let is_subset a b =
     
 (* Reduce rules. Walk the tree (forward and backwards) and eliminate unreachable rules. *)
 let reduce chains =
-
+  let false_rule = ([State [], false], Notrack) in
   let is_terminal = function
     | Jump _ | MarkZone _ | Notrack | Log _ -> false
     | Accept | Drop | Reject _ | Return -> true
   in
   let chains = ref chains in
-  let rec reduce_chain cond chain_id =
+  let rec reduce_chain func chain_id =
     let chn = Chain_map.find chain_id !chains in
-    let rls = reduce_rules cond chn.rules in
+    let rls = func chn.rules in
       chains := Chain_map.add chn.id { id = chn.id; rules = rls; comment = chn.comment } !chains;
-  and reduce_rules cond = function
+
+  and reduce_rules (cond, target) = function
       (cond', _) :: xs when is_subset cond' cond -> 
-        print_string "E"; reduce_rules cond xs
-    | (cond', target) as rle :: xs when is_terminal target -> 
-        let rls = reduce_rules cond xs in
-          rle :: reduce_rules cond' rls
+        print_string "E"; reduce_rules (cond, target) xs
+    | (cond', target') as rle :: xs when is_terminal target' -> 
+        let rls = reduce_rules (cond, target) xs in
+          rle :: reduce_rules (cond', target') rls
     | (cond', Jump chain_id) as rle :: xs when chain_reference_count chain_id !chains = 1 ->
-        reduce_chain cond chain_id;
-        rle :: reduce_rules cond xs
-    | rle :: xs -> rle :: reduce_rules cond xs
+        reduce_chain (reduce_rules (cond, target)) chain_id;
+        rle :: reduce_rules (cond, target) xs
+    | rle :: xs -> rle :: reduce_rules (cond,target) xs
     | [] -> []
-  in
+        
+      
+  and reduce_rules_rev (cond, target) = function
+      (cond', target') :: xs when target = target' && is_subset cond' cond -> 
+        print_string "F"; reduce_rules_rev (cond, target) xs 
+    | (cond', target') as rle :: xs when target = target' -> 
+        let rls = reduce_rules_rev (cond, target) xs in rle :: reduce_rules_rev rle rls
+    | (cond', Jump chain_id) as rle :: xs -> 
+        reduce_chain (reduce_rules_reverse rle) chain_id;
+        rle :: reduce_rules_rev false_rule xs         
+    | (cond', Return) as rle :: xs -> rle :: reduce_rules_rev false_rule xs 
+    | (cond', target) as rle :: xs when is_terminal target -> rle :: reduce_rules_rev rle xs
+    | rle :: xs -> rle :: reduce_rules_rev false_rule xs 
+    | [] -> []
+  and reduce_rules_reverse (cond, target) rules = 
+    List.rev (reduce_rules_rev (cond, target) (List.rev rules))
+
+  and reduce_jump rules = 
+    (* Get the first terminal rules from a chain *)    
+    let rec find_terminal_rules = function 
+        (cond, target) :: (cond', target') :: xs when is_terminal target && target = target' -> 
+          let (conds, _) = find_terminal_rules ((cond', target') :: xs) in (cond :: conds, target)
+      | (cond, target) :: xs when is_terminal target -> ([cond], target)
+      | _ -> ([], Notrack)
+    in
+      match rules with
+          (cond', Jump chain_id) as rle :: xs -> 
+            let (conds, target) = find_terminal_rules (Chain_map.find chain_id !chains).rules in
+            if true then 
+              rle :: reduce_jump xs
+            else 
+              begin match target with
+                  Return -> reduce_jump xs
+                | _ -> (cond', target) :: reduce_jump xs
+              end
+        | rle :: xs -> rle :: reduce_jump xs
+        | [] -> []
+  in            
+
   let keys = Chain_map.fold (fun key _ acc -> key :: acc) !chains [] in
-    List.iter (reduce_chain [State [], false] ) keys; 
+    List.iter (reduce_chain (reduce_rules false_rule)) keys; 
+    List.iter (reduce_chain (reduce_rules_reverse false_rule)) keys; 
+    List.iter (reduce_chain reduce_jump) keys; 
     !chains
 
-(* Reduce rules backward. *)
-let reduce_rev chains = 
-  let is_terminal = function
-    | Jump _ | MarkZone _ | Notrack | Log _ | Return -> false
-    | Accept | Drop | Reject _ -> true
-  in
-  let false_cond = ([State [], false], Notrack) in
-  let chains = ref chains in
-    
-  let rec reduce_chain rle chain_id =
-    let chn = Chain_map.find chain_id !chains in
-    let rls = List.rev (reduce_rules rle (List.rev chn.rules)) in
-      chains := Chain_map.add chn.id { id = chn.id; rules = rls; comment = chn.comment } !chains;
-  (* Given the next rule, see if the previous can be removed. *)
-  and reduce_rules (cond, target) = function
-      (cond', target') as rle :: xs when target = target' && is_subset cond' cond -> 
-        print_string "F"; reduce_rules (cond, target) xs 
-    | (cond', target') as rle :: xs when target = target' -> 
-        let rls = reduce_rules (cond, target) xs in rle :: reduce_rules rle rls
-    | (cond', Jump chain_id) as rle :: xs -> reduce_chain rle chain_id;
-        rle :: reduce_rules ([State [], false], Notrack) xs         
-    | (cond', target) as rle :: xs when is_terminal target -> rle :: reduce_rules rle xs
-    | rle :: xs -> rle :: reduce_rules false_cond xs 
-    | [] -> []
-  in
-  let keys = Chain_map.fold (fun key _ acc -> key :: acc) !chains [] in
-    List.iter (reduce_chain false_cond) keys; 
-    !chains
+
 
 (* Create a function to remove inline chains where:
    A -> Jump x
@@ -324,7 +338,6 @@ let optimize_pass chains =
     map_chain_rules eliminate_dublicate_rules;
     map_chain_rules reorder;
     reduce;
-    reduce_rev; 
     inline should_inline;
     map_chain_rules (fun rls -> Common.map_filter_exceptions (fun (opers, tg) -> (merge_opers opers, tg)) rls);
     remove_unreferenced_chains ] in
