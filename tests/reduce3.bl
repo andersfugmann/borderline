@@ -1,0 +1,16 @@
+process filter {
+        rule {
+                destination tcp port = 5;
+                rule { 
+                       destination tcp port = 5; 
+                       rule { 
+                            rule { } policy { log "OK 1" };
+                            rule { } policy { log "OK 2" };
+                            rule { } policy { log "OK 3" };
+                       } policy { deny };
+                } policy { log "ERROR 1" };    
+                rule { 
+                       destination tcp port = 5; 
+                } policy { log "ERROR 1" };
+        }
+} policy deny

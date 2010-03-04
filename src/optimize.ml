@@ -141,7 +141,7 @@ let reduce chains =
     | (cond', target') as rle :: xs when target = target' -> 
         let rls = reduce_rules_rev (cond, target) xs in rle :: reduce_rules_rev rle rls
     | (cond', Jump chain_id) as rle :: xs -> 
-        reduce_chain (reduce_rules_reverse rle) chain_id;
+        reduce_chain (reduce_rules_reverse (cond, target)) chain_id;
         rle :: reduce_rules_rev false_rule xs         
     | (cond', Return) as rle :: xs -> rle :: reduce_rules_rev false_rule xs 
     | (cond', target) as rle :: xs when is_terminal target -> rle :: reduce_rules_rev rle xs
@@ -150,28 +150,6 @@ let reduce chains =
 
   and reduce_rules_reverse (cond, target) rules = 
     List.rev (reduce_rules_rev (cond, target) (List.rev rules))
-
-(* Get the first terminal rules from a chain *)    
-      (*
-  and find_terminal_rules = function 
-      (cond, target) :: (cond', target') :: xs when is_terminal target && target = target' -> 
-        let (conds, _) = find_terminal_rules ((cond', target') :: xs) in (cond :: conds, target)
-    | (cond, target) :: xs when is_terminal target -> ([cond], target)
-    | _ -> ([], Notrack)
-  and reduce_jump = function
-      (cond', Jump chain_id) as rle :: xs -> begin
-        let (conds, target) = find_terminal_rules (Chain_map.find chain_id !chains).rules in
-          match List.exists (is_subset cond') conds with 
-              true -> begin
-                match target with
-                    Return -> reduce_jump xs
-                  | _ -> (cond', target) :: reduce_jump xs
-              end
-            | false -> rle :: reduce_jump xs
-      end
-    | rle :: xs -> rle :: reduce_jump xs
-    | [] -> []
-      *)
   in            
 
   let keys = Chain_map.fold (fun key _ acc -> key :: acc) !chains [] in
