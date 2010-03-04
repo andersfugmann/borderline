@@ -121,14 +121,19 @@ let reduce chains =
     let terminals = filter_until (fun (_, tg) -> tg = Return) terminal_rules in
       List.fold_left (fun rules (conds', target') -> reduce_rules ((merge_opers conds @ conds'), target') rules) rules terminals
 
+  and reduce_forward_jump = function 
+    | (cond', Jump chain_id) as rle :: xs ->
+        rle :: reduce_forward_jump (reduce_jump cond' xs chain_id) 
+    | rle :: xs -> rle :: reduce_forward_jump xs
+    | [] -> []
+
+  
   and reduce_rules (cond, target) = function
       (cond', _) :: xs when is_subset cond' cond -> 
         print_string "E"; reduce_rules (cond, target) xs
     | (cond', Jump chain_id) as rle :: xs when chain_reference_count chain_id !chains = 1 ->
         reduce_chain (reduce_rules (cond, target)) chain_id;
-        rle :: reduce_rules (cond, target) (reduce_jump cond' xs chain_id)
-    | (cond', Jump chain_id) as rle :: xs ->
-        rle :: reduce_rules (cond, target) (reduce_jump cond' xs chain_id)
+        rle :: reduce_rules (cond, target) xs
     | (cond', target') as rle :: xs when is_terminal target' -> 
         rle :: reduce_rules (cond', target') (reduce_rules (cond, target) xs)
     | rle :: xs -> rle :: reduce_rules (cond,target) xs
@@ -154,6 +159,7 @@ let reduce chains =
   let keys = Chain_map.fold (fun key _ acc -> key :: acc) !chains [] in
     List.iter (reduce_chain (reduce_rules false_rule)) keys; 
     List.iter (reduce_chain (reduce_rules_reverse false_rule)) keys; 
+    List.iter (reduce_chain reduce_forward_jump) keys; 
     !chains
     
 (* Remove all return statements, by creating new chains for each return statement *)
