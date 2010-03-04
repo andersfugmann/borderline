@@ -22,6 +22,7 @@ function execute () {
     
     if [ $? != 0 ]; then
         echo "FAIL"
+        cat ${TEST_RESULT}
         let FAILED++
         return
     fi
@@ -41,7 +42,7 @@ function execute () {
 
 for test_file in *.bl; do
     execute ${test_file}
-    
-    echo
-    echo "tests: $(( SUCCESS + FAILED)) success: ${SUCCESS} fail: ${FAILED}"
 done
+
+echo
+echo "tests: $(( SUCCESS + FAILED)) success: ${SUCCESS} fail: ${FAILED}"

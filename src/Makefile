@@ -44,10 +44,10 @@ web: borderline.ps
 
 .PHONY: configure
 configure: configure.ml
-	ocamlc unix.cma $< -o $@ 
+	ocamlc unix.cma $< -o $@
 
 test: configure borderline
-	./configure --force --output ../configuration/zones 
+	./configure --force --output ../configuration/zones
 	OCAMLRUNPARAM=b ./borderline ../configuration/borderline.bl
 
 .PHONY: %.sig
@@ -56,7 +56,7 @@ test: configure borderline
 
 .PHONY: tests
 tests: borderline
-	for f in ../tests/*.bl; do ./borderline ../tests/$$f || exit; done
+	@cd ../tests; ./test.sh
 
 clean::
 	$(RM) configure

@@ -95,11 +95,7 @@ let merge_opers rle =
 let is_satisfiable conds = 
   not (List.exists (is_always false) conds)  
 
-(* 
-   test if a only accepts a pure subset of b. 
-   Note: is_subset _ [] -> true, as the empty set matches every packet.
-*)
-let is_subset a b = 
+let is_subset a b =
   not (List.exists (fun (cond, neg) -> is_satisfiable (merge_opers ((cond, not neg) :: a))) b)
     
 (* Reduce rules. Walk the tree (forward and backwards) and eliminate unreachable rules. *)
@@ -110,24 +106,35 @@ let reduce chains =
     | Accept | Drop | Reject _ | Return -> true
   in
   let chains = ref chains in
+  let get_chain chain_id = Chain_map.find chain_id !chains in
   let rec reduce_chain func chain_id =
-    let chn = Chain_map.find chain_id !chains in
+    let chn = get_chain chain_id in
     let rls = func chn.rules in
       chains := Chain_map.add chn.id { id = chn.id; rules = rls; comment = chn.comment } !chains;
+      
+  and reduce_jump conds rules chain_id =
+    let rec filter_until pred = function
+        x :: xs when pred x -> [] 
+      | x :: xs -> x :: filter_until pred xs
+      | [] -> []
+    in
+    let terminal_rules = List.filter (fun (_, tg) -> is_terminal tg) (get_chain chain_id).rules in
+    let terminals = filter_until (fun (_, tg) -> tg = Return) terminal_rules in
+      List.fold_left (fun rules (conds', target') -> reduce_rules ((merge_opers conds @ conds'), target') rules) rules terminals
 
   and reduce_rules (cond, target) = function
       (cond', _) :: xs when is_subset cond' cond -> 
         print_string "E"; reduce_rules (cond, target) xs
-    | (cond', target') as rle :: xs when is_terminal target' -> 
-        let rls = reduce_rules (cond, target) xs in
-          rle :: reduce_rules (cond', target') rls
     | (cond', Jump chain_id) as rle :: xs when chain_reference_count chain_id !chains = 1 ->
         reduce_chain (reduce_rules (cond, target)) chain_id;
-        rle :: reduce_rules (cond, target) xs
+        rle :: reduce_rules (cond, target) (reduce_jump cond' xs chain_id)
+    | (cond', Jump chain_id) as rle :: xs ->
+        rle :: reduce_rules (cond, target) (reduce_jump cond' xs chain_id)
+    | (cond', target') as rle :: xs when is_terminal target' -> 
+        rle :: reduce_rules (cond', target') (reduce_rules (cond, target) xs)
     | rle :: xs -> rle :: reduce_rules (cond,target) xs
     | [] -> []
-        
-      
+              
   and reduce_rules_rev (cond, target) = function
       (cond', target') :: xs when target = target' && is_subset cond' cond -> 
         print_string "F"; reduce_rules_rev (cond, target) xs 
@@ -140,46 +147,37 @@ let reduce chains =
     | (cond', target) as rle :: xs when is_terminal target -> rle :: reduce_rules_rev rle xs
     | rle :: xs -> rle :: reduce_rules_rev false_rule xs 
     | [] -> []
+
   and reduce_rules_reverse (cond, target) rules = 
     List.rev (reduce_rules_rev (cond, target) (List.rev rules))
 
-  and reduce_jump rules = 
-    (* Get the first terminal rules from a chain *)    
-    let rec find_terminal_rules = function 
-        (cond, target) :: (cond', target') :: xs when is_terminal target && target = target' -> 
-          let (conds, _) = find_terminal_rules ((cond', target') :: xs) in (cond :: conds, target)
-      | (cond, target) :: xs when is_terminal target -> ([cond], target)
-      | _ -> ([], Notrack)
-    in
-      match rules with
-          (cond', Jump chain_id) as rle :: xs -> 
-            let (conds, target) = find_terminal_rules (Chain_map.find chain_id !chains).rules in
-            if true then 
-              rle :: reduce_jump xs
-            else 
-              begin match target with
-                  Return -> reduce_jump xs
-                | _ -> (cond', target) :: reduce_jump xs
+(* Get the first terminal rules from a chain *)    
+      (*
+  and find_terminal_rules = function 
+      (cond, target) :: (cond', target') :: xs when is_terminal target && target = target' -> 
+        let (conds, _) = find_terminal_rules ((cond', target') :: xs) in (cond :: conds, target)
+    | (cond, target) :: xs when is_terminal target -> ([cond], target)
+    | _ -> ([], Notrack)
+  and reduce_jump = function
+      (cond', Jump chain_id) as rle :: xs -> begin
+        let (conds, target) = find_terminal_rules (Chain_map.find chain_id !chains).rules in
+          match List.exists (is_subset cond') conds with 
+              true -> begin
+                match target with
+                    Return -> reduce_jump xs
+                  | _ -> (cond', target) :: reduce_jump xs
               end
-        | rle :: xs -> rle :: reduce_jump xs
-        | [] -> []
+            | false -> rle :: reduce_jump xs
+      end
+    | rle :: xs -> rle :: reduce_jump xs
+    | [] -> []
+      *)
   in            
 
   let keys = Chain_map.fold (fun key _ acc -> key :: acc) !chains [] in
     List.iter (reduce_chain (reduce_rules false_rule)) keys; 
     List.iter (reduce_chain (reduce_rules_reverse false_rule)) keys; 
-    List.iter (reduce_chain reduce_jump) keys; 
     !chains
-
-
-
-(* Create a function to remove inline chains where:
-   A -> Jump x
-   x: B -> Drop
-   x: C -> Drop,
-
-   where A is_subset_of B U C 
-*)
     
 (* Remove all return statements, by creating new chains for each return statement *)
 let rec fold_return_statements chains =  let rec neg = List.map (fun (x, a) -> (x, not a)) in
