@@ -62,7 +62,6 @@ let merge_opers rle =
       | (true, false) -> (difference (=) s' s, false)
   in
   let rec merge_oper a b = 
-    print_string "M";
     match a, b with       
         (Interface (dir, il), neg), (Interface (dir', il'), neg') when dir = dir' ->
           let (il'', neg'') = merge_list (il, neg) (il', neg') in (Interface (dir, il''), neg'')
@@ -136,14 +135,14 @@ let reduce chains =
     | [] -> []
               
   and reduce_rules_rev (cond, target) = function
-      (cond', target') :: xs when target = target' && is_subset cond' cond -> 
+      (cond', Return) as rle :: xs -> rle :: reduce_rules_rev false_rule xs 
+    | (cond', target') :: xs when target = target' && is_subset cond' cond -> 
         print_string "F"; reduce_rules_rev (cond, target) xs 
     | (cond', target') as rle :: xs when target = target' -> 
         let rls = reduce_rules_rev (cond, target) xs in rle :: reduce_rules_rev rle rls
     | (cond', Jump chain_id) as rle :: xs -> 
         reduce_chain (reduce_rules_reverse (cond, target)) chain_id;
         rle :: reduce_rules_rev false_rule xs         
-    | (cond', Return) as rle :: xs -> rle :: reduce_rules_rev false_rule xs 
     | (cond', target) as rle :: xs when is_terminal target -> rle :: reduce_rules_rev rle xs
     | rle :: xs -> rle :: reduce_rules_rev false_rule xs 
     | [] -> []
