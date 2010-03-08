@@ -51,8 +51,18 @@ let rec map_chain_rules_expand func chains : Ir.chain list =
     List.map (fun chn -> { id = chn.id; rules = map_rules chn.rules; comment = chn.comment } ) chains
 
 let merge_opers rle =
-  let is_sibling (a, _) (b, _) =
-    (cond_type_identical a b) && (get_dir a = get_dir b)
+  (* A bit dangerous, as the compiler wont warn when new types are added. *)
+  let is_sibling a b =
+    match (a, b) with
+        (Interface (dir, _), _), (Interface (dir', _), _) when dir = dir' -> true
+      | (State s, neg), (State s', neg') -> true
+      | (Ports (dir, _), _), (Ports (dir', _), _) when dir = dir' -> true
+      | (Protocol _, _), (Protocol _, _) -> true
+      | (IcmpType _, _), (IcmpType _, _) -> true
+      | (IpRange (dir, _), _), (IpRange (dir', _), _) when dir = dir' -> true
+      | (Zone (dir, _), _), (Zone (dir', _), _) when dir = dir' -> true
+      | (TcpFlags _, _), (TcpFlags _, _) -> false
+      | _ -> false
   in
   let merge_list (s, neg) (s', neg') =
     match neg, neg' with
@@ -61,8 +71,8 @@ let merge_opers rle =
       | (false, true) -> (difference (=) s s', false)
       | (true, false) -> (difference (=) s' s, false)
   in
-  let rec merge_oper a b = 
-    match a, b with       
+  let rec merge_oper a b =
+    match a, b with
         (Interface (dir, il), neg), (Interface (dir', il'), neg') when dir = dir' ->
           let (il'', neg'') = merge_list (il, neg) (il', neg') in (Interface (dir, il''), neg'')
       | (State s, neg), (State s', neg') ->
@@ -71,8 +81,8 @@ let merge_opers rle =
           let (ports'', neg'') = merge_list (ports, neg) (ports', neg') in (Ports (dir, ports''), neg'')
       | (Protocol proto, neg), (Protocol proto', neg') ->
           let (proto'', neg'') = merge_list (proto, neg) (proto', neg') in (Protocol (proto''), neg'')
-      | (IcmpType types, neg), (IcmpType types', neg') -> 
-          let (types'', neg'') = merge_list (types, neg) (types', neg') in (IcmpType types'', neg'')          
+      | (IcmpType types, neg), (IcmpType types', neg') ->
+          let (types'', neg'') = merge_list (types, neg) (types', neg') in (IcmpType types'', neg'')
       | ((IpRange (dir, ips), true) as a), ((IpRange (dir', ips'), false) as b) when dir = dir' ->
           merge_oper b a
       | (IpRange (dir, ips), false), (IpRange (dir', ips'), true) when dir = dir' ->
@@ -81,22 +91,22 @@ let merge_opers rle =
           (IpRange (dir, Ipv6.list_intersection ips ips'), neg)
       | (Zone (dir, zones), neg), (Zone (dir', zones'), neg') when dir = dir' ->
           let (zones'', neg'') = merge_list (zones, neg) (zones', neg') in (Zone (dir, zones''), neg'')
-      | (cond, _), (cond', _) -> failwith ("is_sibling failed: " ^ string_of_int (enumerate_cond cond) ^ ", " ^ string_of_int (enumerate_cond cond')) 
+      | (cond, _), (cond', _) -> failwith ("is_sibling failed: " ^ string_of_int (enumerate_cond cond) ^ ", " ^ string_of_int (enumerate_cond cond'))
 
   in
   let rec merge_siblings acc = function
       x :: xs -> let siblings, rest = List.partition (is_sibling x) xs in
-        merge_siblings ( (List.fold_left merge_oper x siblings) :: acc ) rest 
+        merge_siblings ( (List.fold_left merge_oper x siblings) :: acc ) rest
     | [] -> acc
-  in 
+  in
     merge_siblings [] rle
 
-let is_satisfiable conds = 
-  not (List.exists (is_always false) conds)  
+let is_satisfiable conds =
+  not (List.exists (is_always false) conds)
 
 let is_subset a b =
   not (List.exists (fun (cond, neg) -> is_satisfiable (merge_opers ((cond, not neg) :: a))) b)
-    
+
 (* Reduce rules. Walk the tree (forward and backwards) and eliminate unreachable rules. *)
 let reduce chains =
   let false_rule = ([State [], false], Notrack) in
@@ -110,10 +120,10 @@ let reduce chains =
     let chn = get_chain chain_id in
     let rls = func chn.rules in
       chains := Chain_map.add chn.id { id = chn.id; rules = rls; comment = chn.comment } !chains;
-      
+
   and reduce_jump conds rules chain_id =
     let rec filter_until pred = function
-        x :: xs when pred x -> [] 
+        x :: xs when pred x -> []
       | x :: xs -> x :: filter_until pred xs
       | [] -> []
     in
@@ -121,47 +131,47 @@ let reduce chains =
     let terminals = filter_until (fun (_, tg) -> tg = Return) terminal_rules in
       List.fold_left (fun rules (conds', target') -> reduce_rules ((merge_opers conds @ conds'), target') rules) rules terminals
 
-  and reduce_forward_jump = function 
+  and reduce_forward_jump = function
     | (cond', Jump chain_id) as rle :: xs ->
-        rle :: reduce_forward_jump (reduce_jump cond' xs chain_id) 
+        rle :: reduce_forward_jump (reduce_jump cond' xs chain_id)
     | rle :: xs -> rle :: reduce_forward_jump xs
     | [] -> []
 
-  
+
   and reduce_rules (cond, target) = function
-      (cond', _) :: xs when is_subset cond' cond -> 
+      (cond', _) :: xs when is_subset cond' cond ->
         print_string "E"; reduce_rules (cond, target) xs
     | (cond', Jump chain_id) as rle :: xs when chain_reference_count chain_id !chains = 1 ->
         reduce_chain (reduce_rules (cond, target)) chain_id;
         rle :: reduce_rules (cond, target) xs
-    | (cond', target') as rle :: xs when is_terminal target' -> 
+    | (cond', target') as rle :: xs when is_terminal target' ->
         rle :: reduce_rules (cond', target') (reduce_rules (cond, target) xs)
     | rle :: xs -> rle :: reduce_rules (cond,target) xs
     | [] -> []
-              
+
   and reduce_rules_rev (cond, target) = function
-      (cond', Return) as rle :: xs -> rle :: reduce_rules_rev false_rule xs 
-    | (cond', target') :: xs when target = target' && is_subset cond' cond -> 
-        print_string "F"; reduce_rules_rev (cond, target) xs 
-    | (cond', target') as rle :: xs when target = target' -> 
+      (cond', Return) as rle :: xs -> rle :: reduce_rules_rev false_rule xs
+    | (cond', target') :: xs when target = target' && is_subset cond' cond ->
+        print_string "F"; reduce_rules_rev (cond, target) xs
+    | (cond', target') as rle :: xs when target = target' ->
         let rls = reduce_rules_rev (cond, target) xs in rle :: reduce_rules_rev rle rls
-    | (cond', Jump chain_id) as rle :: xs -> 
+    | (cond', Jump chain_id) as rle :: xs ->
         reduce_chain (reduce_rules_reverse (cond, target)) chain_id;
-        rle :: reduce_rules_rev false_rule xs         
+        rle :: reduce_rules_rev false_rule xs
     | (cond', target) as rle :: xs when is_terminal target -> rle :: reduce_rules_rev rle xs
-    | rle :: xs -> rle :: reduce_rules_rev false_rule xs 
+    | rle :: xs -> rle :: reduce_rules_rev false_rule xs
     | [] -> []
 
-  and reduce_rules_reverse (cond, target) rules = 
+  and reduce_rules_reverse (cond, target) rules =
     List.rev (reduce_rules_rev (cond, target) (List.rev rules))
-  in            
+  in
 
   let keys = Chain_map.fold (fun key _ acc -> key :: acc) !chains [] in
-    List.iter (reduce_chain (reduce_rules false_rule)) keys; 
-    List.iter (reduce_chain (reduce_rules_reverse false_rule)) keys; 
-    List.iter (reduce_chain reduce_forward_jump) keys; 
+    List.iter (reduce_chain (reduce_rules false_rule)) keys;
+    List.iter (reduce_chain (reduce_rules_reverse false_rule)) keys;
+    List.iter (reduce_chain reduce_forward_jump) keys;
     !chains
-    
+
 (* Remove all return statements, by creating new chains for each return statement *)
 let rec fold_return_statements chains =  let rec neg = List.map (fun (x, a) -> (x, not a)) in
   let rec fold_return acc = function
@@ -278,16 +288,16 @@ let rec eliminate_dublicate_rules = function
   | rle :: xs -> rle :: eliminate_dublicate_rules xs
   | [] -> []
 
-(* For each rule in a chain, tests is the conditions are satisfiable. 
+(* For each rule in a chain, tests is the conditions are satisfiable.
    All rules which contains an unsatisfiable rule are removed (including its target)
 *)
-let remove_unsatisfiable_rules rules = 
+let remove_unsatisfiable_rules rules =
   List.filter (fun (conds, _) -> is_satisfiable conds) rules
-      
+
 (*   All conditions which a tautologically true are removed *)
-let remove_true_rules rules = 
+let remove_true_rules rules =
   List.map (fun (conds, target) -> (List.filter (fun cond -> not (is_always true cond)) conds, target)) rules
-  
+
 let rec count_rules chains =
     Chain_map.fold (fun _ chn acc -> acc + List.length chn.rules) chains 0
 

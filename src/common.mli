@@ -6,7 +6,7 @@ module Id_map : Map.S with type key = id
 
 val tcp : int
 val udp : int
-val icmp6 : int
+val icmp : int
 
 val error2string : (string * id) list -> string
 val id2str : id -> string

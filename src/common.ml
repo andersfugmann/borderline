@@ -1,4 +1,4 @@
-(* Geneal functions *)
+(* General functions *)
 
 open Printf
 
@@ -8,12 +8,12 @@ exception ParseError of (string * id) list
 
 let tcp = 6
 let udp = 17
-let icmp6 = 58
+let icmp = 58
 
 let rec join sep = function
     x :: [] -> x
-  | x :: xs -> x ^ sep ^ (join sep xs) 
-  | [] -> "" 
+  | x :: xs -> x ^ sep ^ (join sep xs)
+  | [] -> ""
 
 let error2string errors =
   let err2str (err, (id, pos)) = sprintf "File \"%s\", line %d: Error. %s '%s'" pos.Lexing.pos_fname pos.Lexing.pos_lnum err id
@@ -40,7 +40,7 @@ let eq_id (a, _) (b, _) = a = b
 let idset_from_list lst =
   List.fold_left (fun acc id -> Id_set.add id acc) Id_set.empty lst
 
-let eq_id_list lst lst' = 
+let eq_id_list lst lst' =
   Id_set.equal (idset_from_list lst) (idset_from_list lst')
 
 let combinations a b =
@@ -55,7 +55,7 @@ let difference eq_oper a b =
 let intersection eq_oper a b =
   List.filter ( fun x -> member eq_oper x b ) a
 
-let union eq_oper a b = 
+let union eq_oper a b =
   a @ (difference eq_oper b a)
 
 (* Determine if a is a true subset of b *)
@@ -98,4 +98,4 @@ let map_filter_exceptions func list =
 let identity a = a
 
 let keys map =
- Id_map.fold (fun key _ acc -> key :: acc) map [] 
+ Id_map.fold (fun key _ acc -> key :: acc) map []

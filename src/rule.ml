@@ -1,22 +1,3 @@
-(*
- * Copyright 2009 Anders Fugmann.
- * Distributed under the GNU General Public License v3
- *
- * This file is part of Borderline - A Firewall Generator
- *
- * Borderline is free software: you can redistribute it and/or modify it
- * under the terms of the GNU General Public License version 3 as
- * published by the Free Software Foundation.
- *
- * Borderline is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with Borderline.  If not, see <http://www.gnu.org/licenses/>.
- *)
-
 open Common
 open Frontend
 open Frontend_types
@@ -56,7 +37,7 @@ let rec process_rule table (rules, targets') =
     | State(states, neg) :: xs -> gen_op targets ((Ir.State(states), neg) :: acc) xs
     | Filter(dir, TcpPort(ports), false) :: xs -> gen_op targets ( (Ir.Protocol([tcp]), false) :: (Ir.Ports(dir, list2ints ports), false) :: acc ) xs
     | Filter(dir, UdpPort(ports), false) :: xs-> gen_op targets ( (Ir.Protocol([udp]), false) :: (Ir.Ports(dir, list2ints ports), false) :: acc ) xs
-    | Filter(dir, TcpPort(ports), true) :: xs -> 
+    | Filter(dir, TcpPort(ports), true) :: xs ->
         let chain = gen_op targets [] xs in
         let chain = Chain.replace chain.Ir.id (([(Ir.Protocol([tcp]), false); (Ir.Ports(dir, list2ints ports), false)], Ir.Return) :: chain.Ir.rules) chain.Ir.comment in
           Chain.create [ (acc, Ir.Jump chain.Ir.id) ] "Rule"
@@ -67,10 +48,10 @@ let rec process_rule table (rules, targets') =
     | Filter(dir, Address(ips), neg) :: xs -> gen_op targets ( (Ir.IpRange(dir, List.map Ipv6.to_range (list2ips ips)), neg) :: acc ) xs
     | Filter(dir, FZone(ids), neg) :: xs -> gen_op targets ((Ir.Zone(dir, list2zones ids), neg) :: acc) xs
     | Protocol (protos, neg) :: xs -> gen_op targets ((Ir.Protocol(list2ints protos), neg) :: acc) xs
-    | IcmpType (types, false) :: xs -> gen_op targets ( (Ir.Protocol([icmp6]), false) :: (Ir.IcmpType(list2ints types), false) :: acc) xs
+    | IcmpType (types, false) :: xs -> gen_op targets ( (Ir.Protocol([icmp]), false) :: (Ir.IcmpType(list2ints types), false) :: acc) xs
     | IcmpType (types, true) :: xs ->
         let chain = gen_op targets [] xs in
-        let chain = Chain.replace chain.Ir.id (([(Ir.Protocol([icmp6]), false);
+        let chain = Chain.replace chain.Ir.id (([(Ir.Protocol([icmp]), false);
                                                  (Ir.IcmpType(list2ints types), false)], Ir.Return) :: chain.Ir.rules) chain.Ir.comment in
           Chain.create [ (acc, Ir.Jump chain.Ir.id) ] "Rule"
     | TcpFlags((flags, mask), neg) :: xs -> gen_op targets ((Ir.TcpFlags(list2ints flags, list2ints mask), neg) :: acc) xs
