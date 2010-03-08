@@ -238,7 +238,7 @@ let transform chains =
       | [] -> -1
       | _ -> failwith "More than one protocol specifier in rule."
     in
-      fold protocol target conds'
+      fold protocol target (protocols @ conds')
 
   in
     (* Netfilter does not support the notion of zones. By marking the
