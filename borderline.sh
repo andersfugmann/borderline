@@ -1,24 +1,20 @@
 #!/bin/bash
 
-# Copyright 2009 Anders Fugmann.
-# Distributed under the GNU General Public License v3
+### BEGIN INIT INFO
+# Provides:          borderline
+# Required-Start:    $remote_fs
+# Required-Stop:     $remote_fs
+# Default-Start:     S
+# Default-Stop:      0 6
+# Short-Description: A firewall compiler
+# Description:       Generates a packet filtering firewall for iptables.
+### END INIT INFO
 #
-# This file is part of Borderline - A Firewall Generator
-#
-# Borderline is free software: you can redistribute it and/or modify it
-# under the terms of the GNU General Public License version 3 as
-# published by the Free Software Foundation.
-#
-# Borderline is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with Borderline.  If not, see <http://www.gnu.org/licenses/>.
+# chkconfig: 345 08 92
+# description: Borderline - A firewall compiler
 
 MAIN=/etc/borderline/borderline.bl
-if [ -f /etc/default/borderline ]; then 
+if [ -f /etc/default/borderline ]; then
     . /etc/default/borderline
 fi
 
@@ -30,9 +26,8 @@ fi
 IP6TABLES="/sbin/ip6tables"
 IP6TABLES_SAVE="/sbin/ip6tables-save"
 IP6TABLES_RESTORE="/sbin/ip6tables-restore"
-
-EGREP=/bin/egrep
-BG="/usr/local/sbin/borderline"
+EGREP="/bin/grep -E"
+BORDERLINE="/usr/local/sbin/borderline"
 ALL_DONE="false"
 ALL_OK="true"
 
@@ -68,7 +63,7 @@ function main() {
     on_init
     echo "Applying firewall..."
 
-    ${BG} ${MAIN} > ${TEMP_FILE} 2>&1
+    ${BORDERLINE} ${MAIN} > ${TEMP_FILE} 2>&1
     if [ $? != 0 ]; then
         ALL_DONE="false"
         exit -1
