@@ -102,6 +102,9 @@ case $1 in
         ip6tables -F
         ip6tables -X
         ip6tables -Z
+        ip6tables -P INPUT ACCEPT
+        ip6tables -P OUTPUT ACCEPT
+        ip6tables -P FORWARD ACCEPT
         ;;
     "restart")
         $0 stop
