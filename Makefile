@@ -41,10 +41,12 @@ install: borderline bl-configure autogen /etc/default/borderline
 	mkdir -p /etc/borderline /etc/borderline/zones /etc/borderline/generic
 	$(CP) borderline /usr/local/sbin/
 	$(CP) bl-configure /usr/local/sbin/
-	$(CP) borderline.sh /etc/init.d/
+	$(CP) borderline.sh /etc/init.d/borderline
 	$(CP) configuration/*.bl /etc/borderline
 	$(CP) -av configuration/zones/*.bl /etc/borderline/zones/
 	$(CP) -av configuration/generic/*.bl /etc/borderline/generic/
+
+	[ -x `which update-rc.d`  ] && update-rc.d borderline defaults
 
 clean::
 	$(RM) -f borderline bl-configure
