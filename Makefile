@@ -47,7 +47,7 @@ install: borderline bl-configure autogen /etc/default/borderline
 	$(CP) -av configuration/generic/*.bl /etc/borderline/generic/
 
 clean::
-	$(RM) -f borderline
+	$(RM) -f borderline bl-configure
 	$(RM) -fr *~
 
 clean::

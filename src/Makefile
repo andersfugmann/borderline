@@ -60,6 +60,8 @@ tests: borderline
 
 clean::
 	$(RM) configure
+	$(RM) *~
+
 
 
 # Keep at the bottom.
