@@ -73,6 +73,9 @@ function main() {
     echo "Backup old rules"
     ${IP6TABLES_SAVE} > ${OLD_RULES}
 
+    ${IP6TABLES} -P INPUT DROP
+    ${IP6TABLES} -P OUTPUT DROP
+    ${IP6TABLES} -P FORWARD DROP
     echo "Apply new rules."
     ${IP6TABLES} -F
     ${IP6TABLES} -X
@@ -94,12 +97,12 @@ case $1 in
     "stop")
         echo "Stopping borderline"
         ALL_OK="true"
-        ip6tables -F
-        ip6tables -X
-        ip6tables -Z
-        ip6tables -P INPUT ACCEPT
-        ip6tables -P OUTPUT ACCEPT
-        ip6tables -P FORWARD ACCEPT
+        ${IP6TABLES} -F
+        ${IP6TABLES} -X
+        ${IP6TABLES} -Z
+        ${IP6TABLES} -P INPUT ACCEPT
+        ${IP6TABLES} -P OUTPUT ACCEPT
+        ${IP6TABLES} -P FORWARD ACCEPT
         ;;
     "restart")
         $0 stop
