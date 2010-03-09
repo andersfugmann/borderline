@@ -1,9 +1,9 @@
-Version 0.95
-* Fix merging of rules.
-* Better optimization.
+Version 0.95 (2010-03-09)
+* Fix rule merging
+* Better optimization
 * Added .mli files for most modules
-* Factor out validation rules on rule framwork
-* Added TcpFlags for better validation on TCP packets.
+* Refactor rule framework to make packet validation easier
+* Added TcpFlags for better validation on TCP packets
 
 Version 0.9 (2010-02-08)
 * Configuration program to auto configure borderline
