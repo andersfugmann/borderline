@@ -115,12 +115,9 @@ let rec gen_conditions acc = function
   | (Zone (_, []), false) :: xs
   | (Protocol [], false) :: xs
   | (IcmpType [], false) :: xs -> failwith "Unsatifiable rule in code-gen"
-  | (Ports _ as cond, neg) :: xs ->
-      let pref, postf = gen_condition cond in
-        (gen_conditions acc xs) ^ pref ^ (gen_neg neg) ^ postf ^ " "
   | (cond, neg) :: xs ->
       let pref, postf = gen_condition cond in
-        gen_conditions (pref ^ (gen_neg neg) ^ postf ^ " " ^ acc) xs
+        gen_conditions (acc ^ pref ^ (gen_neg neg) ^ postf ^ " ") xs
   | [] -> acc
 
 let gen_action = function
