@@ -63,7 +63,7 @@ function main() {
     on_init
     echo "Applying firewall..."
 
-    ${BORDERLINE} ${MAIN} > ${TEMP_FILE} 2>&1
+    ${BORDERLINE} ${MAIN} > ${TEMP_FILE}
     if [ $? != 0 ]; then
         ALL_DONE="false"
         exit -1
