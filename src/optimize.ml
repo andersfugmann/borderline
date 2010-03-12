@@ -1,28 +1,10 @@
-(*
- * Copyright 2009 Anders Fugmann.
- * Distributed under the GNU General Public License v3
- *
- * This file is part of Borderline - A Firewall Generator
- *
- * Borderline is free software: you can redistribute it and/or modify it
- * under the terms of the GNU General Public License version 3 as
- * published by the Free Software Foundation.
- *
- * Borderline is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with Borderline.  If not, see <http://www.gnu.org/licenses/>.
- *)
-
 open Common
 open Ir
 open Printf
 open Chain
 
-let max_inline_size = 1
+(* Define the saving in conditions when inlining. *)
+let min_inline_saving = -2
 
 let rec chain_reference_count id chains =
   let count_references rules =
@@ -251,7 +233,7 @@ let rec reorder rules =
 (* Inline chains that satifies p *)
 let rec inline p chains =
   let has_target target rules =
-    List.exists (fun (c, t) -> t = target) rules
+    List.exists (fun (_, t) -> t = target) rules
   in
   let rec inline_chain chain = function
       (conds, target) :: xs when target = Jump(chain.id) ->
@@ -294,7 +276,7 @@ let rec eliminate_dublicate_rules = function
 let remove_unsatisfiable_rules rules =
   List.filter (fun (conds, _) -> is_satisfiable conds) rules
 
-(*   All conditions which a tautologically true are removed *)
+(* All conditions which a tautologically true are removed *)
 let remove_true_rules rules =
   List.map (fun (conds, target) -> (List.filter (fun cond -> not (is_always true cond)) conds, target)) rules
 
@@ -313,7 +295,7 @@ let should_inline cs c =
   let old_conds = (List.fold_left (+) 0 rule_conds) + chain_conds + List.length rule_conds + List.length c.rules in
   (* Inlined count of conditions + targets *)
   let new_conds = List.fold_left (fun acc n -> acc + n * List.length c.rules + chain_conds) 0 rule_conds + (List.length rule_conds * List.length c.rules) in
-    (new_conds - old_conds) * 100 / (old_conds) < 10
+    old_conds - new_conds > min_inline_saving
 
 let conds chains =
   Chain_map.fold (fun _ chn acc -> List.fold_left (fun acc (cl, _) -> List.length cl + acc) (acc + 1) chn.rules) chains 0
