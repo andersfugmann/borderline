@@ -29,10 +29,8 @@ process filter {
              rule { src zone = mars; } policy log_martian;
              rule { dst zone = mars; } policy log_martian;
 
-             rule { state = invalid; } policy log_martian;
-
              use validate;
-             rule { 
+             rule {
                  state = new;
                  # Allow router information for fe80 networks, and Neighbor Discovery (rfc 2461)
                  rule { use link_address; #if
@@ -47,7 +45,7 @@ process filter {
                  use common;
                  use zones;
             }
-        }   
+        }
 } policy { log_missed; }
 
 

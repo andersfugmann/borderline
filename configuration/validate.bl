@@ -1,11 +1,15 @@
 define validate =
-       rule { 
+       rule {
+            rule {
+                 state = invalid;
+            } policy { log_invalid };
             rule {
                  state = new;
                  rule {
+                     protocol = tcp;
                      tcpflags != SYN / SYN,ACK,FIN,RST
                  } policy { log_invalid };
- 
+
                  rule {
                      use bogons; #if
                      rule {
