@@ -15,7 +15,7 @@
 
 MAIN=/etc/borderline/borderline.bl
 if [ -f /etc/default/borderline ]; then
-    . /etc/default/borderline
+    source /etc/default/borderline
 fi
 
 if [ \! -f "${MAIN}" ]; then
@@ -35,14 +35,12 @@ function on_exit() {
     if [ "${ALL_DONE}" != "true" ]; then
         ${IP6TABLES_RESTORE} < ${OLD_RULES}
     fi
-    #rm -f ${OLD_RULES} ${NEW_RULES} ${TEMP_FILE}
-    rm -f ${OLD_RULES} ${TEMP_FILE}
+    rm -f ${OLD_RULES} ${NEW_RULES} ${TEMP_FILE}
 }
 
 function on_init() {
     TEMP_FILE=$(mktemp)
-    #NEW_RULES=$(mktemp)
-    NEW_RULES=/tmp/borderline.rules
+    NEW_RULES=$(mktemp)
     OLD_RULES=$(mktemp)
     chmod 600 ${OLD_RULES} ${NEW_RULES} ${TEMP_FILE}
     trap 'on_exit' TERM QUIT KILL EXIT
