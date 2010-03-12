@@ -1,3 +1,8 @@
+Version 0.96 (2010-03-12)
+* Fix bug in validation rules
+* Remove temporary files after applying the firewall
+* Optimize chain inlining heuristics
+
 Version 0.95 (2010-03-12)
 * Keep firewall secure while applying rules
 * Fix rule merging
