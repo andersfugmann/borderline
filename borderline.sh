@@ -35,12 +35,14 @@ function on_exit() {
     if [ "${ALL_DONE}" != "true" ]; then
         ${IP6TABLES_RESTORE} < ${OLD_RULES}
     fi
-    rm -f ${OLD_RULES} ${NEW_RULES} ${TEMP_FILE}
+    #rm -f ${OLD_RULES} ${NEW_RULES} ${TEMP_FILE}
+    rm -f ${OLD_RULES} ${TEMP_FILE}
 }
 
 function on_init() {
     TEMP_FILE=$(mktemp)
-    NEW_RULES=$(mktemp)
+    #NEW_RULES=$(mktemp)
+    NEW_RULES=/tmp/borderline.rules
     OLD_RULES=$(mktemp)
     chmod 600 ${OLD_RULES} ${NEW_RULES} ${TEMP_FILE}
     trap 'on_exit' TERM QUIT KILL EXIT
@@ -59,29 +61,55 @@ function ip6tables () {
     fi
 }
 
-function main() {
+function iptables () {
+    echo "This is not an ipv4 firewall"
+    ALL_OK="false"
+}
+
+function flush () {
+    ip6tables -F
+    ip6tables -X
+    ip6tables -Z
+}
+
+function set_policy () {
+    POLICY=$1
+
+    ip6tables -P INPUT ${POLICY}
+    ip6tables -P OUTPUT ${POLICY}
+    ip6tables -P FORWARD ${POLICY}
+}
+
+function apply() {
     on_init
-    echo "Applying firewall..."
+    echo "Generating firewall rules."
+
+    cat <<EOF > ${NEW_RULES}
+set_policy DROP
+flush
+ip6tables -A INPUT -j DROP
+ip6tables -A OUTPUT -j DROP
+ip6tables -A FORWARD -j DROP
+EOF
 
     ${BORDERLINE} ${MAIN} > ${TEMP_FILE}
     if [ $? != 0 ]; then
         ALL_DONE="false"
         exit -1
     fi
-    ${EGREP} '^ip6tables' ${TEMP_FILE} > ${NEW_RULES}
+    ${EGREP} '^ip6tables' ${TEMP_FILE} >> ${NEW_RULES}
+
+    cat <<EOF >> ${NEW_RULES}
+ip6tables -D INPUT 1
+ip6tables -D OUTPUT 1
+ip6tables -D FORWARD 1
+EOF
 
     echo "Backup old rules"
     ${IP6TABLES_SAVE} > ${OLD_RULES}
 
-    ${IP6TABLES} -P INPUT DROP
-    ${IP6TABLES} -P OUTPUT DROP
-    ${IP6TABLES} -P FORWARD DROP
     echo "Apply new rules."
-    ${IP6TABLES} -F
-    ${IP6TABLES} -X
-    ${IP6TABLES} -Z
-
-    . ${NEW_RULES}
+    source ${NEW_RULES}
 
     if [ "${ALL_OK}" = "true" ]; then
         echo "Firewall applied with no errors."
@@ -92,22 +120,21 @@ function main() {
 case $1 in
     "start")
         echo "Starting borderline"
-        main
+        apply
         ;;
     "stop")
         echo "Stopping borderline"
-        ALL_OK="true"
-        ${IP6TABLES} -F
-        ${IP6TABLES} -X
-        ${IP6TABLES} -Z
-        ${IP6TABLES} -P INPUT ACCEPT
-        ${IP6TABLES} -P OUTPUT ACCEPT
-        ${IP6TABLES} -P FORWARD ACCEPT
+        flush
+        set_policy ACCEPT
         ;;
     "restart")
-        $0 stop
         $0 start
         ;;
+    "panic")
+        echo "Closing network access"
+        flush
+        set_policy DROP
+        ;;
     *)
-        echo "Use $0 <start|stop|restart>"
+        echo "Use $0 <start|stop|restart|panic>"
 esac
