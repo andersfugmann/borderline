@@ -1,0 +1,35 @@
+
+# /
+/borderline
+/bl-configure
+
+# /configuration/
+/configuration/borderline.out
+/configuration/borderline.sh
+
+# /configuration/generic/
+/configuration/generic/bogon.bl
+/configuration/generic/services.bl
+/configuration/generic/protocols.bl
+
+# /src/
+/src/*.cmi
+/src/*.cmo
+/src/*.cmx
+/src/borderline
+/src/borderline-*
+/src/borderline.ps
+/src/parser.mli
+/src/parser.ml
+/src/lexer.ml
+/src/._d
+/src/doc
+/src/._bcdi
+/src/._ncdi
+/src/configure
+
+# /tests/
+/tests/*.res
+
+# /www/
+/www/borderline_logo.png
