@@ -47,7 +47,7 @@ done
 
 echo
 echo "tests: $(( SUCCESS + FAILED )) success: ${SUCCESS} fail: ${FAILED}"
-if (( FAILED == 0 )); then 
+if (( FAILED != 0 )); then 
     exit 1
 else
     exit 0

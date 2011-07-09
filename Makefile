@@ -17,7 +17,7 @@
 
 CP=cp
 
-.PHONY: autogen install
+.PHONY: autogen install tests
 
 default: borderline autogen bl-configure
 	@echo "Now do a 'sudo make install'"
@@ -49,9 +49,10 @@ install: borderline bl-configure autogen /etc/default/borderline
 	[ -x `which update-rc.d`  ] && update-rc.d borderline defaults
 
 clean::
+	$(MAKE) -C configuration clean
+	$(MAKE) -C src clean
 	$(RM) -f borderline bl-configure
 	$(RM) -fr *~
 
-clean::
-	$(MAKE) -C configuration clean
-	$(MAKE) -C src clean
+tests:
+	cd tests; ./test.sh
