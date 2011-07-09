@@ -67,7 +67,7 @@ let expand nodes =
   in
   let expand_list id =
     try begin match Id_map.find id defines with
-        DefineList (id', x) -> x
+        DefineList (_id', x) -> x
       | _ -> raise (ParseError [("Reference to Id of wrong type", id)])
     end with
         _ -> raise (ParseError [("Reference to unknown id", id)])
@@ -77,7 +77,7 @@ let expand nodes =
 
         (* As before; allow simple defines work as aliases. *)
         DefineList (_, [ Id id ]) -> [ Ref id ]
-      | DefinePolicy (id', x) -> x
+      | DefinePolicy (_id', x) -> x
       | _ -> raise (ParseError [("Reference to Id of wrong type", id)])
     end with
         _ -> raise (ParseError [("Reference to unknown id", id)])

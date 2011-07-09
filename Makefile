@@ -19,6 +19,32 @@ CP=cp
 
 .PHONY: autogen install tests
 
+default: $(BINARIES)
+
+PACKAGES = unix str num
+BUILD_DIR = _build
+DIST_DIR = bin
+DOC_DIR = doc
+OPTIMIZED = true
+OCFLAGS = -thread -w +A -annot -g
+INCLUDE = src
+
+SOURCES = $(wildcard src/*.ml src/*.mli src/*.mll src/*.mly) 
+
+BINARIES = src/borderline \
+	   src/configure
+
+OCAMLRUNPARAM=b
+export OCAMLRUNPARAM=b
+
+default: install
+
+test: configure borderline
+	./configure --force --output ../configuration/zones
+	./borderline ../configuration/borderline.bl
+
+include makefile.mk
+
 default: borderline autogen bl-configure
 	@echo "Now do a 'sudo make install'"
 
@@ -36,7 +62,7 @@ bl-configure:
 /etc/default/borderline:
 	echo "MAIN=/etc/borderline/borderline.bl" > $@
 
-install: borderline bl-configure autogen /etc/default/borderline
+deploy: borderline bl-configure autogen /etc/default/borderline
 
 	mkdir -p /etc/borderline /etc/borderline/zones /etc/borderline/generic
 	$(CP) borderline /usr/local/sbin/
@@ -48,11 +74,10 @@ install: borderline bl-configure autogen /etc/default/borderline
 
 	[ -x `which update-rc.d`  ] && update-rc.d borderline defaults
 
-clean::
-	$(MAKE) -C configuration clean
-	$(MAKE) -C src clean
-	$(RM) -f borderline bl-configure
-	$(RM) -fr *~
+#clean::
+	#$(MAKE) -C configuration clean
+	#$(RM) -f borderline bl-configure
+	#$(RM) -fr *~
 
 tests:
 	cd tests; ./test.sh

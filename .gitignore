@@ -1,4 +1,6 @@
 bl-configure
 borderline
 *~
+bin
+_build
 

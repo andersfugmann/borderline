@@ -1,27 +1,4 @@
-(*
- * Copyright 2009 Anders Fugmann.
- * Distributed under the GNU General Public License v3
- *
- * This file is part of Borderline - A Firewall Generator
- *
- * Borderline is free software: you can redistribute it and/or modify it
- * under the terms of the GNU General Public License version 3 as
- * published by the Free Software Foundation.
- *
- * Borderline is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with Borderline.  If not, see <http://www.gnu.org/licenses/>.
- *)
-
-(* File containing intermidiate types and representation *)
-(* These command can be translated into real code by the backend *)
-
-(* The current IR can only hold rules valid for the filter table - Not Mangle or Nat. *)
-
+(** Intermidiate representation. *)
 open Common
 open Ipv6
 
@@ -71,6 +48,7 @@ type oper = (condition * bool) list * action
 
 type chain = { id: chain_id; rules : oper list; comment: string; }
 
+(** Test if two conditions are idential *)
 let eq_cond (x, n) (y, m) =
   n = m && (
     match x, y with
@@ -123,14 +101,14 @@ let compare (cond1, neg1) (cond2, neg2) =
   let res = compare (enumerate_cond cond1) (enumerate_cond cond2) in
     if res = 0 then compare neg1 neg2 else res
 
-(* Test is a rule is at all satisfiable *)
+(** Test if expr always evaluates to value *)
 let is_always value = function
   | Zone (_, []), neg 
   | State [], neg
   | Ports (_, []), neg
   | Protocol [], neg
   | IcmpType [], neg -> neg = value 
-  | TcpFlags ([], x :: xs), neg -> neg = value 
+  | TcpFlags ([], _x :: _xs), neg -> neg = value 
   | TcpFlags (_, []), neg -> neg != value 
 
   | Interface _, _ 
