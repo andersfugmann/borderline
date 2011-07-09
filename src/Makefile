@@ -30,6 +30,9 @@ USE_CAMLP4 = yes
 
 OCAMLMAKEFILE = /usr/share/ocamlmakefile/OCamlMakefile
 
+OCAMLRUNPARAM=b
+export OCAMLRUNPARAM=b
+
 default: test
 
 .PHONY: borderline borderline-native
@@ -50,7 +53,7 @@ configure: configure.ml
 
 test: configure borderline
 	./configure --force --output ../configuration/zones
-	OCAMLRUNPARAM=b ./borderline ../configuration/borderline.bl
+	./borderline ../configuration/borderline.bl
 
 .PHONY: %.sig
 %.sig: %.ml

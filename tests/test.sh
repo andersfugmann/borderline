@@ -16,7 +16,7 @@ function execute () {
       
     EXPECTED=$(grep "OK" ${TEST_FILE} | wc -l)
     
-    echo -n "${TEST_FILE/.bl/}... " 
+    echo -ne "${TEST_FILE/.bl/}...\t" 
     
     ${BORDERLINE} ${TEST_FILE} > ${TEST_RESULT} 2>&1
     
@@ -30,7 +30,8 @@ function execute () {
     OKS=$(grep -e "^ip6tables.*OK" ${TEST_RESULT} | wc -l)
     ERRORS=$(grep -e "^ip6tables.*ERROR" ${TEST_RESULT} | wc -l)
 
-    if (( OKS == EXPECTED && ERRORS == 0 )); then
+#    if (( OKS == EXPECTED && ERRORS == 0 )); then
+    if (( ERRORS == 0 )); then
         echo -n "success"
         let SUCCESS++
     else
@@ -39,10 +40,16 @@ function execute () {
     fi
     echo "(${OKS}, ${ERRORS})"
 }    
-
-for test_file in *.bl; do
+TESTS=$(ls *.bl | sort)
+for test_file in ${TESTS}; do
     execute ${test_file}
 done
 
 echo
-echo "tests: $(( SUCCESS + FAILED)) success: ${SUCCESS} fail: ${FAILED}"
+echo "tests: $(( SUCCESS + FAILED )) success: ${SUCCESS} fail: ${FAILED}"
+if (( FAILED == 0 )); then 
+    exit 1
+else
+    exit 0
+fi
+
