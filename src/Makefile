@@ -16,9 +16,11 @@
 # along with Borderline.  If not, see <http://www.gnu.org/licenses/>.
 
 
-SOURCES = common.mli common.ml ipv6.mli ipv6.ml parser.mly lexer.mll frontend.mli chain.mli chain.ml \
+SOURCES = common.mli common.ml ipv6.mli ipv6.ml \
+	  parser.mly lexer.mll frontend.mli chain.mli chain.ml \
 	  frontend_types.ml ir.ml optimize.mli optimize.ml zone.mli zone.ml \
-	  frontend.ml ip6tables.mli ip6tables.ml rule.mli rule.ml validate.ml parse.mli parse.ml borderline.ml
+	  frontend.ml ip6tables.mli ip6tables.ml rule.mli rule.ml \
+	  validate.ml parse.mli parse.ml borderline.ml
 
 LIBS    = unix str nums
 
@@ -61,8 +63,6 @@ tests: borderline
 clean::
 	$(RM) configure
 	$(RM) *~
-
-
 
 # Keep at the bottom.
 -include $(OCAMLMAKEFILE)
