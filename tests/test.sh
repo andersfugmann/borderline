@@ -1,7 +1,5 @@
 #!/bin/bash
 
-BORDERLINE=../src/borderline
-
 FAILED=0
 SUCCESS=0
 
@@ -27,8 +25,8 @@ function execute () {
         return
     fi
 
-    OKS=$(grep -e "^ip6tables.*OK" ${TEST_RESULT} | wc -l)
-    ERRORS=$(grep -e "^ip6tables.*ERROR" ${TEST_RESULT} | wc -l)
+    OKS=$(grep -e "^ip.*OK" ${TEST_RESULT} | wc -l)
+    ERRORS=$(grep -e "^ip.*ERROR" ${TEST_RESULT} | wc -l)
 
 #    if (( OKS == EXPECTED && ERRORS == 0 )); then
     if (( ERRORS == 0 )); then

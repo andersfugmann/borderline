@@ -51,7 +51,7 @@ let gen_zone_mask_str dir zone =
   let id, mask = gen_zone_mask dir zone in sprintf "0x%04x/0x%04x" id mask
 
 let tcp_flags flags =
-  let val2str = function
+  let string_of_flag = function
       1 -> "SYN"
     | 2 -> "ACK"
     | 3 -> "FIN"
@@ -62,7 +62,7 @@ let tcp_flags flags =
   in
     match flags with
         [] -> "NONE"
-      | xs -> Common.join "," (List.map val2str xs)
+      | xs -> String.concat "," (List.map string_of_flag xs)
 
 (* Return a prefix and condition, between which a negation can be inserted *)
 let gen_condition = function
@@ -131,7 +131,7 @@ let transform chains =
       | TcpFlags _ -> 2
     in
       (* Reverse the order given above, by making the value negative *)
-      -(Pervasives.compare (value a) (value b))
+      Pervasives.compare (value b) (value a)
   in
     (* Return a list of chains, and a single rule *)
   let denormalize (conds, target) =

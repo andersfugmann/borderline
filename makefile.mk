@@ -11,23 +11,16 @@ vpath %.cmi $(BUILD_DIR)
 vpath %.cmx $(BUILD_DIR)
 vpath %.o $(BUILD_DIR)
 vpath gendep $(BUILD_DIR)
-vpath % $(BUILD_DIR)
-
-# Expand .mly and .mll files in SOURCES
-#MLLS := $(filter %.mll, $(SOURCES))
-#MLYS := $(filter %.mly, $(SOURCES))
+vpath $(BINARIES) $(BUILD_DIR)
 
 SOURCES := $(sort $(filter %.mli %.ml, $(SOURCES)) $(MLLS:.mll=.ml) $(MLYS:.mly=.mli) $(MLYS:.mly=.ml))  
-#$(info SOURCES: $(SOURCES))
 
-
-MAKEFLAGS = --no-print-directory
+#MAKEFLAGS = --no-print-directory
 SHELL := bash
-#DEPENDS := $(addprefix $(BUILD_DIR)/, $(addsuffix .d, $(SOURCES)))
 BINARY_DEPS := $(addprefix $(BUILD_DIR)/, $(addsuffix .d, $(BINARIES)))
+GRAMMER_FILES = $(LEX_FILES:.mll=.ml) $(YACC_FILES:.mly=.mli) $(YACC_FILES:.mly=.ml)  
 
 OCAMLFIND_ARGS = $(addprefix -I $(BUILD_DIR)/,$(INCLUDE)) -package "$(PACKAGES)" 
-
 ifdef OPTIMIZED
 COMPILE_SUFFIX = .cmx
 LD=ocamlopt
@@ -46,7 +39,7 @@ endif
 force:
 
 #.DELETE_ON_ERROR: $(DEPENDS) $(BINARY_DEPENDS) $(BINARIES)
-$(BINARY_DEPS): $(BUILD_DIR)/%.d: $(BUILD_DIR)/%.ml.d gendep
+$(BINARY_DEPS): $(BUILD_DIR)/%.d: $(BUILD_DIR)/%.ml.d gendep $(GRAMMER_FILES)
 	@echo "Depend:  " $(subst $(BUILD_DIR)/,,$@)
 	@[ -d $(dir $@) ] || mkdir -p $(dir $@)
 	@$(BUILD_DIR)/gendep -prefix $(BUILD_DIR) -suffix $(COMPILE_SUFFIX) $(subst $(BUILD_DIR)/,,$(@:.d=)) > $@
@@ -109,7 +102,7 @@ install:: $(BINARIES)
 clean::
 	@echo "Clean."
 	@find . -name \*.d -o -name \*.cm? -o -name \*.o | xargs $(RM) 
-	@$(RM) -r $(BUILD_DIR) $(BIN_DIR) $(DOC_DIR)
+	@$(RM) -r $(BUILD_DIR) $(BIN_DIR) $(DOC_DIR) $(GRAMMER_FILES)
 
 doc: $(subst .ml,.cmo,$(filter %.ml, $(SOURCES))) $(subst .mli,.cmi,$(filter %.mli, $(SOURCES))) 
 	@echo "Documentation"
