@@ -4,6 +4,11 @@ open Printf
 
 type id = string * Lexing.position
 
+let rec filter_opt = function
+  | Some n :: xs -> n :: filter_opt xs
+  | None :: xs -> filter_opt xs
+  | [] -> []
+
 exception ParseError of (string * id) list
 
 let tcp = 6

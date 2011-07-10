@@ -21,7 +21,7 @@ CP=cp
 
 INSTALL_BASE ?= .
 
-PACKAGES = unix str num
+PACKAGES = unix str num oUnit
 BUILD_DIR = _build
 BIN_DIR = $(INSTALL_BASE)/bin
 DOC_DIR = $(INSTALL_BASE)/doc
@@ -33,7 +33,8 @@ INCLUDE = src
 SOURCES = $(wildcard src/*.ml src/*.mli src/*.mll src/*.mly) 
 
 BINARIES = src/borderline \
-	   src/bl_configure
+	   src/bl_configure \
+           src/unit_test
 
 LEX_FILES = src/lexer.mll
 YACC_FILES = src/parser.mly 
@@ -43,7 +44,10 @@ include makefile.mk
 OCAMLRUNPARAM=b
 export OCAMLRUNPARAM=b
 
-.DEFAULT_GOAL := test
+.DEFAULT_GOAL := unittest
+
+unittest: install
+	@$(BIN_DIR)/unit_test
 
 # Standard goal. 
 test: install
