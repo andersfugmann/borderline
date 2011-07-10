@@ -1,2 +1,5 @@
 ext.bl
 wlan0.bl
+eth0.bl
+eth1.bl
+

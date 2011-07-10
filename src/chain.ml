@@ -1,22 +1,3 @@
-(*i 
- * Copyright 2009 Anders Fugmann.
- * Distributed under the GNU General Public License v3 
- *  
- * This file is part of Borderline - A Firewall Generator
- * 
- * Borderline is free software: you can redistribute it and/or modify it
- * under the terms of the GNU General Public License version 3 as
- * published by the Free Software Foundation. 
- *  
- * Borderline is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- * 
- * You should have received a copy of the GNU General Public License
- * along with Borderline.  If not, see <http://www.gnu.org/licenses/>. 
-i*)
-
 open Common
 open Ir
 
@@ -54,17 +35,20 @@ let filter p chains =
   Chain_map.fold (fun _ chn acc -> if p chn then chn :: acc else acc) chains []
 
 let set chain =
-  chains := Chain_map.add chain.id chain !chains; chain
+  chains := Chain_map.add chain.id chain !chains
 
 let delete id =
   chains := Chain_map.remove id !chains
 
 let create rules comment =
   let id = !next_id in
-  incr next_id; set { id = Temporary(id); rules = rules; comment = comment }
+  incr next_id; 
+  let chain = { id = Temporary(id); rules = rules; comment = comment } in
+  set chain; chain
 
 let replace id rules comment =
-  set { id = id; rules = rules; comment = comment }
+  let chain = { id = id; rules = rules; comment = comment } in
+  set chain; chain
 
 let get_named_chain (id, _) = Named(id)
 

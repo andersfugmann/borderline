@@ -20,10 +20,12 @@ define public_tcp_ports = smtp, ssmtp, domain, imaps, www, https, ntp
 define public_udp_ports = domain, ntp
 
 
-# Rembember to define which zone is the external zone. If configure is
+# Rembember to define which zone is the external zone. If bl_configure is
 # used, the system will autimatically assign the external zone.
 # The 'configure' program will automatically set this variable in the 
-# extgernal zone.
-#define external = <name of external zone>
+# external zone.
+#define external = <zone connected to the internet>
 
-# Further configuration is best made in the zone files, where access to zones can be individually defined.
+
+# Further configuration is best made in the zone files, where access
+# to zones can be individually defined.

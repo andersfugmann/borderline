@@ -18,10 +18,12 @@ let _ =
 
     let filter_chains = List.map Rule.process procs in
     let filter_ops = List.map ( fun chn -> ([], Ir.Jump(chn.Ir.id)) ) filter_chains in
-    let _ = Chain.set { Ir.id = Ir.Builtin Ir.INPUT ; rules = input_opers @ filter_ops; comment = "Builtin" } in
-    let _ = Chain.set { Ir.id = Ir.Builtin Ir.OUTPUT ; rules = output_opers @ filter_ops; comment = "Builtin" } in
-    let _ = Chain.set { Ir.id = Ir.Builtin Ir.FORWARD ; rules = forward_opers @ filter_ops; comment = "Builtin" } in
-    let _ = Chain.optimize Optimize.optimize in
+
+    Chain.set { Ir.id = Ir.Builtin Ir.INPUT ; rules = input_opers @ filter_ops; comment = "Builtin" };
+    Chain.set { Ir.id = Ir.Builtin Ir.OUTPUT ; rules = output_opers @ filter_ops; comment = "Builtin" };
+    Chain.set { Ir.id = Ir.Builtin Ir.FORWARD ; rules = forward_opers @ filter_ops; comment = "Builtin" };
+    Chain.optimize Optimize.optimize;
+
     let lines = Chain.emit Ip6tables.emit_chains in
       Printf.printf "%s\nLines: %d\n" (String.concat "\n" lines) (List.length lines)
 

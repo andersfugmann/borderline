@@ -101,15 +101,15 @@ $(BINARIES): %: $(OBJECTS)
 #(OBJECTS) $(addprefix $(BUILD_DIR)/, $($@_objs))
 
 
-install: $(BINARIES)
+install:: $(BINARIES)
 	@echo "Install: " $(notdir $(BINARIES))
-	@[ -d $(DIST_DIR) ] || mkdir $(DIST_DIR)
-	@for f in $(addprefix $(BUILD_DIR)/, $(BINARIES)); do t=$(DIST_DIR)/$$(basename $$f); [ $$f -nt $$t ] && cp -f $$f $$t || true; done
+	@[ -d $(BIN_DIR) ] || mkdir $(BIN_DIR)
+	@for f in $(addprefix $(BUILD_DIR)/, $(BINARIES)); do t=$(BIN_DIR)/$$(basename $$f); [ $$f -ot $$t ] || cp -f $$f $$t; done
 
 clean::
 	@echo "Clean."
 	@find . -name \*.d -o -name \*.cm? -o -name \*.o | xargs $(RM) 
-	@$(RM) -r $(BUILD_DIR) $(DIST_DIR) $(DOC_DIR)
+	@$(RM) -r $(BUILD_DIR) $(BIN_DIR) $(DOC_DIR)
 
 doc: $(subst .ml,.cmo,$(filter %.ml, $(SOURCES))) $(subst .mli,.cmi,$(filter %.mli, $(SOURCES))) 
 	@echo "Documentation"
