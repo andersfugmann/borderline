@@ -26,7 +26,8 @@ BUILD_DIR = _build
 DIST_DIR = bin
 DOC_DIR = doc
 OPTIMIZED = true
-OCFLAGS = -thread -w +A -annot -g
+OCFLAGS = -annot -g
+#-w @A
 INCLUDE = src
 
 SOURCES = $(wildcard src/*.ml src/*.mli src/*.mll src/*.mly) 

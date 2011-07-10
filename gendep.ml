@@ -12,9 +12,6 @@ let prefix = ref "."
 (** Target go generate dependancy for *)
 let target = ref ""
 
-(** Signal that the file needs to be rebuild *)
-let incomplete = ref false
-
 let set_extention ext file = 
    (Filename.chop_extension file) ^ ext
 
@@ -56,7 +53,7 @@ let rec gentree seen file =
         try 
           List.assoc file (parse_dep (set_extention ".ml.d" file)) 
         with 
-          | _ -> incomplete := true; prerr_endline (set_extention ".ml.d" file); [] 
+          | _ -> [] 
       in
       let deps = List.map (set_extention !suffix) deps in
       let deps = List.filter ((<>) file) deps in
@@ -90,11 +87,10 @@ let _ =
   let self = Printf.sprintf "%s/%s.d" !prefix !target in
   
   Printf.printf "%s: %s\n" !target (String.concat " " deps);
-  Printf.printf "%s: %s\n" self (String.concat " " (List.map (fun f -> !prefix ^ "/" ^ (set_extention ".ml.d" f)) deps))
-  (* if !incomplete then Printf.printf "include %s" self  *)
-(*  Printf.printf "-include %s\n" (String.concat " " (List.map (fun f -> !prefix ^ "/" ^ (set_extention ".ml.d" f)) deps));
-  Printf.printf "# Incomplete: %b\n" !incomplete
- if !incomplete then Printf.printf "include %s" self *)
+  Printf.printf "%s: %s\n" self (String.concat " " (List.map (fun f -> !prefix ^ "/" ^ (set_extention ".ml.d" f)) deps));
+  Printf.printf "-include %s\n" (String.concat " " (List.map (fun f -> !prefix ^ "/" ^ (set_extention ".ml.d" f)) deps));
+  ()
+
     
     
 

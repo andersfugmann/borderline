@@ -14,8 +14,8 @@ vpath gendep $(BUILD_DIR)
 vpath % $(BUILD_DIR)
 
 # Expand .mly and .mll files in SOURCES
-MLLS := $(filter %.mll, $(SOURCES))
-MLYS := $(filter %.mly, $(SOURCES))
+#MLLS := $(filter %.mll, $(SOURCES))
+#MLYS := $(filter %.mly, $(SOURCES))
 
 SOURCES := $(sort $(filter %.mli %.ml, $(SOURCES)) $(MLLS:.mll=.ml) $(MLYS:.mly=.mli) $(MLYS:.mly=.ml))  
 #$(info SOURCES: $(SOURCES))
@@ -23,7 +23,7 @@ SOURCES := $(sort $(filter %.mli %.ml, $(SOURCES)) $(MLLS:.mll=.ml) $(MLYS:.mly=
 
 MAKEFLAGS = --no-print-directory
 SHELL := bash
-DEPENDS := $(addprefix $(BUILD_DIR)/, $(addsuffix .d, $(SOURCES)))
+#DEPENDS := $(addprefix $(BUILD_DIR)/, $(addsuffix .d, $(SOURCES)))
 BINARY_DEPS := $(addprefix $(BUILD_DIR)/, $(addsuffix .d, $(BINARIES)))
 
 OCAMLFIND_ARGS = $(addprefix -I $(BUILD_DIR)/,$(INCLUDE)) -package "$(PACKAGES)" 
@@ -45,21 +45,19 @@ endif
 
 force:
 
-#.LOW_RESOLUTION_TIME: $(DEPENDS) $(BINARY_DEPS) 
-
 #.DELETE_ON_ERROR: $(DEPENDS) $(BINARY_DEPENDS) $(BINARIES)
 $(BINARY_DEPS): $(BUILD_DIR)/%.d: $(BUILD_DIR)/%.ml.d gendep
 	@echo "Depend:  " $(subst $(BUILD_DIR)/,,$@)
 	@[ -d $(dir $@) ] || mkdir -p $(dir $@)
 	@$(BUILD_DIR)/gendep -prefix $(BUILD_DIR) -suffix $(COMPILE_SUFFIX) $(subst $(BUILD_DIR)/,,$(@:.d=)) > $@
 
-$(DEPENDS): $(BUILD_DIR)/%.d: %
+$(BUILD_DIR)/%.d: %
 	@echo "Depend:  " $(subst $(BUILD_DIR)/,,$@)
 	@[ -d $(dir $@) ] || mkdir -p $(dir $@)
 	@ocamlfind ocamldep $(addprefix -I ,$(INCLUDE) $(dir $<)) -package "$(PACKAGES)" $< > $@
 
 gendep.cmo: OCFLAGS += -rectypes
-%.cmo: %.ml
+%.cmo: %.ml 
 	@echo "Compile: " $(subst $(BUILD_DIR),,$@)
 	@[ -d $(BUILD_DIR)/$(dir $@) ] || mkdir -p $(BUILD_DIR)/$(dir $@)
 	@ocamlfind ocamlc -c $(OCFLAGS) $(OCAMLFIND_ARGS) $< -o $(BUILD_DIR)/$@
@@ -68,12 +66,12 @@ gendep.cmx: OCFLAGS += -rectypes
 %.cmx: %.ml
 	@echo "Compile: " $(subst $(BUILD_DIR),,$@)
 	@[ -d $(BUILD_DIR)/$(dir $@) ] || mkdir -p $(BUILD_DIR)/$(dir $@)
-	ocamlfind ocamlopt -c $(OCFLAGS) $(OCAMLFIND_ARGS) $< -o $(BUILD_DIR)/$@
+	@ocamlfind ocamlopt -c $(OCFLAGS) $(OCAMLFIND_ARGS) $< -o $(BUILD_DIR)/$@
 
 %.cmi: %.mli
 	@echo "Compile: " $(subst $(BUILD_DIR),,$@)
 	@[ -d $(BUILD_DIR)/$(dir $@) ] || mkdir -p $(BUILD_DIR)/$(dir $@)
-	ocamlfind ocamlc -c $(OCFLAGS) $(OCAMLFIND_ARGS) $< -o $(BUILD_DIR)/$@
+	@ocamlfind ocamlc -c $(OCFLAGS) $(OCAMLFIND_ARGS) $< -o $(BUILD_DIR)/$@
 
 %.ml: %.mll
 	@echo "Lexer:   " $(subst $(BUILD_DIR),,$@)
