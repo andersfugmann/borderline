@@ -1,7 +1,6 @@
 (* Function for validating the AST *)
 
 open Common
-open Frontend_types
 open Frontend
 
 

@@ -1,6 +1,6 @@
+(** Main file. *)
 open Common
 open Parse
-open Frontend_types
 open Frontend
 open Printf
 open Chain

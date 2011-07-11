@@ -1,6 +1,5 @@
 
 open Common
-open Frontend_types
 open Frontend
 open Chain
 

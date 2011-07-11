@@ -1,29 +1,27 @@
 open Common
 open Frontend
-open Frontend_types
 open Chain
-open Big_int
 
-let gen_policy : Frontend_types.policytype -> Ir.action = function
+let gen_policy = function
     ALLOW -> Ir.Accept
   | DENY -> Ir.Drop
   | REJECT -> Ir.Reject(0)
   | LOG prefix -> Ir.Log(prefix)
   | Ref id -> raise (ParseError [ ("Not all ids have been expanded", id) ])
 
-let rec list2ints : Frontend_types.data list -> int list = function
+let rec list2ints = function
     Number (nr, _) :: xs -> nr :: list2ints xs
   | Ip (_, _) :: xs -> failwith "Unexpected ip in int list"
   | Id (id, _) :: xs -> failwith ("No all ints have been expanded: " ^ id)
   | [] -> []
 
-let rec list2ips : Frontend_types.data list -> Ip.t list = function
+let rec list2ips = function
   | Number (_, _) :: xs -> failwith "Unexpected int in ip list"
   | Ip (ip, _) :: xs -> ip :: list2ips xs
   | Id (id, _) :: xs -> failwith ("No all ints have been expanded: " ^ id)
   | [] -> []
 
-let rec list2zones : Frontend_types.data list -> Common.id list = function
+let rec list2zones = function
   | Number (_, _) :: xs -> failwith "Unexpected int in zone list"
   | Ip (_, _) :: xs -> failwith "Unexpected ip in zone list"
   | Id id :: xs -> id :: list2zones xs

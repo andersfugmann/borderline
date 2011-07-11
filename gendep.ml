@@ -51,11 +51,11 @@ let rec gentree seen file =
     | false -> 
       let deps = 
         try 
-          List.assoc file (parse_dep (set_extention ".ml.d" file)) 
+          List.assoc file (parse_dep (set_extention ".ml.d" file))
         with 
           | _ -> [] 
       in
-      let deps = List.map (set_extention !suffix) deps in
+      (* let deps = List.map (set_extention !suffix) deps in *)
       let deps = List.filter ((<>) file) deps in
       (file, List.map (gentree (FileSet.add file seen)) deps)
         
@@ -79,19 +79,32 @@ let args = [
   "-prefix", Arg.Set_string prefix, "Base location of .d files";
   "-suffix", Arg.Set_string suffix, "Type of taget (file extension)"
 ]
+
+let map_suffix file =
+  match Filename.check_suffix file ".cmi" with
+    | true -> set_extention ".mli.d" file
+    | false -> set_extention ".ml.d" file
+
   
 let _ = 
   Arg.parse args (fun s -> target := s) "Generate dependancy file to stdout";
   let tree = gentree FileSet.empty (!target ^ !suffix) in
   let deps = uniq (List.rev (flatten tree)) in
   let self = Printf.sprintf "%s/%s.d" !prefix !target in
+
+  Printf.printf "# DEPS: %s\n\n" (String.concat " " deps);
+
+
+  let link_files = List.filter (fun file -> Filename.check_suffix file !suffix) deps in
+  Printf.printf "%s: %s\n\n" !target (String.concat " " link_files);
   
-  Printf.printf "%s: %s\n" !target (String.concat " " deps);
-  Printf.printf "%s: %s\n" self (String.concat " " (List.map (fun f -> !prefix ^ "/" ^ (set_extention ".ml.d" f)) deps));
-  Printf.printf "-include %s\n" (String.concat " " (List.map (fun f -> !prefix ^ "/" ^ (set_extention ".ml.d" f)) deps));
+  let include_files = List.map map_suffix deps in
+  
+  Printf.printf "%s: %s\n\n" self (String.concat " " (List.map (fun f -> !prefix ^ "/" ^ f) include_files));
+  Printf.printf "-include %s\n\n" (String.concat " " (List.map (fun f -> !prefix ^ "/" ^ f) include_files));
   ()
 
-    
-    
+(* Need to print all read files. We need to include .mli.d files *)
+
 
  

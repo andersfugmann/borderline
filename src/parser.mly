@@ -2,7 +2,6 @@
   (* Include commonly used modules *)
 
   open Frontend
-  open Frontend_types
   open Printf
   open Scanf
   open Lexing
@@ -43,7 +42,7 @@
 %token LBRACE RBRACE COMMA DOT COLON DCOLON SLASH END
 
 %start main
-%type <Frontend_types.node list> main
+%type <Frontend.node list> main
 %%
 
 /* Scan a list of statements, until the end of the list is encountered. */

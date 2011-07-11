@@ -1,25 +1,42 @@
-(*
- * Copyright 2009 Anders Fugmann.
- * Distributed under the GNU General Public License v3
- *
- * This file is part of Borderline - A Firewall Generator
- *
- * Borderline is free software: you can redistribute it and/or modify it
- * under the terms of the GNU General Public License version 3 as
- * published by the Free Software Foundation.
- *
- * Borderline is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with Borderline.  If not, see <http://www.gnu.org/licenses/>.
- *)
+(** Type and utility function for the frontend *)
 
 open Common
-open Frontend_types
 
+type prefix = string
+
+type processtype = MANGLE | FILTER | NAT
+type policytype = ALLOW | DENY | REJECT | LOG of prefix | Ref of id
+
+and node = Import of id
+         | Zone of id * zone_stm list
+         | DefineStms of id * rule_stm list
+         | DefineList of id * data list
+         | DefinePolicy of id * policytype list
+         | Process of processtype * rule_stm list * policytype list
+
+and zone_stm = Interface of id
+             | Network of Ip.t
+             | ZoneRules of processtype * rule_stm list * policytype list
+
+and filter_stm = Address of data list
+               | TcpPort of data list
+               | UdpPort of data list
+               | FZone of data list
+
+and rule_stm = Filter of Ir.direction * filter_stm * Ir.pol
+             | State of Ir.statetype list * Ir.pol
+             | Protocol of data list * Ir.pol
+             | IcmpType of data list * Ir.pol
+             | Rule of rule_stm list * policytype list
+             | Reference of id
+             | TcpFlags of ( data list * data list ) * Ir.pol
+
+
+and data = Number of int * Lexing.position
+         | Id of id
+         | Ip of Ip.t * Lexing.position
+
+(** Line number reference *)
 let lineno = ref 1
 
 let node_type id = function
@@ -29,12 +46,11 @@ let node_type id = function
   | DefineList _ -> 4 = id
   | _ -> false
 
-let rec fold_rules func rules acc =
-  match rules with
-    | Rule (rules, _) as x :: xs -> fold_rules func xs (fold_rules func rules (func acc x))
-    | x :: xs -> fold_rules func xs (func acc x)
-    | [] -> acc
-
+let rec fold_rules func acc = function 
+  | Rule (rules, _) as x :: xs -> fold_rules func (fold_rules func rules (func acc x)) xs
+  | x :: xs -> fold_rules func (func acc x) xs
+  | [] -> acc
+    
 let fold_nodes func nodes acc =
   List.fold_left func acc nodes
 
@@ -45,6 +61,3 @@ let rec fold func nodes acc =
     | _ -> acc
   in
     fold_nodes node_func nodes acc
-
-
-

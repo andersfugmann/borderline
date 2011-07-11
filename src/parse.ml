@@ -1,5 +1,4 @@
 open Common
-open Frontend_types
 open Frontend
 open Parser
 open Lexer
@@ -57,7 +56,7 @@ and expand = function
 
 let process_files files =
   let nodes = List.flatten (List.map parse_file files) in
-  let nodes' = (Zone.emit_nodes Frontend_types.FILTER (Zone.filter nodes)) @ nodes in
+  let nodes' = (Zone.emit_nodes Frontend.FILTER (Zone.filter nodes)) @ nodes in
   let nodes' = Validate.expand nodes' in
     (Zone.filter nodes', Rule.filter_process nodes')
 

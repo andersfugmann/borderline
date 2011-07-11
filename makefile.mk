@@ -77,6 +77,10 @@ gendep.cmx: OCFLAGS += -rectypes
 	@[ -d $(BUILD_DIR)/$(dir $@) ] || mkdir -p $(BUILD_DIR)/$(dir $@)
 	@ocamlfind $(OCAMLC) -c $(OCFLAGS) $(OCAMLFIND_ARGS) $< -o $(BUILD_DIR)/$@
 
+%.inferred: %.ml
+	@ocamlfind $(OCAMLC) -i $(OCFLAGS) $(OCAMLFIND_ARGS) $< 
+
+
 %.ml: %.mll
 	@echo "Lexer:   " $(subst $(BUILD_DIR),,$@)
 	@[ -d $(BUILD_DIR)/$(dir $@) ] || mkdir -p $(BUILD_DIR)/$(dir $@)
@@ -88,7 +92,6 @@ gendep.cmx: OCFLAGS += -rectypes
 	@ocamlyacc $<
 
 %.o: %.c
-
 	@echo "Compile: " $(subst $(BUILD_DIR),,$@)
 	@[ -d $(BUILD_DIR)/$(dir $@) ] || mkdir -p $(BUILD_DIR)/$(dir $@)
 	@ocamlfind $(OCAMLC) -c $(OCFLAGS) -cclib "$(addprefix -l, $(CLIBS))" -ccopt "$(CFLAGS)" $< 
