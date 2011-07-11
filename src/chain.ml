@@ -1,3 +1,5 @@
+(** Operations on chains *)
+
 open Common
 open Ir
 

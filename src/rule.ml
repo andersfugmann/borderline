@@ -28,9 +28,9 @@ let rec list2zones = function
   | [] -> []
 
 let rec process_rule table (rules, targets') =
-  (* Generate the result of a rules that does not depend on the
-     packet.  If the packet must match some element in an empty list,
-     the filter can never be satisfied. *)
+  (** Generate the result of a rules that does not depend on the
+      packet. If the packet must match some element in an empty list,
+      the filter can never be satisfied. *)
   let rec gen_op targets acc = function
     | State(states, neg) :: xs -> gen_op targets ((Ir.State(states), neg) :: acc) xs
     | Filter(dir, TcpPort(ports), false) :: xs -> gen_op targets ( (Ir.Protocol([tcp]), false) :: (Ir.Ports(dir, list2ints ports), false) :: acc ) xs

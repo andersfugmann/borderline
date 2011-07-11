@@ -1,6 +1,5 @@
-(*
-   Emit iptables commands. Currently we have no interface to the
-   iptables library, so we use a shell script as an intermediate step.
+(** Emit iptables commands. Currently we have no interface to the
+    iptables library, so we use a shell script as an intermediate step.
 *)
 
 open Common
@@ -15,7 +14,7 @@ let zone_id = ref 1
 let zone_map = ref StringMap.empty
 
 let elem = function
-    x :: [] -> x
+x :: [] -> x
   | xs -> failwith "One and jsut one element required in list"
 
 let get_zone_id zone =
@@ -24,18 +23,18 @@ let get_zone_id zone =
   with Not_found ->
     let id = !zone_id in
     let _ = zone_map := StringMap.add zone id !zone_map in
-      incr zone_id; printf "#Zone: %s -> %d\n" zone id; id
+    incr zone_id; printf "#Zone: %s -> %d\n" zone id; id
 
 let gen_neg = function
-    true -> "! "
+true -> "! "
   | _ -> ""
 
 let choose_dir a b = function
-    SOURCE      -> a
+SOURCE      -> a
   | DESTINATION -> b
 
 let get_state_name = function
-    NEW -> "new"
+NEW -> "new"
   | ESTABLISHED -> "established"
   | RELATED -> "related"
   | INVALID -> "invalid"
@@ -43,16 +42,16 @@ let get_state_name = function
 
 let gen_zone_mask dir zone =
   let zone_id = get_zone_id (id2str zone) in
-    match dir with
-        SOURCE -> zone_id, 0x00ff
-      | DESTINATION -> zone_id * 0x100, 0xff00
+  match dir with
+      SOURCE -> zone_id, 0x00ff
+    | DESTINATION -> zone_id * 0x100, 0xff00
 
 let gen_zone_mask_str dir zone =
   let id, mask = gen_zone_mask dir zone in sprintf "0x%04x/0x%04x" id mask
 
 let tcp_flags flags =
   let string_of_flag = function
-      1 -> "SYN"
+  1 -> "SYN"
     | 2 -> "ACK"
     | 3 -> "FIN"
     | 4 -> "RST"
@@ -60,11 +59,11 @@ let tcp_flags flags =
     | 6 -> "PSH"
     | flag -> failwith "Unknown tcp flag: " ^ (string_of_int flag)
   in
-    match flags with
-        [] -> "NONE"
-      | xs -> String.concat "," (List.map string_of_flag xs)
+  match flags with
+      [] -> "NONE"
+    | xs -> String.concat "," (List.map string_of_flag xs)
 
-(* Return a prefix and condition, between which a negation can be inserted *)
+(** Return a prefix and condition, between which a negation can be inserted *)
 let gen_condition = function
   | IpSet(direction, ips) ->
     begin
@@ -113,13 +112,13 @@ let gen_action = function
   | Notrack -> "NOTRACK" (* The NoTrack will not work, as it must be placed in the 'raw' table *)
   | Log prefix -> "LOG --log-prefix \"" ^ prefix ^ ":\""
 
-(* To make a direct mapping to iptables rules, the IR tree needs to be
-   denormalized. The transform pass does excatly this. It expands
-   constructs into something trivially convertible to netfilter rules. *)
-
+(** To make a direct mapping to iptables rules, the IR tree needs to
+    be denormalized. The transform pass does excatly this. It expands
+    constructs into something trivially convertible to netfilter
+    rules. *)
 let transform chains =
-  (* Order of conditions. This is used when expanding the conditions,
-     in order to move expanding conditions to the back *)
+  (** Order of conditions. This is used when expanding the conditions,
+      in order to move expanding conditions to the back *)
   let order a b =
     let value = function
         Interface _ -> 1
@@ -135,7 +134,7 @@ let transform chains =
       (* Reverse the order given above, by making the value negative *)
       Pervasives.compare (value b) (value a)
   in
-    (* Return a list of chains, and a single rule *)
+  (** Return a list of chains, and a single rule *)
   let denormalize (conds, target) =
     let rec denorm_rule tg = function
         cl :: [] -> ([], (cl, tg))
@@ -173,7 +172,7 @@ let transform chains =
       | [] -> (acc1, (acc2, tg))
     in expand_conds [] [] target (List.sort (fun (a, _) (b, _) -> order a b) conds)
   in
-    (* Some conditions needs a protocol specifier to work*)
+  (** Some conditions needs a protocol specifier to work*)
   let add_protocol_specifiers (conds, target) =
     let rec fold proto target = function
       | (IcmpType _, false) as cond :: xs when proto != icmp ->
@@ -221,9 +220,9 @@ let transform chains =
       fold protocol target (protocols @ conds')
 
   in
-    (* Netfilter does not support the notion of zones. By marking the
-       packets and matching the mark on the packet, the functionality can
-       be emulated. *)
+  (** Netfilter does not support the notion of zones. By marking the
+      packets and matching the mark on the packet, the functionality can
+      be emulated. *)
   let zone_to_mask (conds, target) =
     let rec zone_to_mask' = function
         (Zone (dir, zone :: []), neg) :: (Zone(dir', zone' :: []), neg') :: xs when neg = neg' && not (dir = dir') ->
@@ -244,14 +243,14 @@ let transform chains =
           map_chains (Chain_map.add chain'.id chain' acc) func ((List.flatten chains) @ xs)
     | [] -> acc
   in
-    (* Some packets are 'stateless', and thus not regarded as 'new' by
-       netfilter. Fix this by using negated states:
-       new => ! related, established, invalid
-       new, related => !established, invalid
-       new, established => !related, invalid
-    *)
+  (** Some packets are 'stateless', and thus not regarded as 'new' by
+      netfilter. Fix this by using negated states:
+      new => ! related, established, invalid
+      new, related => !established, invalid
+      new, established => !related, invalid
+  *)
   let fix_state_match (conds, target) =
-    (* Transform the list of state so the 'new' state is avoided *)
+    (** Transform the list of state so the 'new' state is avoided *)
     let tranform = function
         (State states, neg) when List.mem NEW states ->
           (State (difference (=) [INVALID; RELATED; ESTABLISHED] states), not neg)
@@ -279,8 +278,8 @@ let emit_rules chain =
     List.map ( sprintf "ip6tables -A %s %s" chain_name ) ops
 
 let filter chains =
-  (* Filter rules must take a condition as argument, and return true
-     for rules to be kepts, and false for rules to be removed *)
+  (** Filter rules must take a condition as argument, and return true
+      for rules to be kepts, and false for rules to be removed *)
   let is_tautologically_false (conds, _) =
       List.fold_left (fun acc cond -> acc && not (is_always false cond)) true conds
   in
@@ -293,7 +292,7 @@ let create_chain acc chain =
     | _ -> acc @ [sprintf "ip6tables -N %s #%s" (Chain.get_chain_name chain.id) chain.comment]
 
 
-(* Main entrypoint. *)
+(** Main entrypoint. *)
 let emit_chains chains =
   let funcs = [ transform; filter ] in
   let chains' = List.fold_left (fun acc func -> func acc) chains funcs in

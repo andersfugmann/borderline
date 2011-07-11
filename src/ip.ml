@@ -123,7 +123,7 @@ let to_ips set =
       end
   in
   inner 0 set
-
+(** Allow access to ranges in the set *)
 let to_ranges set = set
 
 

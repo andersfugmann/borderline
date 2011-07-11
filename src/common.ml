@@ -1,4 +1,5 @@
-(* General functions *)
+(** General functions *)
+
 open Printf
 
 type id = string * Lexing.position
@@ -13,11 +14,6 @@ exception ParseError of (string * id) list
 let tcp = 6
 let udp = 17
 let icmp = 58
-
-let rec join sep = function
-    x :: [] -> x
-  | x :: xs -> x ^ sep ^ (join sep xs)
-  | [] -> ""
 
 let error2string errors =
   let err2str (err, (id, pos)) = sprintf "File \"%s\", line %d: Error. %s '%s'" pos.Lexing.pos_fname pos.Lexing.pos_lnum err id
@@ -62,21 +58,21 @@ let intersection eq_oper a b =
 let union eq_oper a b =
   a @ (difference eq_oper b a)
 
-(* Determine if a is a true subset of b *)
+(** Determine if a is a true subset of b *)
 let is_subset eq_oper a b =
   List.for_all (fun x -> member eq_oper x b ) a
 
 let has_intersection eq_oper a b =
   not (intersection eq_oper a b = [])
 
-(* Group items into lists of identical elemenets *)
+(** Group items into lists of identical elemenets *)
 let rec group eq_oper acc = function
     x :: xs ->
       let lst, rest = List.partition (eq_oper x) xs in
         group eq_oper ((x :: lst) :: acc) rest
   | [] -> acc
 
-(* Create as few lists as possible with no identical items *)
+(** Create as few lists as possible with no identical items *)
 let uniq eq_oper lst =
   let rec uniq' acc1 acc2 xs =
     match (acc2, xs) with
@@ -87,7 +83,7 @@ let uniq eq_oper lst =
   in
   uniq' [] [] (group eq_oper [] lst)
 
-(* Like a regular map, but filter exceptions *)
+(** Like a regular map, but filter exceptions *)
 let map_filter_exceptions func list =
   let rec map acc = function
     | x :: xs -> begin
@@ -98,7 +94,7 @@ let map_filter_exceptions func list =
   in map [] list
 
 
-(* Simple identity function *)
+(** Simple identity function *)
 let identity a = a
 
 let keys map =

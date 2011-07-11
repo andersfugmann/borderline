@@ -4,7 +4,7 @@ open Parser
 open Lexer
 open Str
 
-(* Precompiled regular expressions *)
+(** Precompiled regular expressions *)
 let include_regex = regexp "^.*[.]bl$"
 let exclude_regex = regexp "^[.][#~].*$"
 
