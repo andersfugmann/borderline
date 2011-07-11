@@ -95,11 +95,6 @@ let _ =
 
   let implementation_files = List.filter (fun f -> Filename.check_suffix f !suffix) deps in
   
-  Printf.printf "$(BIN_DIR)/%s: %s\n" (Filename.basename !target) !target;
-  Printf.printf "\t@echo \"Install: \" $@\n";
-  Printf.printf "\t@$(CP) %s $@\n\n" (!prefix ^ "/" ^ !target);
-
-
   Printf.printf "%s: %s\n\n" !target (String.concat " " implementation_files);
   let depend_files = List.map (fun f -> (!prefix ^ "/" ^ (map_suffix f))) deps in
   Printf.printf "%s: %s\n\n" self (String.concat " " depend_files);

@@ -110,9 +110,6 @@ $(BINARIES): %: $(OBJECTS)
 	@ocamlfind $(OCAMLC) $(OCFLAGS) $(OCAMLFIND_ARGS) -cclib "$(addprefix -l , $(CLIBS))" -ccopt "$(CFLAGS)" -linkpkg -o $(BUILD_DIR)/$@ $(addprefix $(BUILD_DIR)/, $(subst $(BUILD_DIR)/,,$+))
 #(OBJECTS) $(addprefix $(BUILD_DIR)/, $($@_objs))
 
-install:: _ := $(shell mkdir -p $(BIN_DIR))
-install:: $(addprefix $(BIN_DIR)/, $(notdir $(BINARIES)))
-
 clean::
 	@echo "Clean."
 	@find . -name \*.d -o -name \*.cm? -o -name \*.o | xargs $(RM) 
@@ -122,3 +119,19 @@ doc: $(subst .ml,.cmo,$(filter %.ml, $(SOURCES))) $(subst .mli,.cmi,$(filter %.m
 	@echo "Documentation"
 	@[ -d $(DOC_DIR) ] || mkdir $(DOC_DIR)
 	@ocamlfind ocamldoc -html -d $(DOC_DIR) $(addprefix -I $(BUILD_DIR)/,$(INCLUDE)) -package "$(PACKAGES)" $(SOURCES)
+
+
+
+# A bit dodgy. We autogenerate a makefile to include dynamic rules 
+$(BUILD_DIR)/targets.makefile: makefile.mk
+	@(for BIN in $(BINARIES); do \
+	    printf "$(BIN_DIR)/$$(basename $${BIN}): $${BIN}\n"; \
+	    printf "\t@[ -d $(BIN_DIR) ] || mkdir -p $(BIN_DIR)\n"; \
+	    printf "\t@echo \"Install: \" \$$@\n"; \
+	    printf "\t@\$$(CP) $(BUILD_DIR)/$${BIN} \$$@\n"; \
+	    printf "\n"; \
+          done) > $@
+install:: $(addprefix $(BIN_DIR)/, $(notdir $(BINARIES)))
+
+-include $(BUILD_DIR)/targets.makefile
+
