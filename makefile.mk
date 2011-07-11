@@ -11,7 +11,7 @@ vpath %.cmi $(BUILD_DIR)
 vpath %.cmx $(BUILD_DIR)
 vpath %.o $(BUILD_DIR)
 vpath gendep $(BUILD_DIR)
-vpath $(BINARIES) $(BUILD_DIR)
+vpath % $(BUILD_DIR)
 
 SOURCES := $(sort $(filter %.mli %.ml, $(SOURCES)) $(MLLS:.mll=.ml) $(MLYS:.mly=.mli) $(MLYS:.mly=.ml))  
 
@@ -29,6 +29,7 @@ ifeq ($(TARGET), bytecode)
 else ifeq ($(TARGET), optimized)
   COMPILE_SUFFIX = .cmx
   OCAMLC = ocamlopt
+  OCAMLDEP_FLAGS += -native
 else ifeq ($(TARGET), profile)
   COMPILE_SUFFIX = .cmo
   OCAMLC = ocamlcp
@@ -36,6 +37,7 @@ else ifeq ($(TARGET), profile-opt)
   COMPILE_SUFFIX =.cmx
   OCAMLC = ocamlopt
   OCFLAGS += -p
+  OCAMLDEP_FLAGS += -native
 else
   $(error "Unknown compilation target: $(TARGET)")
 endif
@@ -58,19 +60,20 @@ $(BINARY_DEPS): $(BUILD_DIR)/%.d: $(BUILD_DIR)/%.ml.d gendep $(GRAMMER_FILES)
 $(BUILD_DIR)/%.d: %
 	@echo "Depend:  " $(subst $(BUILD_DIR)/,,$@)
 	@[ -d $(dir $@) ] || mkdir -p $(dir $@)
-	@ocamlfind ocamldep $(addprefix -I ,$(INCLUDE) $(dir $<)) -package "$(PACKAGES)" $< > $@
+	@ocamlfind ocamldep $(OCAMLDEP_FLAGS) $(addprefix -I ,$(INCLUDE) $(dir $<)) -package "$(PACKAGES)" $< > $@
 
 gendep.cmo: OCFLAGS += -rectypes
+gendep.cmx: OCFLAGS += -rectypes
+%.cmx: %.ml 
+	@echo "Compile: " $(subst $(BUILD_DIR),,$@)
+	@[ -d $(BUILD_DIR)/$(dir $@) ] || mkdir -p $(BUILD_DIR)/$(dir $@)
+	@ocamlfind $(OCAMLC) -c $(OCFLAGS) $(OCAMLFIND_ARGS) $< -o $(BUILD_DIR)/$@
+
 %.cmo: %.ml 
 	@echo "Compile: " $(subst $(BUILD_DIR),,$@)
 	@[ -d $(BUILD_DIR)/$(dir $@) ] || mkdir -p $(BUILD_DIR)/$(dir $@)
 	@ocamlfind $(OCAMLC) -c $(OCFLAGS) $(OCAMLFIND_ARGS) $< -o $(BUILD_DIR)/$@
 
-gendep.cmx: OCFLAGS += -rectypes
-%.cmx: %.ml
-	@echo "Compile: " $(subst $(BUILD_DIR),,$@)
-	@[ -d $(BUILD_DIR)/$(dir $@) ] || mkdir -p $(BUILD_DIR)/$(dir $@)
-	@ocamlfind ocamlopt -c $(OCFLAGS) $(OCAMLFIND_ARGS) $< -o $(BUILD_DIR)/$@
 
 %.cmi: %.mli
 	@echo "Compile: " $(subst $(BUILD_DIR),,$@)
@@ -79,7 +82,6 @@ gendep.cmx: OCFLAGS += -rectypes
 
 %.inferred: %.ml
 	@ocamlfind $(OCAMLC) -i $(OCFLAGS) $(OCAMLFIND_ARGS) $< 
-
 
 %.ml: %.mll
 	@echo "Lexer:   " $(subst $(BUILD_DIR),,$@)
@@ -108,11 +110,8 @@ $(BINARIES): %: $(OBJECTS)
 	@ocamlfind $(OCAMLC) $(OCFLAGS) $(OCAMLFIND_ARGS) -cclib "$(addprefix -l , $(CLIBS))" -ccopt "$(CFLAGS)" -linkpkg -o $(BUILD_DIR)/$@ $(addprefix $(BUILD_DIR)/, $(subst $(BUILD_DIR)/,,$+))
 #(OBJECTS) $(addprefix $(BUILD_DIR)/, $($@_objs))
 
-
-install:: $(BINARIES)
-	@echo "Install: " $(notdir $(BINARIES))
-	@[ -d $(BIN_DIR) ] || mkdir $(BIN_DIR)
-	@for f in $(addprefix $(BUILD_DIR)/, $(BINARIES)); do t=$(BIN_DIR)/$$(basename $$f); [ $$f -ot $$t ] || cp -f $$f $$t; done
+install:: _ := $(shell mkdir -p $(BIN_DIR))
+install:: $(addprefix $(BIN_DIR)/, $(notdir $(BINARIES)))
 
 clean::
 	@echo "Clean."

@@ -1,5 +1,4 @@
 (* General functions *)
-
 open Printf
 
 type id = string * Lexing.position

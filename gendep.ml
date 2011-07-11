@@ -41,24 +41,31 @@ let parse_dep filename =
   close_in fd; res
 
 module FileSet = Set.Make(String)
+
+(** All dependency files *)
 exception Out
 
+let map_suffix file =
+  match Filename.check_suffix file ".cmi" with
+    | true -> set_extention ".mli.d" file
+    | false -> set_extention ".ml.d" file
+
 let rec gentree seen file =
-  match FileSet.mem file seen with
-    | true -> 
-      prerr_endline ("Cyclic dependency detected on file: " ^ file);
-      (file, [])
-    | false -> 
-      let deps = 
-        try 
-          List.assoc file (parse_dep (set_extention ".ml.d" file))
-        with 
-          | _ -> [] 
-      in
-      (* let deps = List.map (set_extention !suffix) deps in *)
-      let deps = List.filter ((<>) file) deps in
-      (file, List.map (gentree (FileSet.add file seen)) deps)
-        
+  if FileSet.mem file seen then begin
+    prerr_endline ("Cyclic dependency detected on file: " ^ file);
+    raise Out
+  end;
+  let deps = 
+    try 
+      let deps = parse_dep (set_extention ".ml.d" file) in
+      List.assoc file deps
+    with 
+      | _ -> [] 
+  in
+  (* let deps = List.map (set_extention !suffix) deps in *)
+  let deps = List.filter ((!=) file) deps in
+  (file, List.map (gentree (FileSet.add file seen)) deps)
+    
 let rec print_tree = function 
   | (f, []) -> Printf.printf "(%s)\n" f
   | (f, n) -> Printf.printf "%s:\n" f; List.iter print_tree n 
@@ -77,34 +84,27 @@ let uniq lst =
   
 let args = [
   "-prefix", Arg.Set_string prefix, "Base location of .d files";
-  "-suffix", Arg.Set_string suffix, "Type of taget (file extension)"
+  "-suffix", Arg.Set_string suffix, "Type of target (file extension)"
 ]
 
-let map_suffix file =
-  match Filename.check_suffix file ".cmi" with
-    | true -> set_extention ".mli.d" file
-    | false -> set_extention ".ml.d" file
-
-  
 let _ = 
   Arg.parse args (fun s -> target := s) "Generate dependancy file to stdout";
   let tree = gentree FileSet.empty (!target ^ !suffix) in
   let deps = uniq (List.rev (flatten tree)) in
   let self = Printf.sprintf "%s/%s.d" !prefix !target in
 
-  Printf.printf "# DEPS: %s\n\n" (String.concat " " deps);
+  let implementation_files = List.filter (fun f -> Filename.check_suffix f !suffix) deps in
+  
+  Printf.printf "$(BIN_DIR)/%s: %s\n" (Filename.basename !target) !target;
+  Printf.printf "\t@echo \"Install: \" $@\n";
+  Printf.printf "\t@$(CP) %s $@\n\n" (!prefix ^ "/" ^ !target);
 
 
-  let link_files = List.filter (fun file -> Filename.check_suffix file !suffix) deps in
-  Printf.printf "%s: %s\n\n" !target (String.concat " " link_files);
-  
-  let include_files = List.map map_suffix deps in
-  
-  Printf.printf "%s: %s\n\n" self (String.concat " " (List.map (fun f -> !prefix ^ "/" ^ f) include_files));
-  Printf.printf "-include %s\n\n" (String.concat " " (List.map (fun f -> !prefix ^ "/" ^ f) include_files));
+  Printf.printf "%s: %s\n\n" !target (String.concat " " implementation_files);
+  let depend_files = List.map (fun f -> (!prefix ^ "/" ^ (map_suffix f))) deps in
+  Printf.printf "%s: %s\n\n" self (String.concat " " depend_files);
+  Printf.printf "-include %s\n\n" (String.concat " " depend_files);
   ()
-
-(* Need to print all read files. We need to include .mli.d files *)
 
 
  

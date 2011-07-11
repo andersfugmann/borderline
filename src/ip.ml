@@ -127,10 +127,6 @@ let to_ips set =
 (** Convert a list of ips to a set *)
 let set_of_ips ips =
   List.fold_left (fun acc ip -> add (to_range ip) acc) empty ips
-
-
-
-
     
 (** Test *) 
 let tests = 
