@@ -124,6 +124,9 @@ let to_ips set =
   in
   inner 0 set
 
+let to_ranges set = set
+
+
 (** Convert a list of ips to a set *)
 let set_of_ips ips =
   List.fold_left (fun acc ip -> add (to_range ip) acc) empty ips
@@ -219,3 +222,4 @@ let tests =
     );
       
   ]
+

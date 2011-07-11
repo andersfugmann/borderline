@@ -70,7 +70,7 @@ let gen_condition = function
     begin
       match Ip.to_ips ips with
         | [ (ip, mask) ] -> "", sprintf "--%s %s/%d" (choose_dir "source" "destination" direction) (Ip.string_of_ip ip) mask
-        | _ -> let low, high = elem ips in
+        | _ -> let low, high = elem (Ip.to_ranges ips) in
                "-m iprange ", sprintf "--%s-range %s-%s" 
                  (choose_dir "src" "dst" direction) 
                  (Ip.string_of_ip low) (Ip.string_of_ip high)
@@ -126,7 +126,7 @@ let transform chains =
       | Zone _ -> 2
       | State _ -> 3
       | Ports (_, ports) -> 4
-      | IpSet (_, ips) -> List.length ips
+      | IpSet (_, ips) -> Ip.size ips
       | Protocol protocols -> List.length protocols
       | IcmpType types -> List.length types
       | Mark _ -> 2
@@ -160,8 +160,8 @@ let transform chains =
         (Protocol protocols, neg) :: xs when List.length protocols > 1 ->
           let chain = expand_cond tg (fun p -> Protocol [p]) protocols neg in
             expand_conds (chain :: acc1) acc2 (Ir.Jump chain.id) xs
-      | (IpSet(direction, ips), neg) :: xs when List.length ips > 1 ->
-          let chain = expand_cond tg (fun ip -> IpSet(direction, [ip])) ips neg in
+      | (IpSet(direction, set), neg) :: xs when Ip.size set > 1 ->
+          let chain = expand_cond tg (fun range -> IpSet(direction, Ip.add range Ip.empty)) (Ip.to_ranges set) neg in
             expand_conds (chain :: acc1) acc2 (Ir.Jump chain.id) xs
       | (Zone(direction, zones), neg) :: xs when List.length zones > 1 ->
           let chain = expand_cond tg (fun zone -> Zone(direction, [zone])) zones neg in
