@@ -21,13 +21,24 @@ BINARY_DEPS := $(addprefix $(BUILD_DIR)/, $(addsuffix .d, $(BINARIES)))
 GRAMMER_FILES = $(LEX_FILES:.mll=.ml) $(YACC_FILES:.mly=.mli) $(YACC_FILES:.mly=.ml)  
 
 OCAMLFIND_ARGS = $(addprefix -I $(BUILD_DIR)/,$(INCLUDE)) -package "$(PACKAGES)" 
-ifdef OPTIMIZED
-COMPILE_SUFFIX = .cmx
-LD=ocamlopt
+
+#TARGET := $(strip $(TARGET))
+ifeq ($(TARGET), bytecode)
+  COMPILE_SUFFIX = .cmo
+  OCAMLC = ocamlc
+else ifeq ($(TARGET), optimized)
+  COMPILE_SUFFIX = .cmx
+  OCAMLC = ocamlopt
+else ifeq ($(TARGET), profile)
+  COMPILE_SUFFIX = .cmo
+  OCAMLC = ocamlcp
+else ifeq ($(TARGET), profile-opt)
+  COMPILE_SUFFIX =.cmx
+  OCAMLC = ocamlopt
+  OCFLAGS += -p
 else
-COMPILE_SUFFIX =.cmo
-LD=ocamlc
-endif 
+  $(error "Unknown compilation target: $(TARGET)")
+endif
 
 ifneq ($(MAKECMDGOALS),clean)
 $(foreach dir,$(INCLUDE),$(shell mkdir -p $(BUILD_DIR)/$(dir)))
@@ -53,7 +64,7 @@ gendep.cmo: OCFLAGS += -rectypes
 %.cmo: %.ml 
 	@echo "Compile: " $(subst $(BUILD_DIR),,$@)
 	@[ -d $(BUILD_DIR)/$(dir $@) ] || mkdir -p $(BUILD_DIR)/$(dir $@)
-	@ocamlfind ocamlc -c $(OCFLAGS) $(OCAMLFIND_ARGS) $< -o $(BUILD_DIR)/$@
+	@ocamlfind $(OCAMLC) -c $(OCFLAGS) $(OCAMLFIND_ARGS) $< -o $(BUILD_DIR)/$@
 
 gendep.cmx: OCFLAGS += -rectypes
 %.cmx: %.ml
@@ -64,7 +75,7 @@ gendep.cmx: OCFLAGS += -rectypes
 %.cmi: %.mli
 	@echo "Compile: " $(subst $(BUILD_DIR),,$@)
 	@[ -d $(BUILD_DIR)/$(dir $@) ] || mkdir -p $(BUILD_DIR)/$(dir $@)
-	@ocamlfind ocamlc -c $(OCFLAGS) $(OCAMLFIND_ARGS) $< -o $(BUILD_DIR)/$@
+	@ocamlfind $(OCAMLC) -c $(OCFLAGS) $(OCAMLFIND_ARGS) $< -o $(BUILD_DIR)/$@
 
 %.ml: %.mll
 	@echo "Lexer:   " $(subst $(BUILD_DIR),,$@)
@@ -77,9 +88,10 @@ gendep.cmx: OCFLAGS += -rectypes
 	@ocamlyacc $<
 
 %.o: %.c
+
 	@echo "Compile: " $(subst $(BUILD_DIR),,$@)
 	@[ -d $(BUILD_DIR)/$(dir $@) ] || mkdir -p $(BUILD_DIR)/$(dir $@)
-	@ocamlfind ocamlc -c $(OCFLAGS) -cclib "$(addprefix -l, $(CLIBS))" -ccopt "$(CFLAGS)" $< 
+	@ocamlfind $(OCAMLC) -c $(OCFLAGS) -cclib "$(addprefix -l, $(CLIBS))" -ccopt "$(CFLAGS)" $< 
 	@mv $(notdir $@) $(BUILD_DIR)/$@
 
 gendep: gendep.cmx
@@ -90,7 +102,7 @@ gendep: gendep.cmx
 $(BINARIES): %: $(OBJECTS)
 	@echo "Link:    " $(subst $(BUILD_DIR),,$@)
 	@[ -d $(BUILD_DIR)/$(dir $@) ] || mkdir -p $(BUILD_DIR)/$(dir $@)
-	@ocamlfind $(LD) $(OCFLAGS) $(OCAMLFIND_ARGS) -cclib "$(addprefix -l , $(CLIBS))" -ccopt "$(CFLAGS)" -linkpkg -o $(BUILD_DIR)/$@ $(addprefix $(BUILD_DIR)/, $(subst $(BUILD_DIR)/,,$+))
+	@ocamlfind $(OCAMLC) $(OCFLAGS) $(OCAMLFIND_ARGS) -cclib "$(addprefix -l , $(CLIBS))" -ccopt "$(CFLAGS)" -linkpkg -o $(BUILD_DIR)/$@ $(addprefix $(BUILD_DIR)/, $(subst $(BUILD_DIR)/,,$+))
 #(OBJECTS) $(addprefix $(BUILD_DIR)/, $($@_objs))
 
 
