@@ -41,7 +41,7 @@ let merge_opers rle =
       | (Ports (dir, _), _), (Ports (dir', _), _) when dir = dir' -> true
       | (Protocol _, _), (Protocol _, _) -> true
       | (IcmpType _, _), (IcmpType _, _) -> true
-      | (IpRange (dir, _), _), (IpRange (dir', _), _) when dir = dir' -> true
+      | (IpSet (dir, _), _), (IpSet (dir', _), _) when dir = dir' -> true
       | (Zone (dir, _), _), (Zone (dir', _), _) when dir = dir' -> true
       | (TcpFlags _, _), (TcpFlags _, _) -> false
       | _ -> false
@@ -65,12 +65,12 @@ let merge_opers rle =
           let (proto'', neg'') = merge_list (proto, neg) (proto', neg') in (Protocol (proto''), neg'')
       | (IcmpType types, neg), (IcmpType types', neg') ->
           let (types'', neg'') = merge_list (types, neg) (types', neg') in (IcmpType types'', neg'')
-      | ((IpRange (dir, ips), true) as a), ((IpRange (dir', ips'), false) as b) when dir = dir' ->
+      | ((IpSet (dir, ips), true) as a), ((IpSet (dir', ips'), false) as b) when dir = dir' ->
           merge_oper b a
-      | (IpRange (dir, ips), false), (IpRange (dir', ips'), true) when dir = dir' ->
-          (IpRange (dir, Ipv6.list_difference ips ips'), false)
-      | (IpRange (dir, ips), neg), (IpRange (dir', ips'), neg') when dir = dir' && neg = neg' ->
-          (IpRange (dir, Ipv6.list_intersection ips ips'), neg)
+      | (IpSet (dir, ips), false), (IpSet (dir', ips'), true) when dir = dir' ->
+          (IpSet (dir, Ip.difference ips ips'), false)
+      | (IpSet (dir, ips), neg), (IpSet (dir', ips'), neg') when dir = dir' && neg = neg' ->
+          (IpSet (dir, Ip.intersection ips ips'), neg)
       | (Zone (dir, zones), neg), (Zone (dir', zones'), neg') when dir = dir' ->
           let (zones'', neg'') = merge_list (zones, neg) (zones', neg') in (Zone (dir, zones''), neg'')
       | (cond, _), (cond', _) -> failwith ("is_sibling failed: " ^ string_of_int (enumerate_cond cond) ^ ", " ^ string_of_int (enumerate_cond cond'))

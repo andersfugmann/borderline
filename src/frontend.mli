@@ -18,7 +18,6 @@
 i*)
 
 open Common
-open Ipv6
 open Frontend_types
 
 val lineno : int ref

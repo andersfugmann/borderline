@@ -17,7 +17,7 @@ let rec list2ints : Frontend_types.data list -> int list = function
   | Id (id, _) :: xs -> failwith ("No all ints have been expanded: " ^ id)
   | [] -> []
 
-let rec list2ips : Frontend_types.data list -> Ipv6.ip list = function
+let rec list2ips : Frontend_types.data list -> Ip.t list = function
   | Number (_, _) :: xs -> failwith "Unexpected int in ip list"
   | Ip (ip, _) :: xs -> ip :: list2ips xs
   | Id (id, _) :: xs -> failwith ("No all ints have been expanded: " ^ id)
@@ -45,7 +45,7 @@ let rec process_rule table (rules, targets') =
         let chain = gen_op targets [] xs in
         let chain = Chain.replace chain.Ir.id (([(Ir.Protocol([udp]), false); (Ir.Ports(dir, list2ints ports), false)], Ir.Return) :: chain.Ir.rules) chain.Ir.comment in
           Chain.create [ (acc, Ir.Jump chain.Ir.id) ] "Rule"
-    | Filter(dir, Address(ips), neg) :: xs -> gen_op targets ( (Ir.IpRange(dir, List.map Ipv6.to_range (list2ips ips)), neg) :: acc ) xs
+    | Filter(dir, Address(ips), neg) :: xs -> gen_op targets ( (Ir.IpSet(dir, List.map Ip.to_range (list2ips ips)), neg) :: acc ) xs
     | Filter(dir, FZone(ids), neg) :: xs -> gen_op targets ((Ir.Zone(dir, list2zones ids), neg) :: acc) xs
     | Protocol (protos, neg) :: xs -> gen_op targets ((Ir.Protocol(list2ints protos), neg) :: acc) xs
     | IcmpType (types, false) :: xs -> gen_op targets ( (Ir.Protocol([icmp]), false) :: (Ir.IcmpType(list2ints types), false) :: acc) xs

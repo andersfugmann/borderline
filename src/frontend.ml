@@ -18,7 +18,6 @@
  *)
 
 open Common
-open Ipv6
 open Frontend_types
 
 let lineno = ref 1

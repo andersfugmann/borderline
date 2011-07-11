@@ -1,6 +1,5 @@
 (** Intermidiate representation. *)
 open Common
-open Ipv6
 
 type statetype = NEW | ESTABLISHED | RELATED | INVALID
 
@@ -23,13 +22,11 @@ type pol       = bool
 type icmp_packet_type = int
 
 
-type ip_range = (ip_number * ip_number)
-
 type condition = Interface of direction * id list
                | Zone of direction * zone list
                | State of statetype list
                | Ports of direction * int list
-               | IpRange of direction * ip_range list
+               | IpSet of direction * Ip.set
                | Protocol of int list
                | IcmpType of icmp_type list
                | Mark of int * int
@@ -52,11 +49,7 @@ type chain = { id: chain_id; rules : oper list; comment: string; }
 let eq_cond (x, n) (y, m) =
   n = m && (
     match x, y with
-        IpRange (d, r), IpRange (d', r') ->
-          begin
-            try d = d' && List.for_all2 (fun (x, y) (x', y') -> Ipv6.eq x x' && Ipv6.eq y y') r r'
-            with Invalid_argument _ -> false
-          end
+      | IpSet (d, r), IpSet (d', r') -> Ip.equality r r'
       | Zone(dir, id_lst), Zone (dir', id_lst') -> dir = dir' && eq_id_list id_lst id_lst' 
       | Interface(dir, id_lst), Interface(dir', id_lst') -> dir = dir' && eq_id_list id_lst id_lst'
       | x, y -> x = y
@@ -77,7 +70,7 @@ let get_dir = function
   | Zone (direction, _) -> Some direction
   | State _ -> None
   | Ports (direction, _) -> Some direction
-  | IpRange (direction, _) -> Some direction
+  | IpSet (direction, _) -> Some direction
   | Protocol _ -> None
   | IcmpType _ -> None
   | Mark _ -> None
@@ -88,7 +81,7 @@ let enumerate_cond = function
   | Zone _ -> 2
   | State _ -> 3
   | Ports _ -> 4
-  | IpRange _ -> 5
+  | IpSet _ -> 5
   | Protocol _ -> 6
   | IcmpType _ -> 7
   | TcpFlags _ -> 8
@@ -115,7 +108,7 @@ let is_always value = function
   | Zone _, _ 
   | State _, _
   | Ports _, _ 
-  | IpRange _, _
+  | IpSet _, _
   | Protocol _, _
   | IcmpType _, _ 
   | TcpFlags _, _

@@ -1,21 +1,3 @@
-(*i
- * Copyright 2009 Anders Fugmann.
- * Distributed under the GNU General Public License v3
- *
- * This file is part of Borderline - A Firewall Generator
- *
- * Borderline is free software: you can redistribute it and/or modify it
- * under the terms of the GNU General Public License version 3 as
- * published by the Free Software Foundation.
- *
- * Borderline is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with Borderline.  If not, see <http://www.gnu.org/licenses/>.
-i*)
 
 open Common
 open Frontend_types
@@ -54,8 +36,8 @@ let rec filter_zonerules table = function
 
 (* Return a chain that will mark the zone based on direction *)
 let create_zone_chain direction (id, nodes) =
-  let create_network_rule chain ip =
-    ([(Ir.IpRange(direction, [ Ipv6.to_range ip ] ), false)], Ir.Jump chain.Ir.id)
+  let create_network_rule chain ips =
+    ([(Ir.IpSet(direction, Ip.set_of_ips ips), false)], Ir.Jump chain.Ir.id)
   in
   let create_interface_rule chain interface =
     ([(Ir.Interface(direction, [interface]), false)], Ir.Jump chain.Ir.id)
@@ -66,7 +48,7 @@ let create_zone_chain direction (id, nodes) =
 
   let chain =
     if List.length network_nodes > 0 then
-      Chain.create (List.map (create_network_rule chain) (filter_network nodes)) ("Match networks for zone " ^ (id2str id))
+      Chain.create [ create_network_rule chain (filter_network nodes) ] ("Match networks for zone " ^ (id2str id))
     else
       chain
   in

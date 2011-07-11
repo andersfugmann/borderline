@@ -16,30 +16,46 @@ let (<) = lt_big_int
 let (<=) = le_big_int
 let (>) = gt_big_int
 let (>=) = ge_big_int
-(* let (==) = eq_big_int *)
 
 (* The empty set *)
 let empty = []
 
-type iprange = (big_int * big_int)
+type number = big_int 
+type mask = int
+type t = (big_int * mask)
+type range = (number * number)
 
 (** Define the set type *)
-type t = iprange list 
+type set = range list 
 
 (** Number of bits in ip number *)
 let bits = 128
+
+let field_size = 16
+let sep = ":"
 
 (** Number of elements in a ip set *)
 let size = List.length
 
 (** Print out a set in human readable form *)
 
-let string_of_ip (ip, mask) = Printf.sprintf "%s/%d" (string_of_big_int ip) mask
+let ip_of_string ip : big_int =
+  List.fold_left (fun acc num -> add_int_big_int num (shift_left_big_int acc field_size)) zero_big_int ip  
+  
+(** Ip to string *)
+let string_of_ip ip = 
+  let mask = pred (power_int_positive_int 2 field_size) in
+  let rec to_list ip = function 
+    | 0 -> []
+    | n -> int_of_big_int (and_big_int ip mask) :: to_list (shift_right_big_int ip 16) (n - field_size)
+  in
+  String.concat sep (List.map string_of_int (to_list ip bits))
+
+(** Range to string *)
 let string_of_range (low, high) = Printf.sprintf "(%s/%s)" (string_of_big_int low) (string_of_big_int high)
 
+(** Set to string *)
 let to_string set = String.concat "::" (List.map string_of_range set)
-
-
 
 (** Add an ip number to the set *)
 let rec add (low', high') = function
@@ -94,6 +110,7 @@ let to_range (ip, mask) =
   let low = xor_big_int high mask in
   (low, high)
 
+(** Convert a set to a list of ips *)
 let to_ips set = 
   let rec inner mask = function
     | [] -> []
@@ -106,6 +123,14 @@ let to_ips set =
       end
   in
   inner 0 set
+
+(** Convert a list of ips to a set *)
+let set_of_ips ips =
+  List.fold_left (fun acc ip -> add (to_range ip) acc) empty ips
+
+
+
+
     
 (** Test *) 
 let tests = 

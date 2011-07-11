@@ -18,7 +18,6 @@
  *)
 
 open Common
-open Ipv6
 
 type prefix = string
 
@@ -34,7 +33,7 @@ and node = Import of id
          | Process of processtype * rule_stm list * policytype list
 
 and zone_stm = Interface of id
-             | Network of ip
+             | Network of Ip.t
              | ZoneRules of processtype * rule_stm list * policytype list
 
 and filter_stm = Address of data list
@@ -53,5 +52,5 @@ and rule_stm = Filter of Ir.direction * filter_stm * Ir.pol
 
 and data = Number of int * Lexing.position
          | Id of id
-         | Ip of ip * Lexing.position
+         | Ip of Ip.t * Lexing.position
 
