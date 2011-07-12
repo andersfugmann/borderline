@@ -1,6 +1,8 @@
 # Filter illegal addresses (unallocated networks).
 define bogons = true
 
+# Filter based on iana allocations.
+define allocations = true
 
 # Allow router information for fe80 networks, and Neighbor Discovery
 # (rfc 2461) 
@@ -25,7 +27,6 @@ define public_udp_ports = domain, ntp
 # The 'configure' program will automatically set this variable in the 
 # external zone.
 #define external = <zone connected to the internet>
-
 
 # Further configuration is best made in the zone files, where access
 # to zones can be individually defined.

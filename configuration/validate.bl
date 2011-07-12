@@ -21,5 +21,17 @@ define validate =
                          destination address = bogon;
                      } policy { log_bogon };
                  };
+
+                 rule {
+                     use allocations; #if
+                     rule {
+                         source zone = external;
+                         source address != allocated;
+                     } policy { log_bogon };
+                     rule {
+                         destination zone = external;
+                         destination address != allocated;
+                     } policy { log_bogon };
+                 };
             };
       }

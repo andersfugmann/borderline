@@ -5,18 +5,6 @@
 open Printf
 open Big_int
 
-(** Just add all the normal integer operations *)
-
-let min = min_big_int
-let max = max_big_int
-let succ = succ_big_int 
-let pred = pred_big_int
-
-let (<) = lt_big_int
-let (<=) = le_big_int
-let (>) = gt_big_int
-let (>=) = ge_big_int
-
 (* The empty set *)
 let empty = []
 
@@ -30,14 +18,24 @@ type set = range list
 
 (** Number of bits in ip number *)
 let bits = 128
-
 let field_size = 16
 let sep = ":"
 
+(** Just add all the normal integer operations. The is just for convenience *)
+
+let min = min_big_int
+let max = max_big_int
+let succ = succ_big_int 
+let pred = pred_big_int
+
+let (<) = lt_big_int
+let (<=) = le_big_int
+let (>) = gt_big_int
+let (>=) = ge_big_int
+
+
 (** Number of elements in a ip set *)
 let size = List.length
-
-(** Print out a set in human readable form *)
 
 let ip_of_string ip : big_int =
   List.fold_left (fun acc num -> add_int_big_int num (shift_left_big_int acc field_size)) zero_big_int ip  
@@ -47,15 +45,22 @@ let string_of_ip ip =
   let mask = pred (power_int_positive_int 2 field_size) in
   let rec to_list ip = function 
     | 0 -> []
-    | n -> int_of_big_int (and_big_int ip mask) :: to_list (shift_right_big_int ip 16) (n - field_size)
+    | n -> int_of_big_int (and_big_int ip mask) :: to_list (shift_right_big_int ip field_size) (n - field_size)
   in
-  String.concat sep (List.map string_of_int (to_list ip bits))
+  let field_list = List.rev (to_list ip bits)  in
+  String.concat sep (List.map (Printf.sprintf "%x") field_list)
 
 (** Range to string *)
 let string_of_range (low, high) = Printf.sprintf "(%s/%s)" (string_of_big_int low) (string_of_big_int high)
 
 (** Set to string *)
 let to_string set = String.concat "::" (List.map string_of_range set)
+
+(** Normalize the set, Removing overlaps, and merging ranges if possible *)
+let rec normalize = function
+  | (low, high) :: (low', high') :: xs when (succ high) < low' -> (low, high) :: normalize ((low', high') :: xs)
+  | (low, high) :: (low', high') :: xs -> normalize ((low, max high high') :: xs)
+  | set -> set
 
 (** Add an ip number to the set *)
 let rec add (low', high') = function
@@ -82,7 +87,9 @@ let rec part (low', high') = function
   | [] -> []
 
 (** A U B *)
-let union a b = List.fold_right add a b
+let union a b = 
+  let u = List.merge (fun (l, h) (l', h') -> compare_big_int l l') a b in
+  normalize u
 
 (** A but not B *)
 let difference a b = List.fold_right sub b a
@@ -126,10 +133,12 @@ let to_ips set =
 (** Allow access to ranges in the set *)
 let to_ranges set = set
 
-
 (** Convert a list of ips to a set *)
 let set_of_ips ips =
-  List.fold_left (fun acc ip -> add (to_range ip) acc) empty ips
+  let ranges = List.map to_range ips in
+  (** Sort the ranges *)
+  let ranges = List.sort (fun (l, h) (l', h') -> compare_big_int l l') ranges in
+  normalize ranges 
     
 (** Test *) 
 let tests = 
@@ -216,7 +225,7 @@ let tests =
     "Set to ip list" >:: (fun () ->
       let set = add (r2br (10000, 20000)) empty in
       let ips = to_ips set in
-      let set2 = List.fold_left (fun set range -> add range set) empty (List.map to_range ips) in
+      let set2 = set_of_ips ips in
       assert_bool "Sets must be equal" (equality set set2);
       ()
     );

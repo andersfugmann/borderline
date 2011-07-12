@@ -7,7 +7,7 @@ open Printf
 open Chain
 
 let _ =
-  Sys.set_signal 15 (Sys.Signal_handle (fun _ -> failwith "Stopped here"));
+  Sys.catch_break true;
 
   try
     let files = List.tl (Array.to_list Sys.argv) in
