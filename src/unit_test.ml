@@ -3,7 +3,7 @@ open OUnit
   
 let suite = "Borderline" >::: 
   [ 
-    Ip.tests;
+    Ipset.tests;
   ]     
 
 let _ =         

@@ -70,7 +70,7 @@ statement:
 /* Scan elements within a zone. */
 
 zone_stm:
-  | NETWORK EQ IPv6                       { let i, p, pos = $3 in Network(Ip.ip_of_string i, p) }
+  | NETWORK EQ IPv6                       { let i, p, pos = $3 in Network(Ipset.ip_of_string i, p) }
   | INTERFACE EQ ID                       { Interface($3)}
   | PROCESS process                       { let a, b, c = $2 in ZoneRules(a, b, c) }
 ;
@@ -191,6 +191,6 @@ data_list:
 data:
   | INT                                   { let n, pos = $1 in Number (n, pos) }
   | ID                                    { Id $1 }
-  | IPv6                                  { let i, p, pos = $1 in Ip ((Ip.ip_of_string i, p), pos) }
+  | IPv6                                  { let i, p, pos = $1 in Ip ((Ipset.ip_of_string i, p), pos) }
 ;
 
