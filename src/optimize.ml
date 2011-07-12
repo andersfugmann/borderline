@@ -68,9 +68,9 @@ let merge_opers rle =
       | ((IpSet (dir, ips), true) as a), ((IpSet (dir', ips'), false) as b) when dir = dir' ->
           merge_oper b a
       | (IpSet (dir, ips), false), (IpSet (dir', ips'), true) when dir = dir' ->
-          (IpSet (dir, Ipset.difference ips ips'), false)
+          (IpSet (dir, Ipset.diff ips ips'), false)
       | (IpSet (dir, ips), neg), (IpSet (dir', ips'), neg') when dir = dir' && neg = neg' ->
-          (IpSet (dir, Ipset.intersection ips ips'), neg)
+          (IpSet (dir, Ipset.inter ips ips'), neg)
       | (Zone (dir, zones), neg), (Zone (dir', zones'), neg') when dir = dir' ->
           let (zones'', neg'') = merge_list (zones, neg) (zones', neg') in (Zone (dir, zones''), neg'')
       | (cond, _), (cond', _) -> failwith ("is_sibling failed: " ^ string_of_int (enumerate_cond cond) ^ ", " ^ string_of_int (enumerate_cond cond'))

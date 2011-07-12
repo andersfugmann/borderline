@@ -27,7 +27,7 @@ type condition = Interface of direction * id list
                | Zone of direction * zone list
                | State of statetype list
                | Ports of direction * int list
-               | IpSet of direction * Ipset.set
+               | IpSet of direction * Ipset.t
                | Protocol of int list
                | IcmpType of icmp_type list
                | Mark of int * int
@@ -50,7 +50,7 @@ type chain = { id: chain_id; rules : oper list; comment: string; }
 let eq_cond (x, n) (y, m) =
   n = m && (
     match x, y with
-      | IpSet (d, r), IpSet (d', r') -> Ipset.equality r r'
+      | IpSet (d, r), IpSet (d', r') -> Ipset.equal r r'
       | Zone(dir, id_lst), Zone (dir', id_lst') -> dir = dir' && eq_id_list id_lst id_lst' 
       | Interface(dir, id_lst), Interface(dir', id_lst') -> dir = dir' && eq_id_list id_lst id_lst'
       | x, y -> x = y

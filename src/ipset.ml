@@ -10,11 +10,11 @@ let empty = []
 
 type number = big_int 
 type mask = int
-type t = (big_int * mask)
-type range = (number * number)
+type ip = (big_int * mask)
+type elt = (number * number)
 
 (** Define the set type *)
-type set = range list 
+type t = elt list 
 
 (** Number of bits in ip number *)
 let bits = 128
@@ -34,13 +34,11 @@ let (>) = gt_big_int
 let (>=) = ge_big_int
 
 
-(** Number of elements in a ip set *)
-let size = List.length
+let cardinal = List.length
 
 let ip_of_string ip : big_int =
   List.fold_left (fun acc num -> add_int_big_int num (shift_left_big_int acc field_size)) zero_big_int ip  
   
-(** Ip to string *)
 let string_of_ip ip = 
   let mask = pred (power_int_positive_int 2 field_size) in
   let rec to_list ip = function 
@@ -62,21 +60,19 @@ let rec normalize = function
   | (low, high) :: (low', high') :: xs -> normalize ((low, max high high') :: xs)
   | set -> set
 
-(** Add an ip number to the set *)
 let rec add (low', high') = function
   | (low, high) :: xs when (succ high') < low -> (low', high') :: (low, high) :: xs
   | (low, high) :: xs when (succ high) < low' -> (low, high) :: add (low', high') xs
   | (low, high) :: xs -> add (min low low', max high high') xs 
   | [] -> [ (low', high') ]
 
-(** Remove elements from the set *)
-let rec sub (low', high') = function
+let rec remove (low', high') = function
   | (low, high) :: xs when high' < low -> (low, high) :: xs
-  | (low, high) :: xs when high < low' -> (low, high) :: sub (low', high') xs
+  | (low, high) :: xs when high < low' -> (low, high) :: remove (low', high') xs
   | (low, high) :: xs when low < low' && high' < high -> (low, pred low') :: (succ high', high) :: xs
   | (low, high) :: xs when low' <= low && high' < high -> (succ high', high) :: xs
-  | (low, high) :: xs when low < low' -> (low, pred low') :: sub (low', high') xs
-  | (low, high) :: xs (* when low' <= low *) -> sub (low', high') xs
+  | (low, high) :: xs when low < low' -> (low, pred low') :: remove (low', high') xs
+  | (low, high) :: xs (* when low' <= low *) -> remove (low', high') xs
   | [] -> []
 
 (** Return how much of the given range is part of the set *)
@@ -86,19 +82,15 @@ let rec part (low', high') = function
   | (low, high) :: xs -> (max low low', min high high') :: part (low', high') xs
   | [] -> []
 
-(** A U B *)
 let union a b = 
   let u = List.merge (fun (l, h) (l', h') -> compare_big_int l l') a b in
   normalize u
 
-(** A but not B *)
-let difference a b = List.fold_right sub b a
+let diff a b = List.fold_right remove b a
 
-(** Intersection between A and B *)
-let intersection a b =
+let inter a b =
   List.fold_left (fun acc e -> acc @ part e a) [] b
 
-(** Test if a is a subset of b *) 
 let rec subset a b =
   match (a, b) with
     | (low, high) :: xs, (low', high') :: xs' when high' < low -> subset ((low, high) :: xs) xs'
@@ -106,98 +98,98 @@ let rec subset a b =
     | [], _ -> true
     | _, _ -> false 
   
-(** Test for set equality *)
-let equality a b = 
+let equal a b = 
   subset a b && subset b a
   
-(** Convet an ip addres and mask to an iprange *)
-let to_range (ip, mask) =
+let to_elt (ip, mask) =
   let mask = pred (power_int_positive_int 2 (bits - mask)) in
   let high = or_big_int ip mask in
   let low = xor_big_int high mask in
   (low, high)
 
-(** Convert a set to a list of ips *)
 let to_ips set = 
   let rec inner mask = function
     | [] -> []
     | ((low, high) :: xs) as lst -> 
       let ip = (low, mask) in
-      let range = to_range ip in begin
+      let range = to_elt ip in begin
         match subset [ range ] lst with
-          | true -> ip :: inner 0 (sub range lst) 
+          | true -> ip :: inner 0 (remove range lst) 
           | false -> inner (mask + 1) lst
       end
   in
   inner 0 set
-(** Allow access to ranges in the set *)
-let to_ranges set = set
+
+
+let singleton elt = [ elt ]
+
+let elements set = set
 
 (** Convert a list of ips to a set *)
-let set_of_ips ips =
-  let ranges = List.map to_range ips in
+let from_ips ips =
+  let ranges = List.map to_elt ips in
   (** Sort the ranges *)
   let ranges = List.sort (fun (l, h) (l', h') -> compare_big_int l l') ranges in
   normalize ranges 
     
 (** Test *) 
-let tests = 
+let test = 
   let r2br (a, b) = (big_int_of_int a, big_int_of_int b) in   
   let open OUnit in
   "Generic ip numbers" >::: [
     "Insertion" >:: ( fun () -> 
       let set = add (r2br (3, 5)) empty in
-      assert_equal ~msg:"Wrong set size" ~printer:string_of_int 1 (size set);
+      assert_equal ~msg:"Wrong set size" ~printer:string_of_int 1 (cardinal set);
       let set = add (r2br (1, 2)) set in
-      assert_equal ~msg:"Wrong set size" ~printer:string_of_int 1 (size set);
+      assert_equal ~msg:"Wrong set size" ~printer:string_of_int 1 (cardinal set);
       let set = add (r2br (6, 10)) set in
-      assert_equal ~msg:"Wrong set size" ~printer:string_of_int 1 (size set);
+      assert_equal ~msg:"Wrong set size" ~printer:string_of_int 1 (cardinal set);
       let set = add (r2br (20, 100)) set in
-      assert_equal ~msg:"Wrong set size" ~printer:string_of_int 2 (size set);
+      assert_equal ~msg:"Wrong set size" ~printer:string_of_int 2 (cardinal set);
       let set = add (r2br (11, 19)) set in
-      assert_equal ~msg:"Wrong set size" ~printer:string_of_int 1 (size set);
+      assert_equal ~msg:"Wrong set size" ~printer:string_of_int 1 (cardinal set);
       let set = add (r2br (50, 80)) set in
-      assert_equal ~msg:"Wrong set size" ~printer:string_of_int 1 (size set);
+      assert_equal ~msg:"Wrong set size" ~printer:string_of_int 1 (cardinal set);
       let set = add (r2br (50, 150)) set in
-      assert_equal ~msg:"Wrong set size" ~printer:string_of_int 1 (size set);
+      assert_equal ~msg:"Wrong set size" ~printer:string_of_int 1 (cardinal set);
       ()
     );
     "Removal" >:: ( fun () -> 
       let set = add (r2br (100, 200)) empty in
-      let set = sub (r2br (50, 150)) set in
-      assert_equal ~msg:"Wrong set size" ~printer:string_of_int 1 (size set);
-      let set = sub (r2br (170, 250)) set in
-      assert_equal ~msg:"Wrong set size" ~printer:string_of_int 1 (size set);
-      let set = sub (r2br (155, 165)) set in
-      assert_equal ~msg:"Wrong set size" ~printer:string_of_int 2 (size set);
-      let set = sub (r2br (155, 165)) set in
-      assert_equal ~msg:"Wrong set size" ~printer:string_of_int 2 (size set);
+      let set = remove (r2br (50, 150)) set in
+      assert_equal ~msg:"Wrong set size" ~printer:string_of_int 1 (cardinal set);
+      let set = remove (r2br (170, 250)) set in
+      assert_equal ~msg:"Wrong set size" ~printer:string_of_int 1 (cardinal set);
+      let set = remove (r2br (155, 165)) set in
+      assert_equal ~msg:"Wrong set size" ~printer:string_of_int 2 (cardinal set);
+      let set = remove (r2br (155, 165)) set in
+      assert_equal ~msg:"Wrong set size" ~printer:string_of_int 2 (cardinal set);
       ()
     );
     "Intersection" >:: ( fun () -> 
       let set1 = add ( r2br (100, 200)) empty in
       let set2 = add ( r2br (300, 400)) set1 in
-      assert_equal ~msg:"Wrong set size" ~printer:string_of_int 1 (size (intersection set1 set2));
+      assert_equal ~msg:"Wrong set size" ~printer:string_of_int 1 (cardinal (inter set1 set2));
 
       let set1 = add ( r2br (100, 200)) empty in
       let set2 = add ( r2br (150, 250)) empty in
-      assert_equal ~msg:"Wrong set size" ~printer:string_of_int 1 (size (intersection set1 set2));
+      assert_equal ~msg:"Wrong set size" ~printer:string_of_int 1 (cardinal (inter set1 set2));
       ()
     );
 
     "Equality" >:: (fun () ->
       let set1 = add ( r2br (100, 200)) empty in
       let set2 = add ( r2br (300, 400)) set1 in
-      assert_bool "Sets should be different" (not (equality set1 set2));
+      assert_bool "Sets should be different" (not (equal set1 set2));
 
       let set1 = add ( r2br (250, 350)) empty in
-      assert_bool "Sets should be different" (not (equality set1 set2));
+      assert_bool "Sets should be different" (not (equal set1 set2));
       
       let set2 = add ( r2br (250, 350)) empty in
-      assert_bool "Sets should be equal" (equality set1 set2);
-      assert_bool "Sets should be equal" (equality set2 set1);
-      assert_bool "Sets should be equal" (equality set1 set1);
-      assert_bool "Sets should be equal" (equality set2 set2);
+      assert_bool "Sets should be equal" (equal set1 set2);
+      assert_bool "Sets should be equal" (equal set2 set1);
+      assert_bool "Sets should be equal" (equal set1 set1);
+      assert_bool "Sets should be equal" (equal set2 set2);
       ()
     );
 
@@ -225,8 +217,8 @@ let tests =
     "Set to ip list" >:: (fun () ->
       let set = add (r2br (10000, 20000)) empty in
       let ips = to_ips set in
-      let set2 = set_of_ips ips in
-      assert_bool "Sets must be equal" (equality set set2);
+      let set2 = from_ips ips in
+      assert_bool "Sets must be equal" (equal set set2);
       ()
     );
       
