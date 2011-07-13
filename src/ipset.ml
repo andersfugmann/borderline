@@ -2,173 +2,173 @@
    Define a set type for ip addresses.
 *)
 
+open Printf
+open Big_int
+
 module type Ip_type =
   sig
     val bits : int
     val field_size : int
-    val sep : string 
+    val to_string : int list -> string
   end
 
-module Ipv4 = struct
+module Ipv4 : Ip_type = struct
   let bits = 32
   let field_size = 8
-  let sep = "."
+  let to_string fields = String.concat "." (List.map (sprintf "%d") fields)
 end 
 
-module Ipv6 = struct
+module Ipv6 : Ip_type = struct
   let bits = 128
   let field_size = 16
-  let sep = ":"
+  let to_string fields = String.concat ":" (List.map (sprintf "%4x") fields)
 end  
 
-(** Hey. the generic ip set dont care about ip numbers as such. *)
-
-open Printf
-open Big_int
-
-(* The empty set *)
-let empty = []
-
-type number = big_int 
-type mask = int
-type ip = (big_int * mask)
-type elt = (number * number)
-
-(** Define the set type *)
-type t = elt list 
-
-(** Number of bits in ip number *)
-let bits = 128
-let field_size = 16
-let sep = ":"
-
-
-(** Just add all the normal integer operations. The is just for convenience *)
-
-let min = min_big_int
-let max = max_big_int
-let succ = succ_big_int 
-let pred = pred_big_int
-
-let (<) = lt_big_int
-let (<=) = le_big_int
-let (=) = eq_big_int
-let (>) = gt_big_int
-let (>=) = ge_big_int
-let (-) = sub_big_int
-let (+) = add_big_int
-let (&) = and_big_int
-
-let (-|) = Pervasives.(-)
-let (+|) = Pervasives.(+)
-
-
-let cardinal = List.length
-
+module Make(Ip: Ip_type) =
+struct
   
+  let empty = []
+
+  type number = big_int 
+  type mask = int
+  type ip = (big_int * mask)
+  type elt = (number * number)
+
+  type t = elt list 
+
+  let field_size = Ip.field_size
+
+  (** Just add all the normal integer operations. The is just for convenience *)
+
+  let min = min_big_int
+  let max = max_big_int
+  let succ = succ_big_int 
+  let pred = pred_big_int
+
+  let (<) = lt_big_int
+  let (<=) = le_big_int
+  let (=) = eq_big_int
+  let (>) = gt_big_int
+  let (>=) = ge_big_int
+  let (-) = sub_big_int
+  let (+) = add_big_int
+  let (&) = and_big_int
+
+  let (-|) = Pervasives.(-)
+  let (+|) = Pervasives.(+)
+
+
+  let cardinal = List.length
+
+    
 (** Range to string *)
-let string_of_range (low, high) = Printf.sprintf "(%s/%s)" (string_of_big_int low) (string_of_big_int high)
+  let string_of_range (low, high) = Printf.sprintf "(%s/%s)" (string_of_big_int low) (string_of_big_int high)
 
 (** Set to string *)
-let to_string set = String.concat "::" (List.map string_of_range set)
+  let to_string set = String.concat "::" (List.map string_of_range set)
 
 (** Normalize the set, Removing overlaps, and merging ranges if possible *)
-let rec normalize = function
-  | (low, high) :: (low', high') :: xs when (succ high) < low' -> (low, high) :: normalize ((low', high') :: xs)
-  | (low, high) :: (low', high') :: xs -> normalize ((low, max high high') :: xs)
-  | set -> set
+  let rec normalize = function
+    | (low, high) :: (low', high') :: xs when (succ high) < low' -> (low, high) :: normalize ((low', high') :: xs)
+    | (low, high) :: (low', high') :: xs -> normalize ((low, max high high') :: xs)
+    | set -> set
 
-let rec add (low', high') = function
-  | (low, high) :: xs when (succ high') < low -> (low', high') :: (low, high) :: xs
-  | (low, high) :: xs when (succ high) < low' -> (low, high) :: add (low', high') xs
-  | (low, high) :: xs -> add (min low low', max high high') xs 
-  | [] -> [ (low', high') ]
+  let rec add (low', high') = function
+    | (low, high) :: xs when (succ high') < low -> (low', high') :: (low, high) :: xs
+    | (low, high) :: xs when (succ high) < low' -> (low, high) :: add (low', high') xs
+    | (low, high) :: xs -> add (min low low', max high high') xs 
+    | [] -> [ (low', high') ]
 
-let rec remove (low', high') = function
-  | (low, high) :: xs when high' < low -> (low, high) :: xs
-  | (low, high) :: xs when high < low' -> (low, high) :: remove (low', high') xs
-  | (low, high) :: xs when low < low' && high' < high -> (low, pred low') :: (succ high', high) :: xs
-  | (low, high) :: xs when low' <= low && high' < high -> (succ high', high) :: xs
-  | (low, high) :: xs when low < low' -> (low, pred low') :: remove (low', high') xs
-  | (low, high) :: xs (* when low' <= low *) -> remove (low', high') xs
-  | [] -> []
+  let rec remove (low', high') = function
+    | (low, high) :: xs when high' < low -> (low, high) :: xs
+    | (low, high) :: xs when high < low' -> (low, high) :: remove (low', high') xs
+    | (low, high) :: xs when low < low' && high' < high -> (low, pred low') :: (succ high', high) :: xs
+    | (low, high) :: xs when low' <= low && high' < high -> (succ high', high) :: xs
+    | (low, high) :: xs when low < low' -> (low, pred low') :: remove (low', high') xs
+    | (low, high) :: xs (* when low' <= low *) -> remove (low', high') xs
+    | [] -> []
 
 (** Return how much of the given range is part of the set *)
-let rec part (low', high') = function 
-  | (low, high) :: xs when high' < low -> part (low', high') xs
-  | (low, high) :: xs when high < low' -> []
-  | (low, high) :: xs -> (max low low', min high high') :: part (low', high') xs
-  | [] -> []
-
-let union a b = 
-  let u = List.merge (fun (l, h) (l', h') -> compare_big_int l l') a b in
-  normalize u
-
-let diff a b = List.fold_right remove b a
-
-let inter a b =
-  List.fold_left (fun acc e -> acc @ part e a) [] b
-
-let rec subset a b =
-  match (a, b) with
-    | (low, high) :: xs, (low', high') :: xs' when high' < low -> subset ((low, high) :: xs) xs'
-    | (low, high) :: xs, (low', high') :: xs' when low' <= low && high <= high' -> subset xs ((low', high') :: xs')
-    | [], _ -> true
-    | _, _ -> false 
-  
-let equal a b = 
-  subset a b && subset b a
-
-
-let ip_of_string ip = 
-  List.fold_left (fun acc num -> add_int_big_int num (shift_left_big_int acc field_size)) zero_big_int ip
-    
-let string_of_ip ip = 
-  let mask = pred (power_int_positive_int 2 field_size) in
-  let rec to_list ip = function 
-    | 0 -> []
-    | n -> int_of_big_int (and_big_int ip mask) :: to_list (shift_right_big_int ip field_size) (n -| field_size)
-  in
-  let field_list = List.rev (to_list ip bits)  in
-  String.concat sep (List.map (Printf.sprintf "%x") field_list)
-    
-let to_elt (ip, mask) =
-  let mask = pred (power_int_positive_int 2 (bits -| mask)) in
-  let high = or_big_int ip mask in
-  let low = xor_big_int high mask in
-  (low, high)
-    
-  
-let to_ips set = 
-  let rec inner mask = function
+  let rec part (low', high') = function 
+    | (low, high) :: xs when high' < low -> part (low', high') xs
+    | (low, high) :: xs when high < low' -> []
+    | (low, high) :: xs -> (max low low', min high high') :: part (low', high') xs
     | [] -> []
-    | ((low, high) :: xs) as lst -> 
-      let ip = (low, mask) in
-      let range = to_elt ip in begin
-        match subset [ range ] lst with
-          | true -> ip :: inner 0 (remove range lst) 
-          | false -> inner (mask +| 1) lst
-      end
-  in
-  inner 0 set
+
+  let union a b = 
+    let u = List.merge (fun (l, h) (l', h') -> compare_big_int l l') a b in
+    normalize u
+
+  let diff a b = List.fold_right remove b a
+
+  let inter a b =
+    List.fold_left (fun acc e -> acc @ part e a) [] b
+
+  let rec subset a b =
+    match (a, b) with
+      | (low, high) :: xs, (low', high') :: xs' when high' < low -> subset ((low, high) :: xs) xs'
+      | (low, high) :: xs, (low', high') :: xs' when low' <= low && high <= high' -> subset xs ((low', high') :: xs')
+      | [], _ -> true
+      | _, _ -> false 
+        
+  let equal a b = 
+    subset a b && subset b a
 
 
-let singleton elt = [ elt ]
+  let ip_of_string ip = 
+    List.fold_left (fun acc num -> add_int_big_int num (shift_left_big_int acc Ip.field_size)) zero_big_int ip
+      
+  let string_of_ip ip = 
+    let mask = pred (power_int_positive_int 2 Ip.field_size) in
+    let rec to_list ip = function 
+      | 0 -> []
+      | n -> int_of_big_int (and_big_int ip mask) :: to_list (shift_right_big_int ip Ip.field_size) (n -| Ip.field_size)
+    in
+    Ip.to_string (List.rev (to_list ip Ip.bits))
+      
+  let to_elt (ip, mask) =
+    let mask = pred (power_int_positive_int 2 (Ip.bits -| mask)) in
+    let high = or_big_int ip mask in
+    let low = xor_big_int high mask in
+    (low, high)
+      
+      
+  let to_ips set = 
+    let rec inner mask = function
+      | [] -> []
+      | ((low, high) :: xs) as lst -> 
+        let ip = (low, mask) in
+        let range = to_elt ip in begin
+          match subset [ range ] lst with
+            | true -> ip :: inner 0 (remove range lst) 
+            | false -> inner (mask +| 1) lst
+        end
+    in
+    inner 0 set
 
-let elements set = set
+
+  let singleton elt = [ elt ]
+
+  let elements set = set
 
 (** Convert a list of ips to a set *)
-let from_ips ips =
-  let ranges = List.map to_elt ips in
+  let from_ips ips =
+    let ranges = List.map to_elt ips in
   (** Sort the ranges *)
-  let ranges = List.sort (fun (l, h) (l', h') -> compare_big_int l l') ranges in
-  normalize ranges 
+    let ranges = List.sort (fun (l, h) (l', h') -> compare_big_int l l') ranges in
+    normalize ranges 
 
-let is_network_range (low, high) =
-  let diff = high - low in
+  let is_network_range (low, high) =
+    let diff = high - low in
   (* Basically, diff must be all ones. *)
-  ((succ diff) & diff) = zero_big_int 
+    ((succ diff) & diff) = zero_big_int 
     
+end
+
+
+(** Be a IPv6_set.. *)
+include Make(Ipv6)
+
 (** Test *) 
 let test = 
   let r2br (a, b) = (big_int_of_int a, big_int_of_int b) in   
@@ -258,6 +258,5 @@ let test =
       assert_bool "Sets must be equal" (equal set set2);
       ()
     );
-      
   ]
 
