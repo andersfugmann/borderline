@@ -68,5 +68,8 @@ val elements : t -> elt list
 (** Number of elements in a ip t *)
 val cardinal : t -> int
 
+(** Test if a range can be represented by just one ip / mask *)
+val is_network_range : elt -> bool
+
 (** Unit tests *)
 val test : OUnit.test

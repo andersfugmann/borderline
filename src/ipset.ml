@@ -2,6 +2,27 @@
    Define a set type for ip addresses.
 *)
 
+module type Ip_type =
+  sig
+    val bits : int
+    val field_size : int
+    val sep : string 
+  end
+
+module Ipv4 = struct
+  let bits = 32
+  let field_size = 8
+  let sep = "."
+end 
+
+module Ipv6 = struct
+  let bits = 128
+  let field_size = 16
+  let sep = ":"
+end  
+
+(** Hey. the generic ip set dont care about ip numbers as such. *)
+
 open Printf
 open Big_int
 
@@ -21,6 +42,7 @@ let bits = 128
 let field_size = 16
 let sep = ":"
 
+
 (** Just add all the normal integer operations. The is just for convenience *)
 
 let min = min_big_int
@@ -30,24 +52,20 @@ let pred = pred_big_int
 
 let (<) = lt_big_int
 let (<=) = le_big_int
+let (=) = eq_big_int
 let (>) = gt_big_int
 let (>=) = ge_big_int
+let (-) = sub_big_int
+let (+) = add_big_int
+let (&) = and_big_int
+
+let (-|) = Pervasives.(-)
+let (+|) = Pervasives.(+)
 
 
 let cardinal = List.length
 
-let ip_of_string ip : big_int =
-  List.fold_left (fun acc num -> add_int_big_int num (shift_left_big_int acc field_size)) zero_big_int ip  
   
-let string_of_ip ip = 
-  let mask = pred (power_int_positive_int 2 field_size) in
-  let rec to_list ip = function 
-    | 0 -> []
-    | n -> int_of_big_int (and_big_int ip mask) :: to_list (shift_right_big_int ip field_size) (n - field_size)
-  in
-  let field_list = List.rev (to_list ip bits)  in
-  String.concat sep (List.map (Printf.sprintf "%x") field_list)
-
 (** Range to string *)
 let string_of_range (low, high) = Printf.sprintf "(%s/%s)" (string_of_big_int low) (string_of_big_int high)
 
@@ -100,13 +118,27 @@ let rec subset a b =
   
 let equal a b = 
   subset a b && subset b a
-  
+
+
+let ip_of_string ip = 
+  List.fold_left (fun acc num -> add_int_big_int num (shift_left_big_int acc field_size)) zero_big_int ip
+    
+let string_of_ip ip = 
+  let mask = pred (power_int_positive_int 2 field_size) in
+  let rec to_list ip = function 
+    | 0 -> []
+    | n -> int_of_big_int (and_big_int ip mask) :: to_list (shift_right_big_int ip field_size) (n -| field_size)
+  in
+  let field_list = List.rev (to_list ip bits)  in
+  String.concat sep (List.map (Printf.sprintf "%x") field_list)
+    
 let to_elt (ip, mask) =
-  let mask = pred (power_int_positive_int 2 (bits - mask)) in
+  let mask = pred (power_int_positive_int 2 (bits -| mask)) in
   let high = or_big_int ip mask in
   let low = xor_big_int high mask in
   (low, high)
-
+    
+  
 let to_ips set = 
   let rec inner mask = function
     | [] -> []
@@ -115,7 +147,7 @@ let to_ips set =
       let range = to_elt ip in begin
         match subset [ range ] lst with
           | true -> ip :: inner 0 (remove range lst) 
-          | false -> inner (mask + 1) lst
+          | false -> inner (mask +| 1) lst
       end
   in
   inner 0 set
@@ -131,6 +163,11 @@ let from_ips ips =
   (** Sort the ranges *)
   let ranges = List.sort (fun (l, h) (l', h') -> compare_big_int l l') ranges in
   normalize ranges 
+
+let is_network_range (low, high) =
+  let diff = high - low in
+  (* Basically, diff must be all ones. *)
+  ((succ diff) & diff) = zero_big_int 
     
 (** Test *) 
 let test = 

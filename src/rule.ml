@@ -32,7 +32,7 @@ let rec process_rule table (rules, targets') =
       packet. If the packet must match some element in an empty list,
       the filter can never be satisfied. *)
   let rec gen_op targets acc = function
-    | State(states, neg) :: xs -> gen_op targets ((Ir.State(states), neg) :: acc) xs
+    | State(states, neg) :: xs -> gen_op targets ((Ir.State( Ir.State_set.from_list states), neg) :: acc) xs
     | Filter(dir, TcpPort(ports), false) :: xs -> gen_op targets ( (Ir.Protocol([tcp]), false) :: (Ir.Ports(dir, list2ints ports), false) :: acc ) xs
     | Filter(dir, UdpPort(ports), false) :: xs-> gen_op targets ( (Ir.Protocol([udp]), false) :: (Ir.Ports(dir, list2ints ports), false) :: acc ) xs
     | Filter(dir, TcpPort(ports), true) :: xs ->

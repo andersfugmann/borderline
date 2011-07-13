@@ -14,7 +14,7 @@ let zone_id = ref 1
 let zone_map = ref StringMap.empty
 
 let elem = function
-x :: [] -> x
+  | x :: [] -> x
   | xs -> failwith "One and jsut one element required in list"
 
 let get_zone_id zone =
@@ -26,15 +26,15 @@ let get_zone_id zone =
     incr zone_id; printf "#Zone: %s -> %d\n" zone id; id
 
 let gen_neg = function
-true -> "! "
+  | true -> "! "
   | _ -> ""
 
 let choose_dir a b = function
-SOURCE      -> a
+  | SOURCE      -> a
   | DESTINATION -> b
 
 let get_state_name = function
-NEW -> "new"
+  | NEW -> "new"
   | ESTABLISHED -> "established"
   | RELATED -> "related"
   | INVALID -> "invalid"
@@ -43,7 +43,7 @@ NEW -> "new"
 let gen_zone_mask dir zone =
   let zone_id = get_zone_id (id2str zone) in
   match dir with
-      SOURCE -> zone_id, 0x00ff
+    | SOURCE -> zone_id, 0x00ff
     | DESTINATION -> zone_id * 0x100, 0xff00
 
 let gen_zone_mask_str dir zone =
@@ -51,7 +51,7 @@ let gen_zone_mask_str dir zone =
 
 let tcp_flags flags =
   let string_of_flag = function
-  1 -> "SYN"
+    | 1 -> "SYN"
     | 2 -> "ACK"
     | 3 -> "FIN"
     | 4 -> "RST"
@@ -60,7 +60,7 @@ let tcp_flags flags =
     | flag -> failwith "Unknown tcp flag: " ^ (string_of_int flag)
   in
   match flags with
-      [] -> "NONE"
+    | [] -> "NONE"
     | xs -> String.concat "," (List.map string_of_flag xs)
 
 (** Return a prefix and condition, between which a negation can be inserted *)
@@ -74,26 +74,32 @@ let gen_condition = function
                  (choose_dir "src" "dst" direction) 
                  (Ipset.string_of_ip low) (Ipset.string_of_ip high)
     end
-  | Interface(direction, iface_list) -> ("", (choose_dir "--in-interface " "--out-interface " direction) ^ (id2str (elem iface_list)))
-  | State(states) -> "-m conntrack ", ("--ctstate " ^ ( String.concat "," (List.map get_state_name states)))
-  | Zone(dir, id_lst) -> "-m mark ", "--mark " ^ (gen_zone_mask_str dir (elem id_lst))
+  | Interface(direction, iface_list) -> "", 
+    (choose_dir "--in-interface " "--out-interface " direction) ^ (id2str (elem iface_list))
+  | State(states) -> "-m conntrack ", 
+    ("--ctstate " ^ ( String.concat "," (State_set.fold (fun s acc -> get_state_name s :: acc) states [])))
+  | Zone(dir, id_lst) -> "-m mark ", 
+    "--mark " ^ (gen_zone_mask_str dir (elem id_lst))
   | Ports(direction, port :: []) -> "",
-      ( "--" ^ (choose_dir "source" "destination" direction) ^ "-port " ^ (string_of_int port))
+    ( "--" ^ (choose_dir "source" "destination" direction) ^ "-port " ^ (string_of_int port))
   | Ports(direction, ports) -> "-m multiport ",
-      ( "--" ^ (choose_dir "source" "destination" direction) ^ "-ports " ^ (String.concat "," (List.map string_of_int ports)) )
+    ( "--" ^ (choose_dir "source" "destination" direction) ^ "-ports " ^ (String.concat "," (List.map string_of_int ports)) )
   | Protocol(protocols) -> ("", sprintf "--protocol %d" (elem protocols))
-  | IcmpType(types) -> ("-m icmp6 ", sprintf "--icmpv6-type %d" (elem types))
-  | Mark (value, mask) -> "-m mark ", sprintf "--mark 0x%04x/0x%04x" value mask
-  | TcpFlags (flags, mask) -> "", sprintf "--tcp-flags " ^ (tcp_flags mask) ^ " " ^ (tcp_flags flags)
+  | IcmpType(types) -> "-m icmp6 ", 
+    sprintf "--icmpv6-type %d" (elem types)
+  | Mark (value, mask) -> "-m mark ", 
+    sprintf "--mark 0x%04x/0x%04x" value mask
+  | TcpFlags (flags, mask) -> "", 
+    sprintf "--tcp-flags " ^ (tcp_flags mask) ^ " " ^ (tcp_flags flags)
 
 let rec gen_conditions acc = function
-    (Ports (_, []), true) :: xs
-  | (State [], true) :: xs
+  | (State states, true) :: xs when State_set.is_empty states -> gen_conditions acc xs
+  | (State states, false) :: xs when State_set.is_empty states -> failwith "Unsatifiable rule in code-gen"
+  | (Ports (_, []), true) :: xs
   | (Zone (_, []), true) :: xs
   | (Protocol [], true) :: xs
   | (IcmpType [], true) :: xs -> gen_conditions acc xs
   | (Ports (_, []), false) :: xs
-  | (State [], false) :: xs
   | (Zone (_, []), false) :: xs
   | (Protocol [], false) :: xs
   | (IcmpType [], false) :: xs -> failwith "Unsatifiable rule in code-gen"
@@ -103,7 +109,7 @@ let rec gen_conditions acc = function
   | [] -> acc
 
 let gen_action = function
-    MarkZone(dir, id) -> "MARK --set-mark " ^ (gen_zone_mask_str dir id)
+  | MarkZone(dir, id) -> "MARK --set-mark " ^ (gen_zone_mask_str dir id)
   | Jump(chain_id) -> (Chain.get_chain_name chain_id)
   | Return -> "RETURN"
   | Accept -> "ACCEPT"
@@ -121,7 +127,7 @@ let transform chains =
       in order to move expanding conditions to the back *)
   let order a b =
     let value = function
-        Interface _ -> 1
+      | Interface _ -> 1
       | Zone _ -> 2
       | State _ -> 3
       | Ports (_, ports) -> 4
@@ -137,7 +143,7 @@ let transform chains =
   (** Return a list of chains, and a single rule *)
   let denormalize (conds, target) =
     let rec denorm_rule tg = function
-        cl :: [] -> ([], (cl, tg))
+      | cl :: [] -> ([], (cl, tg))
       | cl :: xs ->
           let chn', rle = denorm_rule target xs in
           let chn = Chain.create [rle] "Denormalize" in
@@ -148,7 +154,7 @@ let transform chains =
   in
   let expand (conds, target) =
     let expand_cond target cond_func lst = function
-        false ->
+      | false ->
           let rules = List.map (fun p -> ([(cond_func p, false)], target)) lst in
             Chain.create rules "Expanded"
       | true ->
@@ -156,7 +162,7 @@ let transform chains =
             Chain.create ( rules @ [ ([], target) ]) "Expanded"
     in
     let rec expand_conds acc1 acc2 tg = function
-        (Protocol protocols, neg) :: xs when List.length protocols > 1 ->
+      | (Protocol protocols, neg) :: xs when List.length protocols > 1 ->
           let chain = expand_cond tg (fun p -> Protocol [p]) protocols neg in
             expand_conds (chain :: acc1) acc2 (Ir.Jump chain.id) xs
       | (IpSet(direction, set), neg) :: xs when Ipset.cardinal set > 1 ->
@@ -225,7 +231,7 @@ let transform chains =
       be emulated. *)
   let zone_to_mask (conds, target) =
     let rec zone_to_mask' = function
-        (Zone (dir, zone :: []), neg) :: (Zone(dir', zone' :: []), neg') :: xs when neg = neg' && not (dir = dir') ->
+      | (Zone (dir, zone :: []), neg) :: (Zone(dir', zone' :: []), neg') :: xs when neg = neg' && not (dir = dir') ->
           let v1, m1 = gen_zone_mask dir zone in
           let v2, m2 = gen_zone_mask dir' zone' in
             (Mark (v1 + v2, m1 + m2), neg) :: zone_to_mask' xs
@@ -237,7 +243,7 @@ let transform chains =
       ([], (zone_to_mask' (List.sort Ir.compare conds), target))
   in
   let rec map_chains acc func = function
-      chain :: xs ->
+    | chain :: xs ->
         let chains, rules = List.split (List.map func chain.rules) in
         let chain' = { id = chain.id; rules = rules; comment = chain.comment } in
           map_chains (Chain_map.add chain'.id chain' acc) func ((List.flatten chains) @ xs)
@@ -252,8 +258,8 @@ let transform chains =
   let fix_state_match (conds, target) =
     (** Transform the list of state so the 'new' state is avoided *)
     let tranform = function
-        (State states, neg) when List.mem NEW states ->
-          (State (difference (=) [INVALID; RELATED; ESTABLISHED] states), not neg)
+      | (State states, neg) when State_set.mem NEW states ->
+          (State (State_set.diff all_states states), not neg)
       | x -> x
     in
       ([], (List.map tranform conds, target))
@@ -288,7 +294,7 @@ let filter chains =
 
 let create_chain acc chain =
   match chain.id with
-      Builtin(_) -> acc
+    | Builtin(_) -> acc
     | _ -> acc @ [sprintf "ip6tables -N %s #%s" (Chain.get_chain_name chain.id) chain.comment]
 
 

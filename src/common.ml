@@ -99,3 +99,20 @@ let identity a = a
 
 let keys map =
  Id_map.fold (fun key _ acc -> key :: acc) map []
+
+
+(** Add some missing functions to standard libraries *)
+
+(** Set is missing a constructor taking a list *)
+module Set = struct
+  module type OrderedType =
+  sig
+    type t
+    val compare: t -> t -> int
+  end    
+  module Make(Ord: OrderedType) =
+  struct
+    include Set.Make(Ord)
+    let from_list elts = List.fold_left (fun a e -> add e a) empty elts 
+  end
+end

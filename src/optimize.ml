@@ -46,35 +46,45 @@ let merge_opers rle =
       | (TcpFlags _, _), (TcpFlags _, _) -> false
       | _ -> false
   in
-  let merge_list (s, neg) (s', neg') =
+  (* !A => !B => X   =>  !(A | B) => X
+
+     A => B => X     => A U B => X
+
+     A => !B => X    => (A / B) => X
+     !A => B => X    => (B / A) => X
+
+  *)
+  let merge_sets inter union diff (s, neg) (s', neg') =
     match neg, neg' with
-        (false, false) -> (intersection (=) s s', false)
-      | (true, true) -> (union (=) s s', true)
-      | (false, true) -> (difference (=) s s', false)
-      | (true, false) -> (difference (=) s' s, false)
+      | (false, false) -> (inter s s', false)
+      | (true, true) ->   (union s s', true)
+      | (false, true) ->  (diff s  s', false)
+      | (true, false) ->  (diff s' s, false)
   in
+
+  let merge_states = merge_sets State_set.inter State_set.union State_set.diff in
+  let merge_ipsets = merge_sets Ipset.inter Ipset.union Ipset.diff in
+  let merge_list = merge_sets (intersection (=)) (union (=)) (difference (=)) in
+  let merge_iface = merge_sets (intersection (=)) (union (=)) (difference (=)) in
+  let merge_zones = merge_sets (intersection (=)) (union (=)) (difference (=)) in
+
   let rec merge_oper a b =
     match a, b with
         (Interface (dir, il), neg), (Interface (dir', il'), neg') when dir = dir' ->
-          let (il'', neg'') = merge_list (il, neg) (il', neg') in (Interface (dir, il''), neg'')
+          let (il'', neg'') = merge_iface (il, neg) (il', neg') in (Interface (dir, il''), neg'')
       | (State s, neg), (State s', neg') ->
-          let (s'', neg'') = merge_list (s, neg) (s', neg') in (State s'', neg'')
+          let (s'', neg'') = merge_states (s, neg) (s', neg') in (State s'', neg'')
       | (Ports (dir, ports), neg), (Ports (dir', ports'), neg') when dir = dir' ->
           let (ports'', neg'') = merge_list (ports, neg) (ports', neg') in (Ports (dir, ports''), neg'')
       | (Protocol proto, neg), (Protocol proto', neg') ->
           let (proto'', neg'') = merge_list (proto, neg) (proto', neg') in (Protocol (proto''), neg'')
       | (IcmpType types, neg), (IcmpType types', neg') ->
           let (types'', neg'') = merge_list (types, neg) (types', neg') in (IcmpType types'', neg'')
-      | ((IpSet (dir, ips), true) as a), ((IpSet (dir', ips'), false) as b) when dir = dir' ->
-          merge_oper b a
-      | (IpSet (dir, ips), false), (IpSet (dir', ips'), true) when dir = dir' ->
-          (IpSet (dir, Ipset.diff ips ips'), false)
-      | (IpSet (dir, ips), neg), (IpSet (dir', ips'), neg') when dir = dir' && neg = neg' ->
-          (IpSet (dir, Ipset.inter ips ips'), neg)
+      | (IpSet (dir, set), neg), (IpSet (dir', set'), neg') when dir = dir' ->
+          let (set'', neg'') = merge_ipsets (set, neg) (set', neg') in (IpSet (dir, set''), neg'')
       | (Zone (dir, zones), neg), (Zone (dir', zones'), neg') when dir = dir' ->
-          let (zones'', neg'') = merge_list (zones, neg) (zones', neg') in (Zone (dir, zones''), neg'')
+          let (zones'', neg'') = merge_zones (zones, neg) (zones', neg') in (Zone (dir, zones''), neg'')
       | (cond, _), (cond', _) -> failwith ("is_sibling failed: " ^ string_of_int (enumerate_cond cond) ^ ", " ^ string_of_int (enumerate_cond cond'))
-
   in
   let rec merge_siblings acc = function
       x :: xs -> let siblings, rest = List.partition (is_sibling x) xs in
@@ -86,13 +96,14 @@ let merge_opers rle =
 let is_satisfiable conds =
   not (List.exists (is_always false) conds)
 
+(** Test if a set b is a subset of a. Meaning that B => A *)
 let is_subset a b =
   not (List.exists (fun (cond, neg) -> is_satisfiable (merge_opers ((cond, not neg) :: a))) b)
 
 (** Reduce rules. Walk the tree (forward and backwards) and eliminate
     unreachable rules. *)
 let reduce chains =
-  let false_rule = ([State [], false], Notrack) in
+  let false_rule = ([State State_set.empty, false], Notrack) in
   let is_terminal = function
     | Jump _ | MarkZone _ | Notrack | Log _ -> false
     | Accept | Drop | Reject _ | Return -> true
