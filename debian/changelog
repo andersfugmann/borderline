@@ -1,0 +1,5 @@
+borderline (0.97-1) unstable; urgency=low
+
+  * Initial release (Closes: #nnnn)  <nnnn is the bug number of your ITP>
+
+ -- Anders Peter Fugmann <afu@marvin.fugmann.net>  Fri, 22 Jul 2011 14:30:50 +0200

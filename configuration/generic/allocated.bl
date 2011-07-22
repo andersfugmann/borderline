@@ -1,4 +1,4 @@
-#Extracted from file:///tmp/ipv6-unicast-address-assignments.xml
+#Extracted from http://www.iana.org/assignments/ipv6-unicast-address-assignments/ipv6-unicast-address-assignments.xml
 define allocated = 2001:0000::/23,
 2001:0200::/23,
 2001:0400::/23,

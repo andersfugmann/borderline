@@ -21,7 +21,7 @@ end
 module Ipv6 : Ip_type = struct
   let bits = 128
   let field_size = 16
-  let to_string fields = String.concat ":" (List.map (sprintf "%4x") fields)
+  let to_string fields = String.concat ":" (List.map (sprintf "%04x") fields)
 end  
 
 module Make(Ip: Ip_type) =
@@ -164,7 +164,6 @@ struct
     ((succ diff) & diff) = zero_big_int 
     
 end
-
 
 (** Be a IPv6_set.. *)
 include Make(Ipv6)

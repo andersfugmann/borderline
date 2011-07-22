@@ -1,21 +1,23 @@
 #!/bin/bash
-
 ### BEGIN INIT INFO
 # Provides:          borderline
-# Required-Start:    $remote_fs
-# Required-Stop:     $remote_fs
+# Required-Start:    $local_fs
+# Required-Stop:
 # Default-Start:     S
 # Default-Stop:      0 6
 # Short-Description: A firewall compiler
 # Description:       Generates a packet filtering firewall for iptables.
 ### END INIT INFO
-#
-# chkconfig: 345 08 92
-# description: Borderline - A firewall compiler
+
+# Author: Anders Peter Fugmann <afu@marvin.fugmann.net>
 
 MAIN=/etc/borderline/borderline.bl
 if [ -f /etc/default/borderline ]; then
     source /etc/default/borderline
+fi
+
+if [ "${DONT_START}" = "1" ]; then 
+    exit 1
 fi
 
 if [ \! -f "${MAIN}" ]; then
@@ -23,11 +25,13 @@ if [ \! -f "${MAIN}" ]; then
     exit 1
 fi
 
+if 
+
 IP6TABLES="/sbin/ip6tables"
 IP6TABLES_SAVE="/sbin/ip6tables-save"
 IP6TABLES_RESTORE="/sbin/ip6tables-restore"
 EGREP="/bin/grep -E"
-BORDERLINE="/usr/local/sbin/borderline"
+BORDERLINE="/bin/borderline"
 ALL_DONE="false"
 ALL_OK="true"
 

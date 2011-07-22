@@ -12,6 +12,9 @@ let prefix = ref "."
 (** Target go generate dependancy for *)
 let target = ref ""
 
+(** Mark some files missing *)
+let missing = ref false
+
 let set_extention ext file = 
    (Filename.chop_extension file) ^ ext
 
@@ -21,7 +24,8 @@ let parse_dep filename =
     let line = input_line fd in
     try 
       let idx = String.index line '\\' in
-      String.sub line 0 (idx - 1) ^ " " ^ read_line fd
+      let deps = String.sub line 0 (idx - 1) in
+      deps ^ " " ^ read_line fd
     with
       | Not_found -> line
   in
@@ -56,11 +60,13 @@ let rec gentree seen file =
     raise Out
   end;
   let deps = 
+    let dep_file = (set_extention ".ml.d" file) in
     try 
-      let deps = parse_dep (set_extention ".ml.d" file) in
+      let deps = parse_dep dep_file in
       List.assoc file deps
     with 
-      | _ -> [] 
+      | Sys_error _ -> missing := true; [] 
+      | Not_found -> []
   in
   (* let deps = List.map (set_extention !suffix) deps in *)
   let deps = List.filter ((!=) file) deps in
@@ -88,12 +94,20 @@ let args = [
 ]
 
 let _ = 
+  let _ = Random.self_init () in
   Arg.parse args (fun s -> target := s) "Generate dependancy file to stdout";
   let tree = gentree FileSet.empty (!target ^ !suffix) in
   let deps = uniq (List.rev (flatten tree)) in
   let self = Printf.sprintf "%s/%s.d" !prefix !target in
 
-  let implementation_files = List.filter (fun f -> Filename.check_suffix f !suffix) deps in
+  let implementation_files = List.filter (fun f -> Filename.check_suffix f !suffix) deps in  
+  
+  (* Make sure the makefile is recreated, if any dependancy files were missing *)
+  if !missing then begin
+    let force = Printf.sprintf "force%d" (Random.int 1073741823) in
+    Printf.printf ".PHONY: %s\n" force;
+    Printf.printf "%s: %s\n" !target force;
+  end;
   
   Printf.printf "%s: %s\n\n" !target (String.concat " " implementation_files);
   let depend_files = List.map (fun f -> (!prefix ^ "/" ^ (map_suffix f))) deps in

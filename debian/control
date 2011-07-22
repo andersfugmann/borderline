@@ -1,0 +1,14 @@
+Source: borderline
+Section: security
+Priority: extra
+Maintainer: Anders Peter Fugmann <anders@fugmann.net>
+Build-Depends: debhelper (>= 8.0.0)
+Standards-Version: 3.9.2
+Homepage: borderline.fugmann.net
+
+Package: borderline
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: Borderline is am ipv6  firewall generator
+ Borderline produces firewalls from a set of configuration files. The
+ firewall rules proces are heavily optimzied for speed. Currently borderline can only produce ipv6 firewalls for linux netfilter, using iptables.
