@@ -10,6 +10,8 @@ vpath %.o $(BUILD_DIR)
 vpath gendep $(BUILD_DIR)
 vpath % $(BUILD_DIR)
 
+CP = cp
+
 SOURCES := $(sort $(filter %.mli %.ml, $(SOURCES)) $(MLLS:.mll=.ml) $(MLYS:.mly=.mli) $(MLYS:.mly=.ml))  
 
 #MAKEFLAGS = --no-print-directory
@@ -51,7 +53,6 @@ endif
 force:
 
 
-
 #.DELETE_ON_ERROR: $(DEPENDS) $(BINARY_DEPENDS) $(BINARIES)
 $(BINARY_DEPS): $(BUILD_DIR)/%.d: $(BUILD_DIR)/%.ml.d gendep $(GRAMMER_FILES)
 	@echo "Depend:  " $(subst $(BUILD_DIR)/,,$@)
@@ -61,7 +62,7 @@ $(BINARY_DEPS): $(BUILD_DIR)/%.d: $(BUILD_DIR)/%.ml.d gendep $(GRAMMER_FILES)
 $(BUILD_DIR)/%.d: %
 	@echo "Depend:  " $(subst $(BUILD_DIR)/,,$@)
 	@[ -d $(dir $@) ] || mkdir -p $(dir $@)
-	@ocamlfind ocamldep $(OCAMLDEP_FLAGS) $(addprefix -I ,$(INCLUDE) $(dir $<)) -package "$(PACKAGES)" $< > $@
+	@ocamlfind ocamldep $(OCAMLDEP_FLAGS) $(addprefix -I ,$(INCLUDE) $(dir $<)) $(addprefix -syntax ,$(SYNTAX)) -package "$(PACKAGES)" $< > $@
 
 gendep.cmo: OCFLAGS += -rectypes
 gendep.cmx: OCFLAGS += -rectypes
@@ -126,12 +127,13 @@ doc: $(subst .ml,.cmo,$(filter %.ml, $(SOURCES))) $(subst .mli,.cmi,$(filter %.m
 $(BUILD_DIR)/targets.makefile: makefile.mk
 	@[ -d $(BUILD_DIR) ] || mkdir -p $(BUILD_DIR)
 	@(for BIN in $(BINARIES); do \
-	    printf "$(BIN_DIR)/$$(basename $${BIN}): $${BIN}\n"; \
-	    printf "\t@[ -d $(BIN_DIR) ] || mkdir -p $(BIN_DIR)\n"; \
+	    printf "\$${BIN_DIR}/$$(basename $${BIN}): $${BIN}\n"; \
+	    printf "\t@[ -d \$${BIN_DIR} ] || mkdir -p \$${BIN_DIR}\n"; \
 	    printf "\t@echo \"Install: \" \$$@\n"; \
-	    printf "\t@\$$(CP) $(BUILD_DIR)/$${BIN} \$$@\n"; \
+	    printf "\t@install $(BUILD_DIR)/$${BIN} \$$@\n"; \
 	    printf "\n"; \
 	done) > $@
+
 install:: $(addprefix $(BIN_DIR)/, $(notdir $(BINARIES)))
 
 -include $(BUILD_DIR)/targets.makefile

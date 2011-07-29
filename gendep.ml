@@ -106,7 +106,8 @@ let _ =
   if !missing then begin
     let force = Printf.sprintf "force%d" (Random.int 1073741823) in
     Printf.printf ".PHONY: %s\n" force;
-    Printf.printf "%s: %s\n" !target force;
+    Printf.printf "%s:\n" force;
+    Printf.printf "%s: %s\n" self force;
   end;
   
   Printf.printf "%s: %s\n\n" !target (String.concat " " implementation_files);
