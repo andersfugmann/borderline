@@ -22,7 +22,7 @@ CP=cp
 DESTDIR ?= .
 export DESTDIR
 
-PACKAGES = unix str num oUnit
+PACKAGES = unix str num oUnit batteries
 BUILD_DIR = _build
 BIN_DIR = $(DESTDIR)/bin
 DOC_DIR = $(DESTDIR)/doc
@@ -31,33 +31,33 @@ OCFLAGS = -annot -g
 #-w @A
 INCLUDE = src
 
-SOURCES = $(wildcard src/*.ml src/*.mli src/*.mll src/*.mly) 
+SOURCES = $(wildcard src/*.ml src/*.mli src/*.mll src/*.mly)
 
 BINARIES = src/borderline \
 	   src/bl_configure \
            src/unit_test
 
 LEX_FILES = src/lexer.mll
-YACC_FILES = src/parser.mly 
+YACC_FILES = src/parser.mly
 
-include makefile.mk
+include rules.mk
 
 OCAMLRUNPARAM=b
 export OCAMLRUNPARAM=b
 
 .DEFAULT_GOAL := unittest
 
-test: unittest 
+test: unittest
 
 unittest: install
 	@$(BIN_DIR)/unit_test
 
-install::  
+install::
 	$(MAKE) -C configuration install
 	[ -d $(DESTDIR)/etc/default/ ] || mkdir -p $(DESTDIR)/etc/default/
 	[ -d $(DESTDIR)/etc/init.d/ ] || mkdir -p $(DESTDIR)/etc/init.d/
-	@echo "MAIN=/etc/borderline/borderline.bl" > $(DESTDIR)/etc/default/borderline	
-	@echo "DONT_START=1" >> $(DESTDIR)/etc/default/borderline	
+	@echo "MAIN=/etc/borderline/borderline.bl" > $(DESTDIR)/etc/default/borderline
+	@echo "DONT_START=1" >> $(DESTDIR)/etc/default/borderline
 	$(CP) borderline.sh $(DESTDIR)/etc/init.d/
 
 #test: install
@@ -78,3 +78,6 @@ clean::
 
 tests: install
 	@cd tests; BORDERLINE=../$(BIN_DIR)/borderline ./test.sh
+
+dep:
+	opam install batteries ounit
