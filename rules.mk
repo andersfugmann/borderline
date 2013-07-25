@@ -65,7 +65,7 @@ endif
 
 force:
 
-.DELETE_ON_ERROR: %.d
+.DELETE_ON_ERROR: %.d $(BINARY_DEPS)
 
 
 ifdef SYNTAX_EXT
@@ -77,12 +77,12 @@ endif
 $(BINARY_DEPS): $(BUILD_DIR)/%.d: $(BUILD_DIR)/%.ml.d $(BUILD_DEP) $(GRAMMER_FILES)
 	@echo "Depend:  " $(subst $(BUILD_DIR)/,,$@)
 	@mkdir -p $(dir $@)
-	@TMP_FILE=$$(mktemp /tmp/ocaml_build.XXXXXXXX) && $(BUILD_DIR)/gendep -prefix $(BUILD_DIR) -suffix $(COMPILE_SUFFIX) $(subst $(BUILD_DIR)/,,$(@:.d=)) > $${TMP_FILE} && mv -f $${TMP_FILE} $@
+	@$(BUILD_DIR)/gendep -prefix $(BUILD_DIR) -suffix $(COMPILE_SUFFIX) $(subst $(BUILD_DIR)/,,$(@:.d=)) > $@
 
 $(BUILD_DIR)/%.d: % $(BUILD_DEP)
 	@echo "Depend:  " $(subst $(BUILD_DIR)/,,$@)
 	@mkdir -p $(dir $@)
-	@TMP_FILE=$$(mktemp /tmp/ocaml_build.XXXXXXXX) && ocamlfind ocamldep $(OCAMLDEP_FLAGS) $(addprefix -I ,$(INCLUDE) $(dir $<)) $(PPFLAGS) -package "$(PACKAGES)" $< > $${TMP_FILE} && mv -f $${TMP_FILE} $@
+	@ocamlfind ocamldep $(OCAMLDEP_FLAGS) $(addprefix -I ,$(INCLUDE) $(dir $<)) $(PPFLAGS) -package "$(PACKAGES)" $< > $@
 
 gendep.%: PPFLAGS =
 
