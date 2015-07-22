@@ -4,12 +4,40 @@ BYTE_ENABLED = true
 
 OCAMLFLAGS = -thread -g -w @A-4-29-33-39-41-44-45-48 -bin-annot
 USE_OCAMLFIND = true
+CP = cp -f
+# MENHIR_ENABLED = true
 
 OCAMLPACKS[] =
     unix str num oUnit batteries
 
 mkdir -p _build
 vmount(-l, src, _build)
+
+.PHONY: clean install unittest build tests
+clean:
+    $(RM) -fr _build
+    $(RM) -fr bin
+    /usr/bin/find . -name \*~ -delete
+
+install: _build/borderline.opt _build/bl_configure.opt
+    mkdir -p $(DESTDIR)/etc/default/
+    mkdir -p $(DESTDIR)/etc/init.d/
+    mkdir -p $(DESTDIR)/usr/local/bin
+    make -C configuration install
+    $(CP) _build/borderline.opt $(DESTDIR)/usr/local/bin/borderline
+    $(CP) _build/bl_configure.opt $(DESTDIR)/usr/local/bin/bl_configure
+    echo "MAIN=/etc/borderline/borderline.bl" > $(DESTDIR)/etc/default/borderline
+    echo "DONT_START=1" >> $(DESTDIR)/etc/default/borderline
+    $(CP) borderline.sh $(DESTDIR)/etc/init.d/
+
+unittest: _build/unit_test.run
+    _build/unit_test.run
+
+tests: _build/borderline.run
+    cd tests; BORDERLINE=../_build/borderline.run ./test.sh
+
+build: _build/borderline.run _build/unit_test.run _build/bl_configure.run
+
 .SUBDIRS: _build
   FILES[] =
 	lexer
