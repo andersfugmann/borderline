@@ -10,7 +10,7 @@
      encountered. The function prints line number along with a
      description. *)
 
-  let exit_ s =    
+  let exit_ s =
     let pos_start = Parsing.symbol_start_pos () in
     let pos_end = Parsing.symbol_end_pos () in
     let c_end = pos_end.pos_cnum - pos_end.pos_bol + 1 in
@@ -22,11 +22,11 @@
 
 %}
 %token ZONE PROCESS RULE IMPORT
-%token DEFINE 
+%token DEFINE
 %token NETWORK INTERFACE
 %token MANGLE FILTER NAT
 %token POLICY ALLOW DENY REJECT LOG
-%token SOURCE DESTINATION ADDRESS STATE USE 
+%token SOURCE DESTINATION ADDRESS STATE USE
 %token NEW ESTABLISHED RELATED INVALID
 %token START EQ ENDL SEMI PROTOCOL
 %token TCP_PORT UDP_PORT ICMPTYPE TCPFLAGS
@@ -70,7 +70,7 @@ statement:
 /* Scan elements within a zone. */
 
 zone_stm:
-  | NETWORK EQ IPv6                       { let i, p, pos = $3 in Network(Ipset.ip_of_string i, p) }
+  | NETWORK EQ IPv6                       { let i, p, _pos = $3 in Network(Ipset.ip_of_string i, p) }
   | INTERFACE EQ ID                       { Interface($3)}
   | PROCESS process                       { let a, b, c = $2 in ZoneRules(a, b, c) }
 ;
@@ -87,7 +87,7 @@ process_type:
   | NAT                                   { NAT }
 ;
 
-/* Rules statements can be a single rule, or a list 
+/* Rules statements can be a single rule, or a list
    of rules enclosed in curly braces, seperated by semicolon. */
 
 rule_stm:
@@ -112,7 +112,7 @@ rule_seq:
   | error                                 { exit_ "Missing semi colon?" }
 ;
 
-/* A policy can be a single policy, or a list of policies 
+/* A policy can be a single policy, or a list of policies
    enclosed in curly braces seperated by semicolon. */
 
 policy_seq:
@@ -179,7 +179,7 @@ state:
   | INVALID                               { Ir.INVALID }
 ;
 
-/* Data lists are polymorphic data sets. The types are 
+/* Data lists are polymorphic data sets. The types are
    validated when mapping the frontend language to the Ir tree */
 
 data_list:
@@ -193,4 +193,3 @@ data:
   | ID                                    { Id $1 }
   | IPv6                                  { let i, p, pos = $1 in Ip ((Ipset.ip_of_string i, p), pos) }
 ;
-

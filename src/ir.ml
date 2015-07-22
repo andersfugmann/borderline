@@ -4,7 +4,7 @@ open Common
 
 type statetype = NEW | ESTABLISHED | RELATED | INVALID
 
-let compare_state s1 s2 = 
+let compare_state s1 s2 =
   let int_of_state = function
     | NEW -> 1
     | ESTABLISHED -> 2
@@ -64,8 +64,8 @@ type chain = { id: chain_id; rules : oper list; comment: string; }
 let eq_cond (x, n) (y, m) =
   n = m && (
     match x, y with
-      | IpSet (d, r), IpSet (d', r') -> Ipset.equal r r'
-      | Zone(dir, id_lst), Zone (dir', id_lst') -> dir = dir' && eq_id_list id_lst id_lst' 
+      | IpSet (_d, r), IpSet (_d', r') -> Ipset.equal r r'
+      | Zone(dir, id_lst), Zone (dir', id_lst') -> dir = dir' && eq_id_list id_lst id_lst'
       | Interface(dir, id_lst), Interface(dir', id_lst') -> dir = dir' && eq_id_list id_lst id_lst'
       | x, y -> x = y
   )
@@ -112,22 +112,22 @@ let compare (cond1, neg1) (cond2, neg2) =
 (** Test if expr always evaluates to value *)
 let is_always value = function
   | State states, neg when State_set.is_empty states -> neg = value
-  | Zone (_, []), neg  
+  | Zone (_, []), neg
   | Ports (_, []), neg
   | Protocol [], neg
-  | IcmpType [], neg -> neg = value 
-  | TcpFlags ([], _x :: _xs), neg -> neg = value 
-  | TcpFlags (_, []), neg -> neg != value 
+  | IcmpType [], neg -> neg = value
+  | TcpFlags ([], _x :: _xs), neg -> neg = value
+  | TcpFlags (_, []), neg -> neg != value
 
-  | Interface _, _ 
-  | Zone _, _ 
+  | Interface _, _
+  | Zone _, _
   | State _, _
-  | Ports _, _ 
+  | Ports _, _
   | IpSet _, _
   | Protocol _, _
-  | IcmpType _, _ 
+  | IcmpType _, _
   | TcpFlags _, _
   | Mark _, _ -> false
 
-let all_states = 
+let all_states =
   List.fold_left (fun acc s -> State_set.add s acc) State_set.empty [ NEW; ESTABLISHED; RELATED; INVALID ]

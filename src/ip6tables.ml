@@ -14,8 +14,8 @@ let zone_id = ref 1
 let zone_map = ref StringMap.empty
 
 let elem = function
-  | x :: [] -> x
-  | xs -> failwith "One and jsut one element required in list"
+  | [x] -> x
+  | _ -> failwith "One and jsut one element required in list"
 
 let get_zone_id zone =
   try
@@ -70,39 +70,39 @@ let gen_condition = function
       match Ipset.to_ips ips with
         | [ (ip, mask) ] -> "", sprintf "--%s %s/%d" (choose_dir "source" "destination" direction) (Ipset.string_of_ip ip) mask
         | _ -> let low, high = elem (Ipset.elements ips) in
-               "-m iprange ", sprintf "--%s-range %s-%s" 
-                 (choose_dir "src" "dst" direction) 
+               "-m iprange ", sprintf "--%s-range %s-%s"
+                 (choose_dir "src" "dst" direction)
                  (Ipset.string_of_ip low) (Ipset.string_of_ip high)
     end
-  | Interface(direction, iface_list) -> "", 
+  | Interface(direction, iface_list) -> "",
     (choose_dir "--in-interface " "--out-interface " direction) ^ (id2str (elem iface_list))
-  | State(states) -> "-m conntrack ", 
+  | State(states) -> "-m conntrack ",
     ("--ctstate " ^ ( String.concat "," (State_set.fold (fun s acc -> get_state_name s :: acc) states [])))
-  | Zone(dir, id_lst) -> "-m mark ", 
+  | Zone(dir, id_lst) -> "-m mark ",
     "--mark " ^ (gen_zone_mask_str dir (elem id_lst))
   | Ports(direction, port :: []) -> "",
     ( "--" ^ (choose_dir "source" "destination" direction) ^ "-port " ^ (string_of_int port))
   | Ports(direction, ports) -> "-m multiport ",
     ( "--" ^ (choose_dir "source" "destination" direction) ^ "-ports " ^ (String.concat "," (List.map string_of_int ports)) )
   | Protocol(protocols) -> ("", sprintf "--protocol %d" (elem protocols))
-  | IcmpType(types) -> "-m icmp6 ", 
+  | IcmpType(types) -> "-m icmp6 ",
     sprintf "--icmpv6-type %d" (elem types)
-  | Mark (value, mask) -> "-m mark ", 
+  | Mark (value, mask) -> "-m mark ",
     sprintf "--mark 0x%04x/0x%04x" value mask
-  | TcpFlags (flags, mask) -> "", 
+  | TcpFlags (flags, mask) -> "",
     sprintf "--tcp-flags " ^ (tcp_flags mask) ^ " " ^ (tcp_flags flags)
 
 let rec gen_conditions acc = function
   | (State states, true) :: xs when State_set.is_empty states -> gen_conditions acc xs
-  | (State states, false) :: xs when State_set.is_empty states -> failwith "Unsatifiable rule in code-gen"
+  | (State states, false) :: _ when State_set.is_empty states -> failwith "Unsatifiable rule in code-gen"
   | (Ports (_, []), true) :: xs
   | (Zone (_, []), true) :: xs
   | (Protocol [], true) :: xs
   | (IcmpType [], true) :: xs -> gen_conditions acc xs
-  | (Ports (_, []), false) :: xs
-  | (Zone (_, []), false) :: xs
-  | (Protocol [], false) :: xs
-  | (IcmpType [], false) :: xs -> failwith "Unsatifiable rule in code-gen"
+  | (Ports (_, []), false) :: _
+  | (Zone (_, []), false) :: _
+  | (Protocol [], false) :: _
+  | (IcmpType [], false) :: _ -> failwith "Unsatifiable rule in code-gen"
   | (cond, neg) :: xs ->
       let pref, postf = gen_condition cond in
         gen_conditions (acc ^ pref ^ (gen_neg neg) ^ postf ^ " ") xs
@@ -123,14 +123,14 @@ let gen_action = function
     constructs into something trivially convertible to netfilter
     rules. *)
 let transform chains =
-  (** Order of conditions. This is used when expanding the conditions,
-      in order to move expanding conditions to the back *)
+  (* Order of conditions. This is used when expanding the conditions,
+     in order to move expanding conditions to the back *)
   let order a b =
     let value = function
       | Interface _ -> 1
       | Zone _ -> 2
       | State _ -> 3
-      | Ports (_, ports) -> 4
+      | Ports (_, _ports) -> 4
       | IpSet (_, ips) -> Ipset.cardinal ips
       | Protocol protocols -> List.length protocols
       | IcmpType types -> List.length types
@@ -140,7 +140,7 @@ let transform chains =
       (* Reverse the order given above, by making the value negative *)
       Pervasives.compare (value b) (value a)
   in
-  (** Return a list of chains, and a single rule *)
+  (* Return a list of chains, and a single rule *)
   let denormalize (conds, target) =
     let rec denorm_rule tg = function
       | cl :: [] -> ([], (cl, tg))
@@ -178,12 +178,13 @@ let transform chains =
       | [] -> (acc1, (acc2, tg))
     in expand_conds [] [] target (List.sort (fun (a, _) (b, _) -> order a b) conds)
   in
-  (** Some conditions needs a protocol specifier to work*)
+
+  (* Some conditions needs a protocol specifier to work*)
   let add_protocol_specifiers (conds, target) =
     let rec fold proto target = function
       | (IcmpType _, false) as cond :: xs when proto != icmp ->
           let chains, (conds, target) = fold proto target xs in chains, ((Protocol [icmp], false) :: cond :: conds, target)
-      | (IcmpType types as op, true) :: xs  ->
+      | (IcmpType _ as op, true) :: xs  ->
           let chain = Chain.create [ ([ (Protocol([icmp]), false);
                                         (op, false)], Ir.Return); ([], target) ] "expanded" in
           let chains, (conds, target) = fold proto (Ir.Jump chain.id) xs in
@@ -226,9 +227,9 @@ let transform chains =
       fold protocol target (protocols @ conds')
 
   in
-  (** Netfilter does not support the notion of zones. By marking the
-      packets and matching the mark on the packet, the functionality can
-      be emulated. *)
+  (* Netfilter does not support the notion of zones. By marking the
+     packets and matching the mark on the packet, the functionality can
+     be emulated. *)
   let zone_to_mask (conds, target) =
     let rec zone_to_mask' = function
       | (Zone (dir, zone :: []), neg) :: (Zone(dir', zone' :: []), neg') :: xs when neg = neg' && not (dir = dir') ->
@@ -249,14 +250,14 @@ let transform chains =
           map_chains (Chain_map.add chain'.id chain' acc) func ((List.flatten chains) @ xs)
     | [] -> acc
   in
-  (** Some packets are 'stateless', and thus not regarded as 'new' by
-      netfilter. Fix this by using negated states:
-      new => ! related, established, invalid
-      new, related => !established, invalid
-      new, established => !related, invalid
+  (* Some packets are 'stateless', and thus not regarded as 'new' by
+     netfilter. Fix this by using negated states:
+     new => ! related, established, invalid
+     new, related => !established, invalid
+     new, established => !related, invalid
   *)
   let fix_state_match (conds, target) =
-    (** Transform the list of state so the 'new' state is avoided *)
+    (* Transform the list of state so the 'new' state is avoided *)
     let tranform = function
       | (State states, neg) when State_set.mem NEW states ->
           (State (State_set.diff all_states states), not neg)
@@ -284,8 +285,8 @@ let emit_rules chain =
     List.map ( sprintf "ip6tables -A %s %s" chain_name ) ops
 
 let filter chains =
-  (** Filter rules must take a condition as argument, and return true
-      for rules to be kepts, and false for rules to be removed *)
+  (* Filter rules must take a condition as argument, and return true
+     for rules to be kepts, and false for rules to be removed *)
   let is_tautologically_false (conds, _) =
       List.fold_left (fun acc cond -> acc && not (is_always false cond)) true conds
   in
@@ -303,7 +304,6 @@ let emit_chains chains =
   let funcs = [ transform; filter ] in
   let chains' = List.fold_left (fun acc func -> func acc) chains funcs in
     (* Create all chains, with no rules *)
-    Chain_map.fold (fun id chn acc -> create_chain acc chn) chains' []
+    Chain_map.fold (fun _id chn acc -> create_chain acc chn) chains' []
     (* Order the rules to make sure that buildin chains are emitted last. *)
     @ List.flatten (List.rev (Chain_map.fold (fun _ chn acc -> emit_rules chn :: acc) chains' []))
-

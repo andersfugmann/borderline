@@ -1,13 +1,10 @@
-bl-configure
-borderline
 *~
 bin
 _build
 doc
 etc
-gendep.annot
-gendep.cm*
-gendep.o
 *#
 #*
 .#*
+*.omc
+.omakedb*

@@ -13,7 +13,7 @@ let rec chain_reference_count id chains =
     Chain_map.fold (fun _ chn acc -> acc + (count_references chn.rules)) chains 0
 
 let rec get_referring_rules chain chains =
-  let test (conds, target) = target = Jump (chain.id) in
+  let test (_conds, target) = target = Jump (chain.id) in
   let referring_chains = Chain.filter (fun chn -> List.exists test chn.rules) chains in
     List.fold_left (fun acc chn -> (List.filter test chn.rules) @ acc) [] referring_chains
 
@@ -33,11 +33,11 @@ let rec map_chain_rules_expand func chains : Ir.chain list =
     List.map (fun chn -> { id = chn.id; rules = map_rules chn.rules; comment = chn.comment } ) chains
 
 let merge_opers rle =
-  (** A bit dangerous, as the compiler wont warn when new types are added. *)
+  (* A bit dangerous, as the compiler wont warn when new types are added. *)
   let is_sibling a b =
     match (a, b) with
         (Interface (dir, _), _), (Interface (dir', _), _) when dir = dir' -> true
-      | (State s, neg), (State s', neg') -> true
+      | (State _, _), (State _, _) -> true
       | (Ports (dir, _), _), (Ports (dir', _), _) when dir = dir' -> true
       | (Protocol _, _), (Protocol _, _) -> true
       | (IcmpType _, _), (IcmpType _, _) -> true
@@ -117,7 +117,7 @@ let reduce chains =
 
   and reduce_jump conds rules chain_id =
     let rec filter_until pred = function
-    x :: xs when pred x -> []
+    x :: _ when pred x -> []
       | x :: xs -> x :: filter_until pred xs
       | [] -> []
     in
@@ -135,7 +135,7 @@ let reduce chains =
   and reduce_rules (cond, target) = function
   (cond', _) :: xs when is_subset cond' cond ->
     print_string "E"; reduce_rules (cond, target) xs
-    | (cond', Jump chain_id) as rle :: xs when chain_reference_count chain_id !chains = 1 ->
+    | (_cond', Jump chain_id) as rle :: xs when chain_reference_count chain_id !chains = 1 ->
       reduce_chain (reduce_rules (cond, target)) chain_id;
       rle :: reduce_rules (cond, target) xs
     | (cond', target') as rle :: xs when is_terminal target' ->
@@ -144,15 +144,15 @@ let reduce chains =
     | [] -> []
 
   and reduce_rules_rev (cond, target) = function
-  (cond', Return) as rle :: xs -> rle :: reduce_rules_rev false_rule xs
+  (_cond', Return) as rle :: xs -> rle :: reduce_rules_rev false_rule xs
     | (cond', target') :: xs when target = target' && is_subset cond' cond ->
       print_string "F"; reduce_rules_rev (cond, target) xs
-    | (cond', target') as rle :: xs when target = target' ->
+    | (_cond', target') as rle :: xs when target = target' ->
       let rls = reduce_rules_rev (cond, target) xs in rle :: reduce_rules_rev rle rls
-    | (cond', Jump chain_id) as rle :: xs ->
+    | (_cond', Jump chain_id) as rle :: xs ->
       reduce_chain (reduce_rules_reverse (cond, target)) chain_id;
       rle :: reduce_rules_rev false_rule xs
-    | (cond', target) as rle :: xs when is_terminal target -> rle :: reduce_rules_rev rle xs
+    | (_cond', target) as rle :: xs when is_terminal target -> rle :: reduce_rules_rev rle xs
     | rle :: xs -> rle :: reduce_rules_rev false_rule xs
     | [] -> []
 
@@ -168,7 +168,7 @@ let reduce chains =
 
 (** Remove all return statements, by creating new chains for each
     return statement *)
-let rec fold_return_statements chains =  
+let rec fold_return_statements chains =
   let rec neg = List.map (fun (x, a) -> (x, not a)) in
   let rec fold_return acc = function
   (cl, Return) :: xs ->
@@ -179,7 +179,7 @@ let rec fold_return_statements chains =
     | rle :: xs -> fold_return (acc @ [rle]) xs
     | [] -> (acc, [])
   in
-  
+
   let fold_func _ chn acc =
     let rls, chns = fold_return [] chn.rules in
     List.fold_left (fun acc chn -> Chain_map.add chn.id chn acc) acc ( { id = chn.id; rules = rls; comment = chn.comment } :: chns )
@@ -252,7 +252,7 @@ let rec inline p chains =
       (conds, target) :: xs when target = Jump(chain.id) ->
         begin
           let rec inline_rules conds = function
-              (c, t) :: xs when t = Return -> failwith "Inline of return target dosallowed."
+              (_c, t) :: _ when t = Return -> failwith "Inline of return target dosallowed."
             | (c, t) :: xs -> ( conds @ c, t ) :: inline_rules conds xs
             | [] -> []
           in
@@ -262,7 +262,7 @@ let rec inline p chains =
     | [] -> []
   in
 
-  (** Find one chain that satifies p *)
+  (* Find one chain that satifies p *)
   let p' chains chain = (not (has_target Return chain.rules || Chain.is_builtin chain.id) ) && chain_reference_count chain.id chains > 0 && p chains chain in
     try
       let chains_to_inline = List.hd (Chain.filter (p' chains) chains) in
@@ -302,9 +302,9 @@ let rec count_rules chains =
     tendency to inline *)
 let should_inline cs c =
   (* Number of conditions in the chain to be inlined *)
-  let chain_conds = List.fold_left (fun acc (cl, t) -> acc + List.length cl) 0 c.rules in
+  let chain_conds = List.fold_left (fun acc (cl, _t) -> acc + List.length cl) 0 c.rules in
   (* Number of conditions for each reference to the chain to be inlined. *)
-  let rule_conds = List.map (fun (cl, t) -> List.length cl) (get_referring_rules c cs) in
+  let rule_conds = List.map (fun (cl, _t) -> List.length cl) (get_referring_rules c cs) in
   (* Current count of conditions + targets *)
   let old_conds = (List.fold_left (+) 0 rule_conds) + chain_conds + List.length rule_conds + List.length c.rules in
   (* Inlined count of conditions + targets *)
@@ -337,4 +337,3 @@ let rec optimize chains =
     match (conds chains) = (conds chains') with
         true -> printf "Optimization done\n"; chains'
       | false -> optimize chains'
-

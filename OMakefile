@@ -1,0 +1,43 @@
+# .PHONY: all install clean
+NATIVE_ENABLED = true
+BYTE_ENABLED = true
+
+OCAMLFLAGS = -thread -g -w @A-4-29-33-39-41-44-45-48 -bin-annot
+USE_OCAMLFIND = true
+
+OCAMLPACKS[] =
+    unix str num oUnit batteries
+
+mkdir -p _build
+vmount(-l, src, _build)
+.SUBDIRS: _build
+  FILES[] =
+	lexer
+	parser
+	frontend
+	ir
+	parse
+	rule
+	ip6tables
+	chain
+	ipset
+	lexer
+	parser
+	validate
+	common
+	ipset
+	optimize
+	zone
+
+  section:
+
+      PROGRAM = borderline
+      .DEFAULT: $(OCamlProgram $(PROGRAM), $(PROGRAM) $(FILES))
+
+  section:
+      PROGRAM = bl_configure
+      .DEFAULT: $(OCamlProgram $(PROGRAM), $(PROGRAM))
+
+  section:
+      PROGRAM = unit_test
+      .DEFAULT: $(OCamlProgram $(PROGRAM), $(PROGRAM) $(FILES))
