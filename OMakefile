@@ -5,7 +5,7 @@ BYTE_ENABLED = true
 OCAMLFLAGS = -thread -g -w @A-4-29-33-39-41-44-45-48 -bin-annot
 USE_OCAMLFIND = true
 CP = cp -f
-# MENHIR_ENABLED = true
+MENHIR_ENABLED = true
 
 OCAMLPACKS[] =
     unix str num oUnit batteries

@@ -112,16 +112,12 @@ rule token = parse
   | '{'            { LBRACE }
   | '}'            { RBRACE }
   | ','            { COMMA }
-  | '.'            { DOT }
-  | ':'            { COLON }
-  | "::"           { DCOLON }
   | '/'            { SLASH }
   | "!="           { NE }
   | '='            { EQ }
   | ';'            { SEMI }
   | '#'            { comment lexbuf }
   | eof            { END }
-  | _ as c         { CHAR(c) }
 
 and comment = parse
     '\n'           { new_line lexbuf; token lexbuf }
