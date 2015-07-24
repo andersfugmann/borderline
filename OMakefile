@@ -6,7 +6,7 @@ OCAMLFLAGS = -thread -g -w @A-4-29-33-39-41-44-45-48 -bin-annot
 USE_OCAMLFIND = true
 CP = cp -f
 MENHIR_ENABLED = true
-MENHIR_FLAGS = --explain
+MENHIR_FLAGS = --explain --infer
 OCAMLPACKS[] =
     unix str num oUnit batteries
 
@@ -18,6 +18,9 @@ clean:
     $(RM) -fr _build
     $(RM) -fr bin
     /usr/bin/find . -name \*~ -delete
+
+dist-clean:
+    git reset -f -d -x
 
 install: _build/borderline.opt _build/bl_configure.opt
     mkdir -p $(DESTDIR)/etc/default/
