@@ -36,28 +36,25 @@ and data = Number of int * Lexing.position
          | Id of id
          | Ip of Ipset.ip * Lexing.position
 
-(** Line number reference *)
-let lineno = ref 1
-
 let node_type id = function
-    Zone _ -> 1 = id
+  | Zone _ -> 1 = id
   | Process _ -> 2 = id
   | DefineStms _ -> 3 = id
   | DefineList _ -> 4 = id
   | _ -> false
 
-let rec fold_rules func acc = function 
+let rec fold_rules func acc = function
   | Rule (rules, _) as x :: xs -> fold_rules func (fold_rules func rules (func acc x)) xs
   | x :: xs -> fold_rules func (func acc x) xs
   | [] -> acc
-    
+
 let fold_nodes func nodes acc =
   List.fold_left func acc nodes
 
-let rec fold func nodes acc =
+let fold func nodes acc =
   let node_func acc = function
-      DefineStms (_, rules)  -> fold_rules func rules acc
+    | DefineStms (_, rules)  -> fold_rules func rules acc
     | Process (_, rules, _) -> fold_rules func rules acc
     | _ -> acc
   in
-    fold_nodes node_func nodes acc
+  fold_nodes node_func nodes acc
