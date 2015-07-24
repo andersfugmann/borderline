@@ -16,7 +16,8 @@ let parse_error pos s =
 %token DEFINE
 %token NETWORK INTERFACE
 %token MANGLE FILTER NAT
-%token POLICY ALLOW DENY REJECT LOG
+%token ALLOW DENY REJECT LOG
+%token POLICY
 %token SOURCE DESTINATION ADDRESS STATE USE
 %token NEW ESTABLISHED RELATED INVALID
 %token SEMI PROTOCOL
@@ -38,147 +39,129 @@ let parse_error pos s =
 /* Scan a list of statements, until the end of the list is encountered. */
 
 main:
-  | statement main                        { $1 :: $2 }
-  | END                                   { [] }
+  | stms = terminated(list(statement), END)            { stms }
 ;
 
 process:
-  | process_type rule_seq action          { ($1, $2, $3) }
-  | error                                 { parse_error $startpos "Expected process definition" }
+  | t=process_type r=rule_seq POLICY a=policy_seq      { (t, r, a) }
+  | error                                              { parse_error $startpos "Expected process definition" }
 ;
 
 statement:
-  | IMPORT STRING                         { F.Import($2) }
-  | ZONE ID LBRACE zone_stms RBRACE       { F.Zone($2, $4) }
-  | DEFINE ID EQ rule_seq                 { F.DefineStms($2, $4) }
-  | DEFINE ID EQ POLICY policy_seq        { F.DefinePolicy($2, $5) }
-  | DEFINE ID EQ data_list                { F.DefineList($2, $4) }
-  | PROCESS process                       { let a, b, c = $2 in F.Process(a, b, c) }
+  | IMPORT s=STRING                                    { F.Import(s) }
+  | ZONE id=ID LBRACE stms=zone_stms RBRACE            { F.Zone(id, stms) }
+  | DEFINE id=ID EQ POLICY policies=policy_seq         { F.DefinePolicy(id, policies) }
+  | DEFINE id=ID EQ rules=rule_seq                     { F.DefineStms(id, rules) }
+  | DEFINE id=ID EQ data=data_list                     { F.DefineList(id, data) }
+  | PROCESS p=process                                  { let (a, b, c) = p in F.Process(a, b, c) }
 ;
 
 /* Scan elements within a zone. */
 
 zone_stm:
-  | NETWORK EQ IPv6                       { let i, p, _pos = $3 in F.Network(Ipset.ip_of_string i, p) }
-  | INTERFACE EQ ID                       { F.Interface($3)}
-  | PROCESS process                       { let a, b, c = $2 in F.ZoneRules(a, b, c) }
+  | NETWORK EQ ip=IPv6                                 { let (i, p, _pos) = ip in F.Network(Ipset.ip_of_string i, p) }
+  | INTERFACE EQ id=ID                                 { F.Interface(id)}
+  | PROCESS p=process                                  { let (a, b, c) = p in F.ZoneRules(a, b, c) }
 ;
 
 zone_stms:
-  | zone_stm SEMI zone_stms               { $1 :: $3 }
-  | zone_stm                              { [ $1 ] }
-  |                                       { [] }
+  | stms = separated_list(SEMI, zone_stm)              { stms }
 ;
 
 process_type:
-  | MANGLE                                { F.MANGLE }
-  | FILTER                                { F.FILTER }
-  | NAT                                   { F.NAT }
+  | MANGLE                                             { F.MANGLE }
+  | FILTER                                             { F.FILTER }
+  | NAT                                                { F.NAT }
 ;
 
 /* Rules statements can be a single rule, or a list
    of rules enclosed in curly braces, seperated by semicolon. */
 
 rule_stm:
-  | RULE rule_seq action                  { F.Rule ($2, $3) }
-  | USE ID                                { F.Reference ($2) }
-  | filter_direction filter_stm           { F.Filter ($1, fst $2, snd $2) }
-  | STATE oper state_list                 { F.State ($3, $2) }
-  | PROTOCOL oper data_list               { F.Protocol ($3, $2) }
-  | ICMPTYPE oper data_list               { F.IcmpType ($3, $2) }
-  | TCPFLAGS oper data_list SLASH data_list { F.TcpFlags (($3, $5), $2) }
-;
-
-rule_stms:
-  | rule_seq SEMI rule_stms               { $1 @ $3 }
-  | rule_seq                              { $1 }
-  |                                       { [] }
+  | RULE r=rule_seq a=action                           { F.Rule (r, a) }
+  | USE id=ID                                          { F.Reference (id) }
+  | d=filter_direction f=filter_stm                    { F.Filter (d, fst f, snd f) }
+  | STATE o=oper s=state_list                          { F.State (s, o) }
+  | PROTOCOL o=oper d=data_list                        { F.Protocol (d, o) }
+  | ICMPTYPE o=oper d=data_list                        { F.IcmpType (d, o) }
+  | TCPFLAGS o=oper f=data_list SLASH d=data_list      { F.TcpFlags ((f, d), o) }
 ;
 
 rule_seq:
-  | rule_stm                              { [$1] }
-  | LBRACE rule_stms RBRACE               { $2 }
-  | error                                 { parse_error $startpos "Missing semi colon?" }
+  | rule=rule_stm                                      { [rule] }
+  | LBRACE rules=separated_list(SEMI, rule_stm) RBRACE { rules }
+  | error                                              { parse_error $startpos "Missing semi colon?" }
 ;
 
 /* A policy can be a single policy, or a list of policies
    enclosed in curly braces seperated by semicolon. */
 
 policy_seq:
-  | policy                                { [ $1 ] }
-  | LBRACE policy_stms RBRACE             { $2 }
-  | error                                 { parse_error $startpos "Expected policy" }
-;
-
-policy_stms:
-  | policy SEMI policy_stms               { $1 :: $3 }
-  | policy                                { [ $1 ] }
-  |                                       { [ ] }
+  | p=policy                                           { [ p ] }
+  | LBRACE p=separated_list(SEMI, policy) RBRACE       { p }
+  | error                                              { parse_error $startpos "Expected policy" }
 ;
 
 string:
-  | STRING                                { fst $1 }
-  | error                                 { parse_error $startpos "Expected string" }
+  | s=STRING                                           { fst s }
+  | error                                              { parse_error $startpos "Expected string" }
 ;
 
 policy:
-  | ALLOW                                 { F.ALLOW }
-  | DENY                                  { F.DENY }
-  | REJECT                                { F.REJECT }
-  | LOG string                            { F.LOG($2) }
-  | ID                                    { F.Ref($1) }
+  | ALLOW                                              { F.ALLOW }
+  | DENY                                               { F.DENY }
+  | REJECT                                             { F.REJECT }
+  | LOG s=string                                       { F.LOG(s) }
+  | id=ID                                              { F.Ref(id) }
 ;
 
 action:
-  | POLICY policy_seq                     { $2 }
-  |                                       { [] }
+  | POLICY policies=policy_seq                         { policies }
+  |                                                    { [] }
 ;
 
 /* Rules for a generic filter. */
 
 filter_direction:
-  | SOURCE                                { Ir.SOURCE }
-  | DESTINATION                           { Ir.DESTINATION }
+  | SOURCE                                             { Ir.SOURCE }
+  | DESTINATION                                        { Ir.DESTINATION }
 ;
 
 filter_stm:
-  | TCP_PORT oper data_list               { (F.TcpPort $3, $2) }
-  | UDP_PORT oper data_list               { (F.UdpPort $3, $2) }
-  | ADDRESS oper data_list                { (F.Address $3, $2) }
-  | ZONE oper data_list                   { (F.FZone $3, $2) }
-  | error                                 { parse_error $startpos "Expected filter" }
+  | TCP_PORT o=oper d=data_list                        { (F.TcpPort d, o) }
+  | UDP_PORT o=oper d=data_list                        { (F.UdpPort d, o) }
+  | ADDRESS o=oper d=data_list                         { (F.Address d, o) }
+  | ZONE o=oper d=data_list                            { (F.FZone d, o) }
+  | error                                              { parse_error $startpos "Expected filter" }
 ;
 
 oper:
-  | EQ                                    { false }
-  | NE                                    { true }
-  | error                                 { parse_error $startpos "Expected = or '!='" }
+  | EQ                                                 { false }
+  | NE                                                 { true }
+  | error                                              { parse_error $startpos "Expected = or '!='" }
 ;
 
 state_list:
-  | state                                 { [ $1 ] }
-  | state COMMA state_list                { $1 :: $3 }
-  |                                       { [] }
+  | states=separated_list(COMMA, state)                { states }
+
 ;
 
 state:
-  | NEW                                   { Ir.NEW }
-  | ESTABLISHED                           { Ir.ESTABLISHED }
-  | RELATED                               { Ir.RELATED }
-  | INVALID                               { Ir.INVALID }
+  | NEW                                                { Ir.NEW }
+  | ESTABLISHED                                        { Ir.ESTABLISHED }
+  | RELATED                                            { Ir.RELATED }
+  | INVALID                                            { Ir.INVALID }
 ;
 
 /* Data lists are polymorphic data sets. The types are
    validated when mapping the frontend language to the Ir tree */
 
 data_list:
-  | data COMMA data_list                  { $1 :: $3 }
-  | data                                  { [ $1 ] }
-  |                                       { [ ] }
+  | data=separated_list(COMMA, data)                   { data }
 ;
 
 data:
-  | INT                                   { let n, pos = $1 in F.Number (n, pos) }
-  | ID                                    { F.Id $1 }
-  | IPv6                                  { let i, p, pos = $1 in F.Ip ((Ipset.ip_of_string i, p), pos) }
+  | i=INT                                              { let n, pos = i in F.Number (n, pos) }
+  | id=ID                                              { F.Id id }
+  | ip=IPv6                                            { let i, p, pos = ip in F.Ip ((Ipset.ip_of_string i, p), pos) }
 ;
