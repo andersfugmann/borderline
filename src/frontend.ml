@@ -1,5 +1,5 @@
 (** Type and utility function for the frontend *)
-
+open !Batteries
 open Common
 
 type prefix = string

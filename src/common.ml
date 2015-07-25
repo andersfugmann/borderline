@@ -1,16 +1,12 @@
 (** General functions *)
-
+open !Batteries
 open Printf
 
 type id = string * Lexing.position
 
-let rec filter_opt = function
-  | Some n :: xs -> n :: filter_opt xs
-  | None :: xs -> filter_opt xs
-  | [] -> []
-
 exception ParseError of (string * id) list
 
+(* Place these in a const.ml *)
 let tcp = 6
 let udp = 17
 let icmp = 58
@@ -43,9 +39,6 @@ let idset_from_list lst =
 let eq_id_list lst lst' =
   Id_set.equal (idset_from_list lst) (idset_from_list lst')
 
-let combinations a b =
-  List.flatten (List.map (fun x -> List.map (fun y -> (x, y)) b) a)
-
 let member eq_oper x lst =
   List.exists (fun x' -> eq_oper x x') lst
 
@@ -62,12 +55,9 @@ let union eq_oper a b =
 let is_subset eq_oper a b =
   List.for_all (fun x -> member eq_oper x b ) a
 
-let has_intersection eq_oper a b =
-  not (intersection eq_oper a b = [])
-
 (** Group items into lists of identical elemenets *)
 let rec group eq_oper acc = function
-    x :: xs ->
+  | x :: xs ->
       let lst, rest = List.partition (eq_oper x) xs in
         group eq_oper ((x :: lst) :: acc) rest
   | [] -> acc
@@ -109,10 +99,10 @@ module Set = struct
   sig
     type t
     val compare: t -> t -> int
-  end    
+  end
   module Make(Ord: OrderedType) =
   struct
     include Set.Make(Ord)
-    let from_list elts = List.fold_left (fun a e -> add e a) empty elts 
+    let from_list elts = List.fold_left (fun a e -> add e a) empty elts
   end
 end
