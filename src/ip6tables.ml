@@ -187,6 +187,7 @@ let transform chains =
           let chains, (conds, target) = fold proto (Ir.Jump chain.Ir.id) xs in
             chain :: chains, (conds, target)
 
+(*
       | (Ir.TcpFlags _, false) as cond :: xs when proto != tcp ->
           let chains, (conds, target) = fold proto target xs in chains, ((Ir.Protocol [tcp], false) :: cond :: conds, target)
 
@@ -195,6 +196,7 @@ let transform chains =
                                         (op, false)], Ir.Return); ([], target) ] "expanded" in
           let chains, (conds, target) = fold proto (Ir.Jump chain.Ir.id) xs in
             chain :: chains, (conds, target)
+*)
 
       | (Ir.Ports _, false) as cond :: xs when proto != tcp && proto != udp ->
           let chain = Chain.create [ ([(Ir.Protocol([tcp]), false); cond], target);
