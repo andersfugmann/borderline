@@ -1,12 +1,9 @@
-open Common
-open Frontend
-open Parser
-open Lexer
-open Str
+open Batteries
+module F = Frontend
 
 (** Precompiled regular expressions *)
-let include_regex = regexp "^.*[.]bl$"
-let exclude_regex = regexp "^[.][#~].*$"
+let include_regex = Str.regexp "^.*[.]bl$"
+let exclude_regex = Str.regexp "^[.][#~].*$"
 
 module File_set = Set.Make( String )
 
@@ -25,7 +22,7 @@ let parse file =
     end
 
 let rec parse_file file =
-  if string_match include_regex file 0 && not (string_match exclude_regex file 0) then
+  if Str.string_match include_regex file 0 && not (Str.string_match exclude_regex file 0) then
     let prev_dir = Unix.getcwd () in
     let _ = Unix.chdir (Filename.dirname file) in
     let res = expand (parse (Filename.basename file)) in
@@ -42,14 +39,14 @@ and include_path dir_handle =
   with End_of_file -> []
 
 and expand = function
-    Import(path, _) :: xs when Sys.is_directory path ->
+  | F.Import(path, _) :: xs when Sys.is_directory path ->
       let dir = Unix.opendir path in
       let prev_dir = Unix.getcwd () in
       let _ = Unix.chdir path in
       let res = include_path dir in
       let _ = Unix.chdir prev_dir in
         res @ expand xs
-  | Import(file, _) :: xs when not (Sys.is_directory file) ->
+  | F.Import(file, _) :: xs when not (Sys.is_directory file) ->
       parse_file file @ expand xs
   | x :: xs -> x :: expand xs
   | [ ] -> [ ]
@@ -59,4 +56,3 @@ let process_files files =
   let nodes' = (Zone.emit_nodes Frontend.FILTER (Zone.filter nodes)) @ nodes in
   let nodes' = Validate.expand nodes' in
     (Zone.filter nodes', Rule.filter_process nodes')
-

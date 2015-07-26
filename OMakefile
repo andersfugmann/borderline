@@ -13,7 +13,7 @@ OCAMLPACKS[] =
 mkdir -p _build
 vmount(-l, src, _build)
 
-.PHONY: clean install unittest build tests
+.PHONY: clean install unittest build tests test
 clean:
     $(RM) -fr _build
     $(RM) -fr bin
@@ -39,7 +39,12 @@ unittest: _build/unit_test.run
 tests: _build/borderline.run
     cd tests; BORDERLINE=../_build/borderline.run ./test.sh
 
-build: _build/borderline.run _build/unit_test.run _build/bl_configure.run
+test: build
+    make -C configuration
+    _build/bl_configure.run --output configuration/zones --force
+    _build/borderline.run configuration/borderline.bl
+
+build: _build/borderline.run _build/unit_test.run _build/bl_configure.run _build/borderline.opt _build/unit_test.opt _build/bl_configure.opt
 
 .SUBDIRS: _build
   FILES[] =

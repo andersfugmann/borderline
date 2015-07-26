@@ -3,10 +3,7 @@
 *)
 
 open Common
-open Ir
 open Printf
-open Str
-open String
 open Chain
 
 module StringMap = Map.Make(String)
@@ -27,24 +24,24 @@ let get_zone_id zone =
 
 let gen_neg = function
   | true -> "! "
-  | _ -> ""
+  | false -> ""
 
 let choose_dir a b = function
-  | SOURCE      -> a
-  | DESTINATION -> b
+  | Ir.SOURCE      -> a
+  | Ir.DESTINATION -> b
 
 let get_state_name = function
-  | NEW -> "new"
-  | ESTABLISHED -> "established"
-  | RELATED -> "related"
-  | INVALID -> "invalid"
+  | Ir.NEW -> "new"
+  | Ir.ESTABLISHED -> "established"
+  | Ir.RELATED -> "related"
+  | Ir.INVALID -> "invalid"
 
 
 let gen_zone_mask dir zone =
   let zone_id = get_zone_id (id2str zone) in
   match dir with
-    | SOURCE -> zone_id, 0x00ff
-    | DESTINATION -> zone_id * 0x100, 0xff00
+  | Ir.SOURCE -> zone_id, 0x00ff
+  | Ir.DESTINATION -> zone_id * 0x100, 0xff00
 
 let gen_zone_mask_str dir zone =
   let id, mask = gen_zone_mask dir zone in sprintf "0x%04x/0x%04x" id mask
@@ -65,58 +62,58 @@ let tcp_flags flags =
 
 (** Return a prefix and condition, between which a negation can be inserted *)
 let gen_condition = function
-  | IpSet(direction, ips) ->
+  | Ir.IpSet(direction, ips) ->
     begin
       match Ipset.to_ips ips with
-        | [ (ip, mask) ] -> "", sprintf "--%s %s/%d" (choose_dir "source" "destination" direction) (Ipset.string_of_ip ip) mask
-        | _ -> let low, high = elem (Ipset.elements ips) in
-               "-m iprange ", sprintf "--%s-range %s-%s"
-                 (choose_dir "src" "dst" direction)
-                 (Ipset.string_of_ip low) (Ipset.string_of_ip high)
+      | [ (ip, mask) ] -> "", sprintf "--%s %s/%d" (choose_dir "source" "destination" direction) (Ipset.string_of_ip ip) mask
+      | _ -> let low, high = elem (Ipset.elements ips) in
+        "-m iprange ", sprintf "--%s-range %s-%s"
+          (choose_dir "src" "dst" direction)
+          (Ipset.string_of_ip low) (Ipset.string_of_ip high)
     end
-  | Interface(direction, iface_list) -> "",
+  | Ir.Interface(direction, iface_list) -> "",
     (choose_dir "--in-interface " "--out-interface " direction) ^ (id2str (elem iface_list))
-  | State(states) -> "-m conntrack ",
-    ("--ctstate " ^ ( String.concat "," (State_set.fold (fun s acc -> get_state_name s :: acc) states [])))
-  | Zone(dir, id_lst) -> "-m mark ",
+  | Ir.State(states) -> "-m conntrack ",
+    ("--ctstate " ^ ( String.concat "," (Ir.State_set.fold (fun s acc -> get_state_name s :: acc) states [])))
+  | Ir.Zone(dir, id_lst) -> "-m mark ",
     "--mark " ^ (gen_zone_mask_str dir (elem id_lst))
-  | Ports(direction, port :: []) -> "",
+  | Ir.Ports(direction, port :: []) -> "",
     ( "--" ^ (choose_dir "source" "destination" direction) ^ "-port " ^ (string_of_int port))
-  | Ports(direction, ports) -> "-m multiport ",
+  | Ir.Ports(direction, ports) -> "-m multiport ",
     ( "--" ^ (choose_dir "source" "destination" direction) ^ "-ports " ^ (String.concat "," (List.map string_of_int ports)) )
-  | Protocol(protocols) -> ("", sprintf "--protocol %d" (elem protocols))
-  | IcmpType(types) -> "-m icmp6 ",
+  | Ir.Protocol(protocols) -> ("", sprintf "--protocol %d" (elem protocols))
+  | Ir.IcmpType(types) -> "-m icmp6 ",
     sprintf "--icmpv6-type %d" (elem types)
-  | Mark (value, mask) -> "-m mark ",
+  | Ir.Mark (value, mask) -> "-m mark ",
     sprintf "--mark 0x%04x/0x%04x" value mask
-  | TcpFlags (flags, mask) -> "",
+  | Ir.TcpFlags (flags, mask) -> "",
     sprintf "--tcp-flags " ^ (tcp_flags mask) ^ " " ^ (tcp_flags flags)
 
 let rec gen_conditions acc = function
-  | (State states, true) :: xs when State_set.is_empty states -> gen_conditions acc xs
-  | (State states, false) :: _ when State_set.is_empty states -> failwith "Unsatifiable rule in code-gen"
-  | (Ports (_, []), true) :: xs
-  | (Zone (_, []), true) :: xs
-  | (Protocol [], true) :: xs
-  | (IcmpType [], true) :: xs -> gen_conditions acc xs
-  | (Ports (_, []), false) :: _
-  | (Zone (_, []), false) :: _
-  | (Protocol [], false) :: _
-  | (IcmpType [], false) :: _ -> failwith "Unsatifiable rule in code-gen"
+  | (Ir.State states, true) :: xs when Ir.State_set.is_empty states -> gen_conditions acc xs
+  | (Ir.State states, false) :: _ when Ir.State_set.is_empty states -> failwith "Unsatifiable rule in code-gen"
+  | (Ir.Ports (_, []), true) :: xs
+  | (Ir.Zone (_, []), true) :: xs
+  | (Ir.Protocol [], true) :: xs
+  | (Ir.IcmpType [], true) :: xs -> gen_conditions acc xs
+  | (Ir.Ports (_, []), false) :: _
+  | (Ir.Zone (_, []), false) :: _
+  | (Ir.Protocol [], false) :: _
+  | (Ir.IcmpType [], false) :: _ -> failwith "Unsatifiable rule in code-gen"
   | (cond, neg) :: xs ->
       let pref, postf = gen_condition cond in
         gen_conditions (acc ^ pref ^ (gen_neg neg) ^ postf ^ " ") xs
   | [] -> acc
 
 let gen_action = function
-  | MarkZone(dir, id) -> "MARK --set-mark " ^ (gen_zone_mask_str dir id)
-  | Jump(chain_id) -> (Chain.get_chain_name chain_id)
-  | Return -> "RETURN"
-  | Accept -> "ACCEPT"
-  | Drop   -> "DROP"
-  | Reject _ -> "REJECT"
-  | Notrack -> "NOTRACK" (* The NoTrack will not work, as it must be placed in the 'raw' table *)
-  | Log prefix -> "LOG --log-prefix \"" ^ prefix ^ ":\""
+  | Ir.MarkZone(dir, id) -> "MARK --set-mark " ^ (gen_zone_mask_str dir id)
+  | Ir.Jump(chain_id) -> (Chain.get_chain_name chain_id)
+  | Ir.Return -> "RETURN"
+  | Ir.Accept -> "ACCEPT"
+  | Ir.Drop   -> "DROP"
+  | Ir.Reject _ -> "REJECT"
+  | Ir.Notrack -> "NOTRACK" (* The NoTrack will not work, as it must be placed in the 'raw' table *)
+  | Ir.Log prefix -> "LOG --log-prefix \"" ^ prefix ^ ":\""
 
 (** To make a direct mapping to iptables rules, the IR tree needs to
     be denormalized. The transform pass does excatly this. It expands
@@ -127,15 +124,15 @@ let transform chains =
      in order to move expanding conditions to the back *)
   let order a b =
     let value = function
-      | Interface _ -> 1
-      | Zone _ -> 2
-      | State _ -> 3
-      | Ports (_, _ports) -> 4
-      | IpSet (_, ips) -> Ipset.cardinal ips
-      | Protocol protocols -> List.length protocols
-      | IcmpType types -> List.length types
-      | Mark _ -> 2
-      | TcpFlags _ -> 2
+      | Ir.Interface _ -> 1
+      | Ir.Zone _ -> 2
+      | Ir.State _ -> 3
+      | Ir.Ports (_, _ports) -> 4
+      | Ir.IpSet (_, ips) -> Ipset.cardinal ips
+      | Ir.Protocol protocols -> List.length protocols
+      | Ir.IcmpType types -> List.length types
+      | Ir.Mark _ -> 2
+      | Ir.TcpFlags _ -> 2
     in
       (* Reverse the order given above, by making the value negative *)
       Pervasives.compare (value b) (value a)
@@ -147,10 +144,10 @@ let transform chains =
       | cl :: xs ->
           let chn', rle = denorm_rule target xs in
           let chn = Chain.create [rle] "Denormalize" in
-            (chn :: chn', (cl, Ir.Jump chn.id))
+            (chn :: chn', (cl, Ir.Jump chn.Ir.id))
       | [] -> ([], ([], tg))
     in
-      denorm_rule target (uniq (fun (a, _) (b, _) -> cond_type_identical a b && (get_dir a = None || get_dir a == get_dir b)) conds)
+      denorm_rule target (uniq (fun (a, _) (b, _) -> Ir.cond_type_identical a b && (Ir.get_dir a = None || Ir.get_dir a == Ir.get_dir b)) conds)
   in
   let expand (conds, target) =
     let expand_cond target cond_func lst = function
@@ -162,18 +159,18 @@ let transform chains =
             Chain.create ( rules @ [ ([], target) ]) "Expanded"
     in
     let rec expand_conds acc1 acc2 tg = function
-      | (Protocol protocols, neg) :: xs when List.length protocols > 1 ->
-          let chain = expand_cond tg (fun p -> Protocol [p]) protocols neg in
-            expand_conds (chain :: acc1) acc2 (Ir.Jump chain.id) xs
-      | (IpSet(direction, set), neg) :: xs when Ipset.cardinal set > 1 ->
-          let chain = expand_cond tg (fun range -> IpSet(direction, Ipset.singleton range)) (Ipset.elements set) neg in
-            expand_conds (chain :: acc1) acc2 (Ir.Jump chain.id) xs
-      | (Zone(direction, zones), neg) :: xs when List.length zones > 1 ->
-          let chain = expand_cond tg (fun zone -> Zone(direction, [zone])) zones neg in
-            expand_conds (chain :: acc1) acc2 (Ir.Jump chain.id) xs
-      | (IcmpType(types), neg) :: xs when List.length types > 1 ->
-          let chain = expand_cond tg (fun t -> IcmpType([t])) types neg in
-            expand_conds (chain :: acc1) acc2 (Ir.Jump chain.id) xs
+      | (Ir.Protocol protocols, neg) :: xs when List.length protocols > 1 ->
+          let chain = expand_cond tg (fun p -> Ir.Protocol [p]) protocols neg in
+            expand_conds (chain :: acc1) acc2 (Ir.Jump chain.Ir.id) xs
+      | (Ir.IpSet(direction, set), neg) :: xs when Ipset.cardinal set > 1 ->
+          let chain = expand_cond tg (fun range -> Ir.IpSet(direction, Ipset.singleton range)) (Ipset.elements set) neg in
+            expand_conds (chain :: acc1) acc2 (Ir.Jump chain.Ir.id) xs
+      | (Ir.Zone(direction, zones), neg) :: xs when List.length zones > 1 ->
+          let chain = expand_cond tg (fun zone -> Ir.Zone(direction, [zone])) zones neg in
+            expand_conds (chain :: acc1) acc2 (Ir.Jump chain.Ir.id) xs
+      | (Ir.IcmpType(types), neg) :: xs when List.length types > 1 ->
+          let chain = expand_cond tg (fun t -> Ir.IcmpType([t])) types neg in
+            expand_conds (chain :: acc1) acc2 (Ir.Jump chain.Ir.id) xs
       | cond :: xs -> expand_conds acc1 (cond :: acc2) tg xs
       | [] -> (acc1, (acc2, tg))
     in expand_conds [] [] target (List.sort (fun (a, _) (b, _) -> order a b) conds)
@@ -182,45 +179,45 @@ let transform chains =
   (* Some conditions needs a protocol specifier to work*)
   let add_protocol_specifiers (conds, target) =
     let rec fold proto target = function
-      | (IcmpType _, false) as cond :: xs when proto != icmp ->
-          let chains, (conds, target) = fold proto target xs in chains, ((Protocol [icmp], false) :: cond :: conds, target)
-      | (IcmpType _ as op, true) :: xs  ->
-          let chain = Chain.create [ ([ (Protocol([icmp]), false);
+      | (Ir.IcmpType _, false) as cond :: xs when proto != icmp ->
+          let chains, (conds, target) = fold proto target xs in chains, ((Ir.Protocol [icmp], false) :: cond :: conds, target)
+      | (Ir.IcmpType _ as op, true) :: xs  ->
+          let chain = Chain.create [ ([ (Ir.Protocol([icmp]), false);
                                         (op, false)], Ir.Return); ([], target) ] "expanded" in
-          let chains, (conds, target) = fold proto (Ir.Jump chain.id) xs in
+          let chains, (conds, target) = fold proto (Ir.Jump chain.Ir.id) xs in
             chain :: chains, (conds, target)
 
-      | (TcpFlags _, false) as cond :: xs when proto != tcp ->
-          let chains, (conds, target) = fold proto target xs in chains, ((Protocol [tcp], false) :: cond :: conds, target)
+      | (Ir.TcpFlags _, false) as cond :: xs when proto != tcp ->
+          let chains, (conds, target) = fold proto target xs in chains, ((Ir.Protocol [tcp], false) :: cond :: conds, target)
 
-      | (TcpFlags _ as op, true) :: xs  ->
-          let chain = Chain.create [ ([ (Protocol([tcp]), false);
+      | (Ir.TcpFlags _ as op, true) :: xs  ->
+          let chain = Chain.create [ ([ (Ir.Protocol([tcp]), false);
                                         (op, false)], Ir.Return); ([], target) ] "expanded" in
-          let chains, (conds, target) = fold proto (Ir.Jump chain.id) xs in
+          let chains, (conds, target) = fold proto (Ir.Jump chain.Ir.id) xs in
             chain :: chains, (conds, target)
 
-      | (Ports _, false) as cond :: xs when proto != tcp && proto != udp ->
-          let chain = Chain.create [ ([(Protocol([tcp]), false); cond], target);
-                                     ([(Protocol([udp]), false); cond], target) ] "Expanded"
+      | (Ir.Ports _, false) as cond :: xs when proto != tcp && proto != udp ->
+          let chain = Chain.create [ ([(Ir.Protocol([tcp]), false); cond], target);
+                                     ([(Ir.Protocol([udp]), false); cond], target) ] "Expanded"
           in
-          let chains, (conds, target) = fold proto (Ir.Jump chain.id) xs in
+          let chains, (conds, target) = fold proto (Ir.Jump chain.Ir.id) xs in
             chain :: chains, (conds, target)
 
-      | (Ports _, true) as cond :: xs ->
-          let chain = Chain.create [ ([(Protocol([tcp]), false); cond], Ir.Return);
-                                     ([(Protocol([udp]), false); cond], Ir.Return);
+      | (Ir.Ports _, true) as cond :: xs ->
+          let chain = Chain.create [ ([(Ir.Protocol([tcp]), false); cond], Ir.Return);
+                                     ([(Ir.Protocol([udp]), false); cond], Ir.Return);
                                      ([], target) ] "Expanded"
           in
-          let chains, (conds, target) = fold proto (Ir.Jump chain.id) xs in
+          let chains, (conds, target) = fold proto (Ir.Jump chain.Ir.id) xs in
             chain :: chains, (conds, target)
 
       | cond :: xs ->
           let chains, (conds, target) = fold proto target xs in chains, (cond :: conds, target)
       | [] -> [], ([], target)
     in
-    let protocols, conds'  = List.partition (fun (cond, _) -> (cond_type_identical (Protocol []) cond)) conds in
+    let protocols, conds' = List.partition (fun (cond, _) -> (Ir.cond_type_identical (Ir.Protocol []) cond)) conds in
     let protocol = match protocols with
-      | (Protocol [p], false) :: [] -> p
+      | (Ir.Protocol [p], false) :: [] -> p
       | [] -> -1
       | _ -> failwith "More than one protocol specifier in rule."
     in
@@ -232,12 +229,12 @@ let transform chains =
      be emulated. *)
   let zone_to_mask (conds, target) =
     let rec zone_to_mask' = function
-      | (Zone (dir, zone :: []), neg) :: (Zone(dir', zone' :: []), neg') :: xs when neg = neg' && not (dir = dir') ->
-          let v1, m1 = gen_zone_mask dir zone in
-          let v2, m2 = gen_zone_mask dir' zone' in
-            (Mark (v1 + v2, m1 + m2), neg) :: zone_to_mask' xs
-      | (Zone (dir, zone :: []), neg) :: xs ->
-          let v, m = gen_zone_mask dir zone in (Mark (v, m), neg) :: zone_to_mask' xs
+      | (Ir.Zone (dir, zone :: []), neg) :: (Ir.Zone(dir', zone' :: []), neg') :: xs when neg = neg' && not (dir = dir') ->
+        let v1, m1 = gen_zone_mask dir zone in
+        let v2, m2 = gen_zone_mask dir' zone' in
+        (Ir.Mark (v1 + v2, m1 + m2), neg) :: zone_to_mask' xs
+      | (Ir.Zone (dir, zone :: []), neg) :: xs ->
+        let v, m = gen_zone_mask dir zone in (Ir.Mark (v, m), neg) :: zone_to_mask' xs
       | x :: xs -> x :: zone_to_mask' xs
       | [] -> []
     in
@@ -245,9 +242,9 @@ let transform chains =
   in
   let rec map_chains acc func = function
     | chain :: xs ->
-        let chains, rules = List.split (List.map func chain.rules) in
-        let chain' = { id = chain.id; rules = rules; comment = chain.comment } in
-          map_chains (Chain_map.add chain'.id chain' acc) func ((List.flatten chains) @ xs)
+      let chains, rules = List.split (List.map func chain.Ir.rules) in
+      let chain' = { Ir.id = chain.Ir.id; rules = rules; comment = chain.Ir.comment } in
+      map_chains (Chain_map.add chain'.Ir.id chain' acc) func ((List.flatten chains) @ xs)
     | [] -> acc
   in
   (* Some packets are 'stateless', and thus not regarded as 'new' by
@@ -259,8 +256,8 @@ let transform chains =
   let fix_state_match (conds, target) =
     (* Transform the list of state so the 'new' state is avoided *)
     let tranform = function
-      | (State states, neg) when State_set.mem NEW states ->
-          (State (State_set.diff all_states states), not neg)
+      | (Ir.State states, neg) when Ir.State_set.mem Ir.NEW states ->
+          (Ir.State (Ir.State_set.diff Ir.all_states states), not neg)
       | x -> x
     in
       ([], (List.map tranform conds, target))
@@ -280,24 +277,23 @@ let emit_rule (cond_list, action) : string =
     conditions ^ "-j " ^ target
 
 let emit_rules chain =
-  let chain_name = Chain.get_chain_name chain.id in
-  let ops = List.map emit_rule chain.rules in
+  let chain_name = Chain.get_chain_name chain.Ir.id in
+  let ops = List.map emit_rule chain.Ir.rules in
     List.map ( sprintf "ip6tables -A %s %s" chain_name ) ops
 
 let filter chains =
   (* Filter rules must take a condition as argument, and return true
      for rules to be kepts, and false for rules to be removed *)
   let is_tautologically_false (conds, _) =
-      List.fold_left (fun acc cond -> acc && not (is_always false cond)) true conds
+      List.fold_left (fun acc cond -> acc && not (Ir.is_always false cond)) true conds
   in
-  let filter func chain = { id = chain.id; rules = List.filter func chain.rules; comment = chain.comment } in
+  let filter func chain = { Ir.id = chain.Ir.id; rules = List.filter func chain.Ir.rules; comment = chain.Ir.comment } in
     Chain_map.map (filter is_tautologically_false) chains
 
 let create_chain acc chain =
-  match chain.id with
-    | Builtin(_) -> acc
-    | _ -> acc @ [sprintf "ip6tables -N %s #%s" (Chain.get_chain_name chain.id) chain.comment]
-
+  match chain.Ir.id with
+    | Ir.Builtin(_) -> acc
+    | _ -> acc @ [sprintf "ip6tables -N %s #%s" (Chain.get_chain_name chain.Ir.id) chain.Ir.comment]
 
 (** Main entrypoint. *)
 let emit_chains chains =

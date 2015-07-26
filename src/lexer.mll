@@ -19,7 +19,7 @@ let new_line lexbuf =
 }
 
 rule token = parse
-    [' ' '\t']     { token lexbuf }     (* skip blanks *)
+  | [' ' '\t']     { token lexbuf }     (* skip blanks *)
   | '\n'           { new_line lexbuf; token lexbuf }
   | "zone"         { ZONE }
   | "process"      { PROCESS }
@@ -105,8 +105,9 @@ rule token = parse
         IPv6(sl @ (gen rem) @ el, mask, lexbuf.Lexing.lex_curr_p)
     }
   | ['0'-'9']+ as lxm { INT(int_of_string lxm, lexbuf.Lexing.lex_curr_p) }
-  | ['a'-'z''A'-'Z''_']['a'-'z''A'-'Z''0'-'9''_''-''.']* as lxm { ID (lxm, lexbuf.Lexing.lex_curr_p) }
-  | '"'(['0'-'9' 'a'-'z' 'A'-'Z' '.' '/' '_' '-' ' ']+ as str)'"' { STRING (str, lexbuf.Lexing.lex_curr_p) }
+  | ['a'-'z''A'-'Z''_']['a'-'z''A'-'Z''0'-'9''_''.''-']* as lxm { IDENT (lxm, lexbuf.Lexing.lex_curr_p) }
+  | '"'(['0'-'9' 'a'-'z' 'A'-'Z' '.' '/' '_' '-' ' ']+ as str)'"' { QUOTE (str, lexbuf.Lexing.lex_curr_p) }
+
 
 (* Simple tokens *)
   | '{'            { LBRACE }

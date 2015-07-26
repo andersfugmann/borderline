@@ -20,7 +20,7 @@ let parse str =
   try
     Scanf.sscanf str "%s dev %s" (fun ip net -> (ip, net))
   with
-      _ -> Scanf.sscanf str "%s via %s dev %s" (fun ip _ net -> (ip, net))
+  | _ -> Scanf.sscanf str "%s via %s dev %s" (fun ip _ net -> (ip, net))
 
 (* Read off lines one by one *)
 let rec parse_routes ch_in map =
@@ -34,7 +34,7 @@ let rec parse_routes ch_in map =
     in
       parse_routes ch_in (Interface_map.add iface (net :: networks) map)
   with
-      End_of_file -> map
+  | End_of_file -> map
 
 let write_external_zone ch_out interface _networks =
     Printf.fprintf ch_out "zone %s {\n" interface;
@@ -56,7 +56,7 @@ let write_zone filename interface networks =
   print_endline ("Writing file: " ^ filename);
   let ch_out = open_out filename in
     (match is_external_zone networks with
-        true -> write_external_zone ch_out interface networks
+      |  true -> write_external_zone ch_out interface networks
       | false -> write_internal_zone ch_out interface networks
     ); close_out ch_out
 
@@ -67,14 +67,14 @@ let has_external_zone interfaces =
 let validate_dir output_dir =
   try
     match Sys.is_directory output_dir with
-        true -> ()
-      | false -> raise (Usage_error ("Not a directory: " ^ output_dir))
+    | true -> ()
+    | false -> raise (Usage_error ("Not a directory: " ^ output_dir))
   with _ -> raise (Usage_error ("Not a directory: " ^ output_dir))
 
 let validate_file force file =
   match force || (not (Sys.file_exists file)) with
-      true -> ()
-    | false -> raise (Usage_error ("File already exists: " ^ file))
+  | true -> ()
+  | false -> raise (Usage_error ("File already exists: " ^ file))
 
 let () =
   let output_dir = ref "/etc/borderline/zones" and
@@ -95,13 +95,13 @@ let () =
     validate_dir !output_dir;
     let file_list =
       Interface_map.fold (fun iface _ acc -> (create_file_name iface) :: acc) interfaces
-           (if (found_external) then [] else [ !output_dir ^ "/" ^ "ext.bl" ])
+        (if (found_external) then [] else [ !output_dir ^ "/" ^ "ext.bl" ])
     in
     let () = List.iter (validate_file !force) file_list in
 
-      Interface_map.iter (fun iface nets -> write_zone (create_file_name iface) iface nets) interfaces;
-      if not (found_external) then
-        Printf.fprintf (open_out (!output_dir ^ "/" ^ "ext.bl")) "# No external interface found\ndefine external = \n"
-      else
-        ()
+    Interface_map.iter (fun iface nets -> write_zone (create_file_name iface) iface nets) interfaces;
+    if not (found_external) then
+      Printf.fprintf (open_out (!output_dir ^ "/" ^ "ext.bl")) "# No external interface found\ndefine external = \n"
+    else
+      ()
   with Usage_error msg -> print_endline ("Error: " ^  msg)

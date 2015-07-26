@@ -5,26 +5,26 @@ define bogons = true
 define allocations = true
 
 # Allow router information for fe80 networks, and Neighbor Discovery
-# (rfc 2461) 
+# (rfc 2461)
 define link_address = true
 
 
 # List of ports all machines guarded by the firewall can be contacted.
-# See commmon.bl 
+# See commmon.bl
 define global_tcp_ports = ssh
-define global_udp_ports = 
+define global_udp_ports =
 
 
 # List of ports accessable on the firewall itself, accessable from the
-# outside. 
+# outside.
 # See zones/self.bl
-define public_tcp_ports = smtp, ssmtp, domain, imaps, www, https, ntp 
+define public_tcp_ports = smtp, ssmtp, domain, imaps, http, https, ntp
 define public_udp_ports = domain, ntp
 
 
 # Rembember to define which zone is the external zone. If bl_configure is
 # used, the system will autimatically assign the external zone.
-# The 'configure' program will automatically set this variable in the 
+# The 'configure' program will automatically set this variable in the
 # external zone.
 #define external = <zone connected to the internet>
 

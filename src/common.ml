@@ -66,10 +66,10 @@ let rec group eq_oper acc = function
 let uniq eq_oper lst =
   let rec uniq' acc1 acc2 xs =
     match (acc2, xs) with
-        [], [] -> []
-      | _, [] :: ys -> uniq' acc1 acc2 ys
-      | _, (x :: xs) :: ys -> uniq' (x :: acc1) (xs :: acc2) ys
-      | _, [] -> acc1 :: uniq' [] [] acc2
+    | [], [] -> []
+    | _, [] :: ys -> uniq' acc1 acc2 ys
+    | _, (x :: xs) :: ys -> uniq' (x :: acc1) (xs :: acc2) ys
+    | _, [] -> acc1 :: uniq' [] [] acc2
   in
   uniq' [] [] (group eq_oper [] lst)
 

@@ -2,5 +2,5 @@
 build:
 force:
 
-clean install unittest build tests: %: force
+clean install unittest build tests test: %: force
 	omake -w $@ -j 4

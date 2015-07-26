@@ -25,9 +25,9 @@ let parse_error pos s =
 
 
 %token <int * Lexing.position> INT
-%token <string * Lexing.position> ID
 %token <int list * int * Lexing.position> IPv6
-%token <string * Lexing.position> STRING
+%token <string * Lexing.position> QUOTE
+%token <string * Lexing.position> IDENT
 
 %token LBRACE RBRACE COMMA SLASH END
 
@@ -41,22 +41,23 @@ main:
   | stms = terminated(list(statement), END)            { stms }
 
 statement:
-  | IMPORT s=STRING                                    { F.Import(s) }
-  | ZONE id=ID LBRACE stms=separated_list_opt(SEMI, zone_stm) RBRACE { F.Zone(id, stms) }
-  | DEFINE id=ID EQ POLICY policies=policy_seq         { F.DefinePolicy(id, policies) }
-  | DEFINE id=ID EQ rules=rule_seq                     { F.DefineStms(id, rules) }
-  | DEFINE id=ID EQ data=data_list                     { F.DefineList(id, data) }
+  | IMPORT s=string                                    { F.Import(s) }
+  | ZONE id=id LBRACE stms=separated_list_opt(SEMI, zone_stm) RBRACE { F.Zone(id, stms) }
+  | DEFINE id=id EQ POLICY policies=policy_seq         { F.DefinePolicy(id, policies) }
+  | DEFINE id=id EQ rules=rule_seq                     { F.DefineStms(id, rules) }
+  | DEFINE id=id EQ rule=rule_stm                      { F.DefineStms(id, [ rule ] ) }
+  | DEFINE id=id EQ data=data_list                     { F.DefineList(id, data) }
   | PROCESS t=process_type r=rule_seq POLICY p=policy_seq { F.Process (t,r,p) }
 
 rule_seq:
   | LBRACE rules=separated_list_opt(SEMI, rule_stm) RBRACE { rules }
   | error                                                  { parse_error $startpos "Missing semi colon for rules." }
 
-/* Scan elements within a zone. */
+(* Scan elements within a zone. *)
 
 zone_stm:
   | NETWORK EQ ip=IPv6                                 { let (i, p, _pos) = ip in F.Network(Ipset.ip_of_string i, p) }
-  | INTERFACE EQ id=ID                                 { F.Interface(id)}
+  | INTERFACE EQ id=id                                 { F.Interface(id)}
   | PROCESS t=process_type r=rule_seq p=policy_opt     { F.ZoneRules (t,r,p) }
 
 policy_opt:
@@ -68,21 +69,21 @@ process_type:
   | FILTER                                             { F.FILTER }
   | NAT                                                { F.NAT }
 
-/* Rules statements can be a single rule, or a list
-   of rules enclosed in curly braces, seperated by semicolon. */
+(* Rules statements can be a single rule, or a list
+   of rules enclosed in curly braces, seperated by semicolon. *)
 
 rule_stm:
   | RULE r=rule_seq p=policy_opt                       { F.Rule (r, p) }
-  | USE id=ID                                          { F.Reference (id) }
+  | USE id=id                                          { F.Reference (id) }
   | d=filter_direction f=filter_stm                    { F.Filter (d, fst f, snd f) }
   | STATE o=oper states=separated_list(COMMA, state)   { F.State (states, o) }
   | PROTOCOL o=oper d=data_list                        { F.Protocol (d, o) }
   | ICMPTYPE o=oper d=data_list                        { F.IcmpType (d, o) }
   | TCPFLAGS o=oper f=data_list SLASH d=data_list      { F.TcpFlags ((f, d), o) }
+  | error                                              { parse_error $startpos "Expected rule stm" }
 
-
-/* A policy can be a single policy, or a list of policies
-   enclosed in curly braces seperated by semicolon. */
+(* A policy can be a single policy, or a list of policies
+   enclosed in curly braces seperated by semicolon. *)
 
 policy_seq:
   | p=policy                                           { [ p ] }
@@ -90,17 +91,17 @@ policy_seq:
   | error                                              { parse_error $startpos "Expected policy" }
 
 string:
-  | s=STRING                                           { fst s }
+  | s=QUOTE                                            { s }
   | error                                              { parse_error $startpos "Expected string" }
 
 policy:
   | ALLOW                                              { F.ALLOW }
   | DENY                                               { F.DENY }
   | REJECT                                             { F.REJECT }
-  | LOG s=string                                       { F.LOG(s) }
-  | id=ID                                              { F.Ref(id) }
+  | LOG s=string                                       { F.LOG(fst s) }
+  | id=id                                              { F.Ref(id) }
 
-/* Rules for a generic filter. */
+(* Rules for a generic filter. *)
 
 filter_direction:
   | SOURCE                                             { Ir.SOURCE }
@@ -124,19 +125,24 @@ state:
   | RELATED                                            { Ir.RELATED }
   | INVALID                                            { Ir.INVALID }
 
-/* Data lists are polymorphic data sets. The types are
-   validated when mapping the frontend language to the Ir tree */
+(* Data lists are polymorphic data sets. The types are
+   validated when mapping the frontend language to the Ir tree *)
 
 data_list:
-  | data=separated_list(COMMA, data)                   { data }
+  | data=separated_list_opt(COMMA, data)                   { data }
 ;
 
 data:
   | i=INT                                              { let n, pos = i in F.Number (n, pos) }
-  | id=ID                                              { F.Id id }
+  | id=id                                              { F.Id id }
   | ip=IPv6                                            { let i, p, pos = ip in F.Ip ((Ipset.ip_of_string i, p), pos) }
 
 separated_list_opt(SEP, T):
   | { [] }
   | t = T { [t] }
   | t = T SEP ts = separated_list_opt(SEP, T) { t :: ts }
+
+id:
+  | s = QUOTE { s }
+  | i = IDENT { i }
+  | error     { parse_error $startpos "Identifier or quoted string expected" }
