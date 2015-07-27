@@ -9,23 +9,25 @@ let next_id = ref 0
 
 (** Equality between chain names *)
 let cmp_chain_id = function
-    Temporary(a), Temporary(b) -> a = b
+  | Temporary(a), Temporary(b) -> a = b
   | Builtin(a), Builtin(b)     -> a = b
   | Named(a), Named(b)         -> a = b
   | _, _                       -> false
 
 (** Retrieve the string name of a chain *)
 let get_chain_name = function
-    Temporary(id) -> Printf.sprintf "temp_%04d" id
+  | Temporary(id) -> Printf.sprintf "temp_%04d" id
   | Named(name) -> Printf.sprintf "%s" name
-  | Builtin(tpe) -> match tpe with
-        INPUT   -> "INPUT"
+  | Builtin(tpe) ->
+    begin match tpe with
+      |   INPUT   -> "INPUT"
       | OUTPUT  -> "OUTPUT"
       | FORWARD -> "FORWARD"
+    end
 
 (** Test if a chain isa builtin one *)
 let is_builtin = function
-    Builtin(_) -> true
+  | Builtin(_) -> true
   | _ -> false
 
 let compare a b =
@@ -53,7 +55,7 @@ let delete id =
 (** Create a new unnamed chain *)
 let create rules comment =
   let id = !next_id in
-  incr next_id; 
+  incr next_id;
   let chain = { id = Temporary(id); rules = rules; comment = comment } in
   set chain; chain
 

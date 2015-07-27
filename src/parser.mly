@@ -51,7 +51,6 @@ statement:
 
 rule_seq:
   | LBRACE rules=separated_list_opt(SEMI, rule_stm) RBRACE { rules }
-  | error                                                  { parse_error $startpos "Missing semi colon for rules." }
 
 (* Scan elements within a zone. *)
 
@@ -80,7 +79,6 @@ rule_stm:
   | PROTOCOL o=oper d=data_list                        { F.Protocol (d, o) }
   | ICMPTYPE o=oper d=data_list                        { F.IcmpType (d, o) }
   | TCPFLAGS o=oper f=data_list SLASH d=data_list      { F.TcpFlags ((f, d), o) }
-  | error                                              { parse_error $startpos "Expected rule stm" }
 
 (* A policy can be a single policy, or a list of policies
    enclosed in curly braces seperated by semicolon. *)
@@ -88,7 +86,6 @@ rule_stm:
 policy_seq:
   | p=policy                                           { [ p ] }
   | LBRACE p=separated_list_opt(SEMI, policy) RBRACE   { p }
-  | error                                              { parse_error $startpos "Expected policy" }
 
 string:
   | s=QUOTE                                            { s }
