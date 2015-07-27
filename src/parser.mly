@@ -117,10 +117,10 @@ oper:
   | error                                              { parse_error $startpos "Expected = or '!='" }
 
 state:
-  | NEW                                                { Ir.NEW }
-  | ESTABLISHED                                        { Ir.ESTABLISHED }
-  | RELATED                                            { Ir.RELATED }
-  | INVALID                                            { Ir.INVALID }
+  | NEW                                                { State.NEW }
+  | ESTABLISHED                                        { State.ESTABLISHED }
+  | RELATED                                            { State.RELATED }
+  | INVALID                                            { State.INVALID }
 
 (* Data lists are polymorphic data sets. The types are
    validated when mapping the frontend language to the Ir tree *)

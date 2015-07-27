@@ -63,7 +63,7 @@ let merge_opers rle =
     | (true, false) ->  (diff s' s, false)
   in
 
-  let merge_states = merge_sets State_set.inter State_set.union State_set.diff in
+  let merge_states = merge_sets State.inter State.union State.diff in
   let merge_ipsets = merge_sets Ipset.inter Ipset.union Ipset.diff in
   let merge_list = merge_sets (intersection (=)) (union (=)) (difference (=)) in
   let merge_iface = merge_sets (intersection (=)) (union (=)) (difference (=)) in
@@ -104,7 +104,7 @@ let is_subset a b =
 (** Reduce rules. Walk the tree (forward and backwards) and eliminate
     unreachable rules. *)
 let reduce chains =
-  let false_rule = ([State State_set.empty, false], Notrack) in
+  let false_rule = ([State State.empty, false], Notrack) in
   let is_terminal = function
     | Jump _ | MarkZone _ | Notrack | Log _ -> false
     | Accept | Drop | Reject _ | Return -> true

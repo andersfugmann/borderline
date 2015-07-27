@@ -30,11 +30,10 @@ let choose_dir a b = function
   | Ir.DESTINATION -> b
 
 let get_state_name = function
-  | Ir.NEW -> "new"
-  | Ir.ESTABLISHED -> "established"
-  | Ir.RELATED -> "related"
-  | Ir.INVALID -> "invalid"
-
+  | State.NEW -> "new"
+  | State.ESTABLISHED -> "established"
+  | State.RELATED -> "related"
+  | State.INVALID -> "invalid"
 
 let gen_zone_mask dir zone =
   let zone_id = get_zone_id (id2str zone) in
@@ -73,7 +72,7 @@ let gen_condition = function
   | Ir.Interface(direction, iface_list) -> "",
     (choose_dir "--in-interface " "--out-interface " direction) ^ (id2str (elem iface_list))
   | Ir.State(states) -> "-m conntrack ",
-    ("--ctstate " ^ ( String.concat "," (Ir.State_set.fold (fun s acc -> get_state_name s :: acc) states [])))
+    ("--ctstate " ^ ( String.concat "," (State.fold (fun s acc -> get_state_name s :: acc) states [])))
   | Ir.Zone(dir, id_lst) -> "-m mark ",
     "--mark " ^ (gen_zone_mask_str dir (elem id_lst))
   | Ir.Ports(direction, port :: []) -> "",
@@ -89,8 +88,8 @@ let gen_condition = function
     sprintf "--tcp-flags " ^ (tcp_flags mask) ^ " " ^ (tcp_flags flags)
 
 let rec gen_conditions acc = function
-  | (Ir.State states, true) :: xs when Ir.State_set.is_empty states -> gen_conditions acc xs
-  | (Ir.State states, false) :: _ when Ir.State_set.is_empty states -> failwith "Unsatifiable rule in code-gen"
+  | (Ir.State states, true) :: xs when State.is_empty states -> gen_conditions acc xs
+  | (Ir.State states, false) :: _ when State.is_empty states -> failwith "Unsatifiable rule in code-gen"
   | (Ir.Ports (_, []), true) :: xs
   | (Ir.Zone (_, []), true) :: xs
   | (Ir.Protocol [], true) :: xs
@@ -257,8 +256,8 @@ let transform chains =
   let fix_state_match (conds, target) =
     (* Transform the list of state so the 'new' state is avoided *)
     let tranform = function
-      | (Ir.State states, neg) when Ir.State_set.mem Ir.NEW states ->
-          (Ir.State (Ir.State_set.diff Ir.all_states states), not neg)
+      | (Ir.State states, neg) when State.mem State.NEW states ->
+          (Ir.State (State.diff State.all states), not neg)
       | x -> x
     in
       ([], (List.map tranform conds, target))

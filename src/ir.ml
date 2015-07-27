@@ -1,17 +1,7 @@
 (** Intermidiate representation. *)
+open Batteries
 
 open Common
-
-type statetype = NEW | ESTABLISHED | RELATED | INVALID
-
-let compare_state s1 s2 =
-  let int_of_state = function
-    | NEW -> 1
-    | ESTABLISHED -> 2
-    | RELATED -> 3
-    | INVALID -> 4
-  in
-  compare (int_of_state s1) (int_of_state s2)
 
 type zone = id
 type mask = int
@@ -31,15 +21,10 @@ type pol       = bool
 
 type icmp_packet_type = int
 
-module State_set = Set.Make (struct
-                               type t = statetype
-                               let compare = compare_state
-                             end)
-
 
 type condition = Interface of direction * id list
                | Zone of direction * zone list
-               | State of State_set.t
+               | State of State.t
                | Ports of direction * int list
                | IpSet of direction * Ipset.t
                | Protocol of int list
@@ -111,7 +96,7 @@ let compare (cond1, neg1) (cond2, neg2) =
 
 (** Test if expr always evaluates to value *)
 let is_always value = function
-  | State states, neg when State_set.is_empty states -> neg = value
+  | State states, neg when State.is_empty states -> neg = value
   | Zone (_, []), neg
   | Ports (_, []), neg
   | Protocol [], neg
@@ -128,6 +113,3 @@ let is_always value = function
   | IcmpType _, _
   | TcpFlags _, _
   | Mark _, _ -> false
-
-let all_states =
-  List.fold_left (fun acc s -> State_set.add s acc) State_set.empty [ NEW; ESTABLISHED; RELATED; INVALID ]

@@ -63,6 +63,7 @@ build: _build/borderline.run _build/unit_test.run _build/bl_configure.run _build
 	common
 	ipset
 	optimize
+	state
 	zone
 
   section:
