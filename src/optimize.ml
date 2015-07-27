@@ -5,7 +5,7 @@ open Chain
 
 (** Define the saving in conditions when inlining. *)
 let min_inline_saving = -2
-let max_inline_size = 1
+let max_inline_size = 0
 
 let rec chain_reference_count id chains =
   let count_references rules =
@@ -312,7 +312,7 @@ let should_inline cs c =
   let old_conds = (List.fold_left (+) 0 rule_conds) + chain_conds + List.length rule_conds + List.length c.rules in
   (* Inlined count of conditions + targets *)
   let new_conds = List.fold_left (fun acc n -> acc + n * List.length c.rules + chain_conds) 0 rule_conds + (List.length rule_conds * List.length c.rules) in
-  old_conds - new_conds > min_inline_saving || chain_conds <= max_inline_size
+  old_conds - new_conds > min_inline_saving
 
 let conds chains =
   Chain_map.fold (fun _ chn acc -> List.fold_left (fun acc (cl, _) -> List.length cl + acc) (acc + 1) chn.rules) chains 0
