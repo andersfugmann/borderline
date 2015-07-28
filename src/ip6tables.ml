@@ -36,7 +36,7 @@ let get_state_name = function
   | State.INVALID -> "invalid"
 
 let gen_zone_mask dir zone =
-  let zone_id = get_zone_id (id2str zone) in
+  let zone_id = get_zone_id zone in
   match dir with
   | Ir.SOURCE -> zone_id, 0x00ff
   | Ir.DESTINATION -> zone_id * 0x100, 0xff00
@@ -70,7 +70,7 @@ let gen_condition = function
           (Ipset.string_of_ip low) (Ipset.string_of_ip high)
     end
   | Ir.Interface(direction, iface_list) -> "",
-    (choose_dir "--in-interface " "--out-interface " direction) ^ (id2str (elem iface_list))
+    (choose_dir "--in-interface " "--out-interface " direction) ^ (elem iface_list)
   | Ir.State(states) -> "-m conntrack ",
     ("--ctstate " ^ ( String.concat "," (State.fold (fun s acc -> get_state_name s :: acc) states [])))
   | Ir.Zone(dir, id_lst) -> "-m mark ",

@@ -3,6 +3,7 @@ open Batteries
 
 open Common
 
+type id = string (* New addition *)
 type zone = id
 type mask = int
 type icmp_type = int (* This seems to be missing a sub-type *)

@@ -1,43 +1,30 @@
 (** General functions *)
-open !Batteries
+open Batteries
 open Printf
 
-type id = string * Lexing.position
+type id = string
 
-exception ParseError of (string * id) list
+exception ParseError of (string * id option * Lexing.position option)
+let parse_error ?pos ?id str = raise (ParseError (str, id, pos))
 
 (* Place these in a const.ml *)
 let tcp = 6
 let udp = 17
 let icmp = 58
 
-let error2string errors =
-  let err2str (err, (id, pos)) = sprintf "File \"%s\", line %d: Error. %s '%s'" pos.Lexing.pos_fname pos.Lexing.pos_lnum err id
+let error2string (error, id, pos) =
+  let prefix = Option.map_default
+      (fun pos -> sprintf "File \"%s\", line %d" pos.Lexing.pos_fname pos.Lexing.pos_lnum)
+      "Unknown location" pos
   in
-    String.concat "\n" (List.map err2str errors)
-
-module Id_set = Set.Make (struct
-  type t = id
-  let compare = fun (a, _) (b, _) -> String.compare a b
- end)
-
-module Id_map = Map.Make (struct
-  type t = id
-  let compare = fun (a, _) (b, _) -> String.compare a b
- end)
-
-let id2str (str, _) = str
+  let postfix = Option.map_default (sprintf "'%s'") "" id in
+  sprintf "%s: %s %s" prefix error postfix
 
 let ints_to_string ints =
  String.concat "," (List.map string_of_int ints)
 
-let eq_id (a, _) (b, _) = a = b
-
-let idset_from_list lst =
-  List.fold_left (fun acc id -> Id_set.add id acc) Id_set.empty lst
-
 let eq_id_list lst lst' =
-  Id_set.equal (idset_from_list lst) (idset_from_list lst')
+  Set.equal (Set.of_list lst) (Set.of_list lst')
 
 let member eq_oper x lst =
   List.exists (fun x' -> eq_oper x x') lst
@@ -82,27 +69,3 @@ let map_filter_exceptions func list =
       end
     | [] -> List.rev acc
   in map [] list
-
-
-(** Simple identity function *)
-let identity a = a
-
-let keys map =
- Id_map.fold (fun key _ acc -> key :: acc) map []
-
-
-(** Add some missing functions to standard libraries *)
-
-(** Set is missing a constructor taking a list *)
-module Set = struct
-  module type OrderedType =
-  sig
-    type t
-    val compare: t -> t -> int
-  end
-  module Make(Ord: OrderedType) =
-  struct
-    include Set.Make(Ord)
-    let from_list elts = List.fold_left (fun a e -> add e a) empty elts
-  end
-end
