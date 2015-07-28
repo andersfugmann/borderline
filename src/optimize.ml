@@ -1,3 +1,4 @@
+open Batteries
 open Common
 open Ir
 open Printf
@@ -11,7 +12,7 @@ let rec chain_reference_count id chains =
   let count_references rules =
     List.fold_left (fun acc -> function (_, Jump id') when id = id' -> acc + 1 | _ -> acc) 0 rules
   in
-  Chain_map.fold (fun _ chn acc -> acc + (count_references chn.rules)) chains 0
+  Map.fold (fun chn acc -> acc + (count_references chn.rules)) chains 0
 
 let rec get_referring_rules chain chains =
   let test (_conds, target) = target = Jump (chain.id) in
@@ -20,7 +21,7 @@ let rec get_referring_rules chain chains =
 
 (** Optimize rules in each chain. No chain insertion or removal is possible *)
 let map_chain_rules func chains =
-  Chain_map.map (fun chn -> { id = chn.id; rules = func chn.rules; comment = chn.comment }) chains
+  Map.map (fun chn -> { id = chn.id; rules = func chn.rules; comment = chn.comment }) chains
 
 let rec map_chain_rules_expand func chains : Ir.chain list =
   let rec map_rules = function
@@ -110,11 +111,11 @@ let reduce chains =
     | Accept | Drop | Reject _ | Return -> true
   in
   let chains = ref chains in
-  let get_chain chain_id = Chain_map.find chain_id !chains in
+  let get_chain chain_id = Map.find chain_id !chains in
   let rec reduce_chain func chain_id =
     let chn = get_chain chain_id in
     let rls = func chn.rules in
-    chains := Chain_map.add chn.id { id = chn.id; rules = rls; comment = chn.comment } !chains;
+    chains := Map.add chn.id { id = chn.id; rules = rls; comment = chn.comment } !chains;
 
   and reduce_jump conds rules chain_id =
     let rec filter_until pred = function
@@ -160,7 +161,7 @@ let reduce chains =
     List.rev (reduce_rules_rev (cond, target) (List.rev rules))
   in
 
-  let keys = Chain_map.fold (fun key _ acc -> key :: acc) !chains [] in
+  let keys = Map.foldi (fun key _ acc -> key :: acc) !chains [] in
   List.iter (reduce_chain (reduce_rules false_rule)) keys;
   List.iter (reduce_chain (reduce_rules_reverse false_rule)) keys;
   List.iter (reduce_chain reduce_forward_jump) keys;
@@ -180,20 +181,20 @@ let fold_return_statements chains =
     | [] -> (acc, [])
   in
 
-  let fold_func _ chn acc =
+  let fold_func chn acc =
     let rls, chns = fold_return [] chn.rules in
-    List.fold_left (fun acc chn -> Chain_map.add chn.id chn acc) acc ( { id = chn.id; rules = rls; comment = chn.comment } :: chns )
+    List.fold_left (fun acc chn -> Map.add chn.id chn acc) acc ( { id = chn.id; rules = rls; comment = chn.comment } :: chns )
   in
-  Chain_map.fold fold_func chains Chain_map.empty
+  Map.fold fold_func chains Map.empty
 
 let remove_unreferenced_chains chains =
   let get_referenced_chains chain =
-    List.fold_left (fun acc -> function (_, Jump id) -> (Chain_map.find id chains) :: acc | _ -> acc) [] chain.rules
+    List.fold_left (fun acc -> function (_, Jump id) -> (Map.find id chains) :: acc | _ -> acc) [] chain.rules
   in
   let rec descend acc chain =
-    List.fold_left (fun acc chn -> descend acc chn) (Chain_map.add chain.id chain acc) (get_referenced_chains chain)
+    List.fold_left (fun acc chn -> descend acc chn) (Map.add chain.id chain acc) (get_referenced_chains chain)
   in
-  Chain_map.fold (fun id chn acc -> match id with Builtin _ -> descend acc chn | _ -> acc) chains Chain_map.empty
+  Map.foldi (fun id chn acc -> match id with Builtin _ -> descend acc chn | _ -> acc) chains Map.empty
 
 (** Remove dublicate chains *)
 let remove_dublicate_chains chains =
@@ -201,8 +202,8 @@ let remove_dublicate_chains chains =
     map_chain_rules (List.map (function (c, Jump id') when List.mem id' ids -> (c, Jump id) | x -> x)) chns
   in
   let is_sibling a b = (Ir.eq_rules a.rules b.rules) && not (a.id = b.id) in
-  let identical_chains chain chains = Chain_map.fold (fun id chn acc -> if is_sibling chain chn then id :: acc else acc) chains [] in
-  let remap_list = Chain_map.fold (fun id chn acc -> (id, identical_chains chn chains) :: acc) chains [] in
+  let identical_chains chain chains = Map.foldi (fun id chn acc -> if is_sibling chain chn then id :: acc else acc) chains [] in
+  let remap_list = Map.foldi (fun id chn acc -> (id, identical_chains chn chains) :: acc) chains [] in
   List.fold_left (fun acc (id, ids) -> if List.length ids > 0 then printf "D"; replace_chain_ids (id, ids) acc) chains remap_list
 
 (** Move drops to the bottom. This allows improvement to dead code
@@ -298,7 +299,7 @@ let remove_true_rules rules =
   List.map (fun (conds, target) -> (List.filter (fun cond -> not (is_always true cond)) conds, target)) rules
 
 let rec count_rules chains =
-  Chain_map.fold (fun _ chn acc -> acc + List.length chn.rules) chains 0
+  Map.fold (fun chn acc -> acc + List.length chn.rules) chains 0
 
 (** Determine if a chain should be linined. The algorithm is based on
     number of conditions before and after the merge, with a slight
@@ -315,7 +316,7 @@ let should_inline cs c =
   old_conds - new_conds > min_inline_saving
 
 let conds chains =
-  Chain_map.fold (fun _ chn acc -> List.fold_left (fun acc (cl, _) -> List.length cl + acc) (acc + 1) chn.rules) chains 0
+  Map.fold (fun chn acc -> List.fold_left (fun acc (cl, _) -> List.length cl + acc) (acc + 1) chn.rules) chains 0
 
 let optimize_pass chains =
   printf "Optim: (%d, %d) " (count_rules chains) (conds chains); flush stdout;

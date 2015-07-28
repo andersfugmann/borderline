@@ -1,3 +1,4 @@
+open Batteries
 (** Emit iptables commands. Currently we have no interface to the
     iptables library, so we use a shell script as an intermediate step.
 *)
@@ -244,7 +245,7 @@ let transform chains =
     | chain :: xs ->
       let chains, rules = List.split (List.map func chain.Ir.rules) in
       let chain' = { Ir.id = chain.Ir.id; rules = rules; comment = chain.Ir.comment } in
-      map_chains (Chain.Chain_map.add chain'.Ir.id chain' acc) func ((List.flatten chains) @ xs)
+      map_chains (Map.add chain'.Ir.id chain' acc) func ((List.flatten chains) @ xs)
     | [] -> acc
   in
   (* Some packets are 'stateless', and thus not regarded as 'new' by
@@ -262,7 +263,7 @@ let transform chains =
     in
       ([], (List.map tranform conds, target))
   in
-  let map chains func = Chain.Chain_map.fold (fun _ chn acc -> map_chains acc func [chn]) chains Chain.Chain_map.empty in
+  let map chains func = Map.fold (fun chn acc -> map_chains acc func [chn]) chains Map.empty in
 
   let transformations = [ expand; zone_to_mask;
                           denormalize;
@@ -288,7 +289,7 @@ let filter chains =
       List.fold_left (fun acc cond -> acc && not (Ir.is_always false cond)) true conds
   in
   let filter func chain = { Ir.id = chain.Ir.id; rules = List.filter func chain.Ir.rules; comment = chain.Ir.comment } in
-    Chain.Chain_map.map (filter is_tautologically_false) chains
+    Map.map (filter is_tautologically_false) chains
 
 let create_chain acc chain =
   match chain.Ir.id with
@@ -300,6 +301,6 @@ let emit_chains chains =
   let funcs = [ transform; filter ] in
   let chains' = List.fold_left (fun acc func -> func acc) chains funcs in
     (* Create all chains, with no rules *)
-    Chain.Chain_map.fold (fun _id chn acc -> create_chain acc chn) chains' []
+    Map.fold (fun chn acc -> create_chain acc chn) chains' []
     (* Order the rules to make sure that buildin chains are emitted last. *)
-    @ List.flatten (List.rev (Chain.Chain_map.fold (fun _ chn acc -> emit_rules chn :: acc) chains' []))
+    @ List.flatten (List.rev (Map.fold (fun chn acc -> emit_rules chn :: acc) chains' []))

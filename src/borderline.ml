@@ -1,10 +1,8 @@
-(** Main file. *)
 open Batteries
+(** Main file. *)
 
 open Common
-open Parse
 open Printf
-open Chain
 
 module F = Frontend
 
@@ -15,7 +13,7 @@ let _ =
     let files = List.tl (Array.to_list Sys.argv) in
       prerr_endline (Printf.sprintf "Parsing file(s): %s" (String.concat ", " files));
 
-      let (zones, procs) = process_files files in
+      let (zones, procs) = Parse.process_files files in
       let zones = List.map (fun ((id, _pos), stms) -> id, stms) zones in
 
       let input_opers, output_opers, forward_opers = Zone.emit F.FILTER zones in
@@ -23,9 +21,9 @@ let _ =
       let filter_chains = List.map Rule.process procs in
       let filter_ops = List.map ( fun chn -> ([], Ir.Jump(chn.Ir.id)) ) filter_chains in
 
-      Chain.set { Ir.id = Ir.Builtin Ir.INPUT ; rules = input_opers @ filter_ops; comment = "Builtin" };
-      Chain.set { Ir.id = Ir.Builtin Ir.OUTPUT ; rules = output_opers @ filter_ops; comment = "Builtin" };
-      Chain.set { Ir.id = Ir.Builtin Ir.FORWARD ; rules = forward_opers @ filter_ops; comment = "Builtin" };
+      Chain.add { Ir.id = Ir.Builtin Ir.INPUT ; rules = input_opers @ filter_ops; comment = "Builtin" };
+      Chain.add { Ir.id = Ir.Builtin Ir.OUTPUT ; rules = output_opers @ filter_ops; comment = "Builtin" };
+      Chain.add { Ir.id = Ir.Builtin Ir.FORWARD ; rules = forward_opers @ filter_ops; comment = "Builtin" };
       Chain.optimize Optimize.optimize;
 
       let lines = Chain.emit Ip6tables.emit_chains in
