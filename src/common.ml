@@ -20,28 +20,6 @@ let error2string (error, id, pos) =
   let postfix = Option.map_default (sprintf "'%s'") "" id in
   sprintf "%s: %s %s" prefix error postfix
 
-let ints_to_string ints =
- String.concat "," (List.map string_of_int ints)
-
-let eq_id_list lst lst' =
-  Set.equal (Set.of_list lst) (Set.of_list lst')
-
-let member eq_oper x lst =
-  List.exists (fun x' -> eq_oper x x') lst
-
-let difference eq_oper a b =
-  List.filter (fun x -> not (member eq_oper x b) ) a
-
-let intersection eq_oper a b =
-  List.filter ( fun x -> member eq_oper x b ) a
-
-let union eq_oper a b =
-  a @ (difference eq_oper b a)
-
-(** Determine if a is a true subset of b *)
-let is_subset eq_oper a b =
-  List.for_all (fun x -> member eq_oper x b ) a
-
 (** Group items into lists of identical elemenets *)
 let rec group eq_oper acc = function
   | x :: xs ->

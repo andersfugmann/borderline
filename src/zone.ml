@@ -40,7 +40,7 @@ let create_zone_chain direction (id, nodes) =
     ([(Ir.IpSet(direction, Ipset.from_ips ips), false)], Ir.Jump chain.Ir.id)
   in
   let create_interface_rule chain interface =
-    ([(Ir.Interface(direction, [interface]), false)], Ir.Jump chain.Ir.id)
+    ([(Ir.Interface(direction, Set.singleton interface), false)], Ir.Jump chain.Ir.id)
   in
   let chain = Chain.create [([], Ir.MarkZone(direction, id))] ("Mark zone " ^ id) in
   let network_nodes = filter_network nodes in

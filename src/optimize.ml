@@ -56,7 +56,7 @@ let merge_opers rle =
      !A => B => X    => (B / A) => X
 
   *)
-  let merge_sets inter union diff (s, neg) (s', neg') =
+  let merge inter union diff (s, neg) (s', neg') =
     match neg, neg' with
     | (false, false) -> (inter s s', false)
     | (true, true) ->   (union s s', true)
@@ -64,28 +64,29 @@ let merge_opers rle =
     | (true, false) ->  (diff s' s, false)
   in
 
-  let merge_states = merge_sets State.inter State.union State.diff in
-  let merge_ipsets = merge_sets Ipset.inter Ipset.union Ipset.diff in
-  let merge_list = merge_sets (intersection (=)) (union (=)) (difference (=)) in
-  let merge_iface = merge_sets (intersection (=)) (union (=)) (difference (=)) in
-  let merge_zones = merge_sets (intersection (=)) (union (=)) (difference (=)) in
+  let merge_states = merge State.inter State.union State.diff in
+  let merge_ipsets = merge Ipset.inter Ipset.union Ipset.diff in
+  (* I cant event begin to describe how much this sucks *)
+  let merge_sets = merge Set.intersect Set.union Set.diff in
+  let merge_sets' = merge Set.intersect Set.union Set.diff in
+  let merge_sets'' = merge Set.intersect Set.union Set.diff in
 
   let rec merge_oper a b =
     match a, b with
-      |  (Interface (dir, il), neg), (Interface (dir', il'), neg') when dir = dir' ->
-        let (il'', neg'') = merge_iface (il, neg) (il', neg') in (Interface (dir, il''), neg'')
+      |  (Interface (dir, is), neg), (Interface (dir', is'), neg') when dir = dir' ->
+        let (is'', neg'') = merge_sets (is, neg) (is', neg') in (Interface (dir, is''), neg'')
       | (State s, neg), (State s', neg') ->
         let (s'', neg'') = merge_states (s, neg) (s', neg') in (State s'', neg'')
       | (Ports (dir, ports), neg), (Ports (dir', ports'), neg') when dir = dir' ->
-        let (ports'', neg'') = merge_list (ports, neg) (ports', neg') in (Ports (dir, ports''), neg'')
-      | (Protocol proto, neg), (Protocol proto', neg') ->
-        let (proto'', neg'') = merge_list (proto, neg) (proto', neg') in (Protocol (proto''), neg'')
+        let (ports'', neg'') = merge_sets' (ports, neg) (ports', neg') in (Ports (dir, ports''), neg'')
+      | (Protocol protos, neg), (Protocol protos', neg') ->
+        let (protos'', neg'') = merge_sets' (protos, neg) (protos', neg') in (Protocol (protos''), neg'')
       | (IcmpType types, neg), (IcmpType types', neg') ->
-        let (types'', neg'') = merge_list (types, neg) (types', neg') in (IcmpType types'', neg'')
+        let (types'', neg'') = merge_sets'' (types, neg) (types', neg') in (IcmpType types'', neg'')
       | (IpSet (dir, set), neg), (IpSet (dir', set'), neg') when dir = dir' ->
         let (set'', neg'') = merge_ipsets (set, neg) (set', neg') in (IpSet (dir, set''), neg'')
       | (Zone (dir, zones), neg), (Zone (dir', zones'), neg') when dir = dir' ->
-        let (zones'', neg'') = merge_zones (zones, neg) (zones', neg') in (Zone (dir, zones''), neg'')
+        let (zones'', neg'') = merge_sets (zones, neg) (zones', neg') in (Zone (dir, zones''), neg'')
       | (cond, _), (cond', _) -> failwith ("is_sibling failed: " ^ string_of_int (enumerate_cond cond) ^ ", " ^ string_of_int (enumerate_cond cond'))
   in
   let rec merge_siblings acc = function
