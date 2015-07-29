@@ -27,7 +27,6 @@ end
 
 module Make(Ip: Ip_type) =
 struct
-  (* Everything works - But its O(N^2). We should represent this as a tree *)
 
   (* Top is a range *)
   (* Left are less, Right are more *)
