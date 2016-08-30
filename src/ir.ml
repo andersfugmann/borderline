@@ -3,6 +3,7 @@ open Batteries
 
 open Common
 
+type id = string (* New addition *)
 type zone = id
 type mask = int
 type icmp_type = int (* This seems to be missing a sub-type *)
@@ -22,15 +23,15 @@ type pol       = bool
 type icmp_packet_type = int
 
 
-type condition = Interface of direction * id list
-               | Zone of direction * zone list
+type condition = Interface of direction * id Set.t
+               | Zone of direction * zone Set.t
                | State of State.t
-               | Ports of direction * int list
+               | Ports of direction * int Set.t
                | IpSet of direction * Ipset.t
-               | Protocol of int list
-               | IcmpType of icmp_type list
+               | Protocol of int Set.t
+               | IcmpType of icmp_type Set.t
                | Mark of int * int
-               | TcpFlags of int list * int list
+               | TcpFlags of int list * int list (* TODO: Should be sets also *)
 
 type action = Jump of chain_id
             | MarkZone of direction * zone
@@ -50,9 +51,10 @@ let eq_cond (x, n) (y, m) =
   n = m && (
     match x, y with
       | IpSet (_d, r), IpSet (_d', r') -> Ipset.equal r r'
-      | Zone(dir, id_lst), Zone (dir', id_lst') -> dir = dir' && eq_id_list id_lst id_lst'
-      | Interface(dir, id_lst), Interface(dir', id_lst') -> dir = dir' && eq_id_list id_lst id_lst'
+      | Zone(dir, ids), Zone (dir', ids') -> dir = dir' && Set.equal ids ids'
+      | Interface(dir, ids), Interface(dir', ids') -> dir = dir' && Set.equal ids ids'
       | x, y -> x = y
+      (* TODO: Add all rule types, and add as a function *)
   )
 
 let eq_conds a b = List.length a == List.length b && List.for_all2 (fun c1 c2 -> eq_cond c1 c2) a b
@@ -97,10 +99,10 @@ let compare (cond1, neg1) (cond2, neg2) =
 (** Test if expr always evaluates to value *)
 let is_always value = function
   | State states, neg when State.is_empty states -> neg = value
-  | Zone (_, []), neg
-  | Ports (_, []), neg
-  | Protocol [], neg
-  | IcmpType [], neg -> neg = value
+  | Zone (_, s), neg when Set.is_empty s -> neg = value
+  | Ports (_, s), neg when Set.is_empty s -> neg = value
+  | Protocol s, neg when Set.is_empty s -> neg = value
+  | IcmpType s, neg when Set.is_empty s -> neg = value
   | TcpFlags ([], _x :: _xs), neg -> neg = value
   | TcpFlags (_, []), neg -> neg != value
 

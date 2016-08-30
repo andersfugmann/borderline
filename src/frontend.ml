@@ -3,6 +3,7 @@ open !Batteries
 open Common
 
 type prefix = string
+type id = string * Lexing.position
 
 type processtype = MANGLE | FILTER | NAT
 type policytype = ALLOW | DENY | REJECT | LOG of prefix | Ref of id

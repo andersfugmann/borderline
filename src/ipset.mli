@@ -1,13 +1,13 @@
 (** Generic ip functions *)
 
 (** Type of the set *)
-type t 
+type t
 
 (** The empty set *)
 val empty : t
 
 (** Ip number. Anonymous type *)
-type number 
+type number
 
 (** Ip mask *)
 type mask = int
@@ -18,7 +18,7 @@ type ip = number * mask
 (** Element type *)
 type elt = number * number
 
-(* Get these from a functor 
+(* Get these from a functor
 val bits : int
 val field_size : int
 val sep : string
@@ -39,31 +39,31 @@ val add : elt -> t -> t
 val remove : elt -> t -> t
 
 (** A U B *)
-val union : t -> t -> t 
+val union : t -> t -> t
 
 (** A but not B *)
-val diff : t -> t -> t 
+val diff : t -> t -> t
 
 (** Intersection between A and B *)
-val inter : t -> t -> t 
+val inter : t -> t -> t
 
-(** Test if a is a subset of b *) 
+(** Test if a is a subset of b *)
 val subset : t -> t -> bool
 
 (** Test for t equality *)
 val equal : t -> t -> bool
 
 (** Convet an ip addres and mask to a t element *)
-val to_elt : ip -> elt 
+val to_elt : ip -> elt
 
 (** Convert a t to a list of ips *)
 val to_ips : t -> ip list
 
 (** Convert a list of ips to a t *)
-val from_ips : ip list -> t 
+val from_ips : ip list -> t
 
 (** Get the list of elements in the t *)
-val elements : t -> elt list 
+val elements : t -> elt list
 
 (** Number of elements in a ip t *)
 val cardinal : t -> int
@@ -72,4 +72,4 @@ val cardinal : t -> int
 val is_network_range : elt -> bool
 
 (** Unit tests *)
-val test : OUnit.test
+val test : OUnit2.test

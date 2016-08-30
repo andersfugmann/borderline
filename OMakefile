@@ -41,8 +41,8 @@ tests: _build/borderline.run
 
 test: build
     make -C configuration
-    _build/bl_configure.run --output configuration/zones --force
-    _build/borderline.run configuration/borderline.bl
+    _build/bl_configure.opt --output configuration/zones --force
+    _build/borderline.opt configuration/borderline.bl
 
 build: _build/borderline.run _build/unit_test.run _build/bl_configure.run _build/borderline.opt _build/unit_test.opt _build/bl_configure.opt
 
