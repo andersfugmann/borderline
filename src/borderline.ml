@@ -26,7 +26,7 @@ let _ =
       Chain.add { Ir.id = Ir.Builtin Ir.FORWARD ; rules = forward_opers @ filter_ops; comment = "Builtin" };
       Chain.optimize Optimize.optimize;
 
-      let lines = Chain.emit Ip6tables.emit_chains in
+      let lines = Chain.emit Nf6tables.emit_chains in
       Printf.printf "%s\nLines: %d\n" (String.concat "\n" lines) (List.length lines)
 
   with ParseError err as excpt -> flush stdout; prerr_endline (error2string err); raise excpt

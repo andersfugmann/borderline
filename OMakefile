@@ -2,13 +2,12 @@
 NATIVE_ENABLED = true
 BYTE_ENABLED = true
 
-OCAMLFLAGS = -thread -g -w @A-4-29-33-39-41-44-45-48 -bin-annot
+OCAMLFLAGS = -g -w @A-4-29-33-39-41-44-45-48 -bin-annot
 USE_OCAMLFIND = true
 CP = cp -f
 MENHIR_ENABLED = true
 MENHIR_FLAGS = --explain --infer
-OCAMLPACKS[] =
-    unix str num oUnit batteries
+OCAMLPACKS[] = unix str num oUnit core
 
 mkdir -p _build
 vmount(-l, src, _build)
@@ -21,6 +20,10 @@ clean:
 
 dist-clean:
     git reset -f -d -x
+
+dep:
+    opam install core menhir
+
 
 install: _build/borderline.opt _build/bl_configure.opt
     mkdir -p $(DESTDIR)/etc/default/
@@ -55,6 +58,7 @@ build: _build/borderline.run _build/unit_test.run _build/bl_configure.run _build
 	parse
 	rule
 	ip6tables
+	nf6tables
 	chain
 	ipset
 	lexer
