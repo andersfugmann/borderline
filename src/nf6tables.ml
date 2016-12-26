@@ -10,6 +10,9 @@
 open Batteries
 open Printf
 
+let zone_bits = 16
+let zone_mask = 1 lsl zone_bits - 1
+
 let str_of_set s =
   Set.to_list s
   |> List.map string_of_int
@@ -25,12 +28,11 @@ let string_of_flag = function
   | 6 -> "psh"
   | flag -> failwith "Unknown tcp flag: " ^ (string_of_int flag)
 
-let get_zone_id =
-  let zones = Hashtbl.create 100 in
-  fun zone ->
-    match Hashtbl.find_option zones zone with
-    | Some id -> id
-    | None ->
+let zones = Hashtbl.create 100
+let get_zone_id zone =
+  match Hashtbl.find_option zones zone with
+  | Some id -> id
+  | None ->
       let id = Hashtbl.length zones + 1 in
       Hashtbl.add zones zone id;
       id
@@ -57,32 +59,33 @@ let chain_premable chain =
 (* TODO: Handle negation *)
 let gen_cond neg =
   let neg_str = match neg with
-    | true -> " != "
+    | true -> "!= "
     | false -> ""
   in
   function
   | Ir.Interface (dir, zones) ->
-    let zones = sprintf "{ %s } " (Set.to_list zones |> String.concat ", ") in
+    let zones = sprintf "{ %s }" (Set.to_list zones |> String.concat ", ") in
     let classifier = match dir with
       | Ir.SOURCE -> "iif"
       | Ir.DESTINATION -> "oif"
     in
-    sprintf "meta %s %s %s" classifier neg_str zones
+    sprintf "meta %s %s%s" classifier neg_str zones
 
   | Ir.Zone (dir, zones) ->
+    let shift = match dir with
+      | Ir.SOURCE -> 0
+      | Ir.DESTINATION -> zone_bits
+    in
     let zone_ids =
       Set.to_list zones
       |> List.map get_zone_id
-      |> List.map (fun i -> i * 0x100)
-      |> List.map (sprintf "0x%04x")
+      |> List.map (fun i -> i lsl shift)
+      |> List.map (sprintf "0x%08x")
       |> String.concat ", "
       |> sprintf "{ %s }"
     in
-    let mask = match dir with
-      | Ir.SOURCE -> 0x00ff (* Ahh. Ok. We get a mask as well *)
-      | Ir.DESTINATION -> 0xff00
-    in
-    sprintf "ct mark and 0x%04x %s %s" mask neg_str zone_ids
+    let mask = zone_mask lsl shift in
+    sprintf "meta mark & 0x%08x %s%s" mask neg_str zone_ids
   | Ir.State states ->
     let string_of_state state = match state with
       | State.NEW -> "new"
@@ -95,14 +98,14 @@ let gen_cond neg =
       |> List.map string_of_state
       |> String.concat ", "
     in
-    sprintf "ct state %s { %s }" neg_str states
+    sprintf "ct state %s{ %s }" neg_str states
 
   | Ir.Ports (dir, ports) ->
     let cond = match dir with
       | Ir.SOURCE -> "sport"
       | Ir.DESTINATION -> "dport"
     in
-    sprintf "tcp %s %s %s" neg_str cond (str_of_set ports)
+    sprintf "tcp %s%s %s" neg_str cond (str_of_set ports)
 
   | Ir.IpSet (dir, ips) ->
     let classifier = match dir with
@@ -114,35 +117,46 @@ let gen_cond neg =
       |> List.map (fun (ip, mask) -> sprintf "%s/%d" (Ipset.string_of_ip ip) mask)
       |> String.concat ", "
     in
-    sprintf "ip6 %s %s { %s }" classifier neg_str ips
+    sprintf "ip6 %s %s{ %s }" classifier neg_str ips
   | Ir.Protocol protocols ->
-    (* TODO: Protocols should be an ADT:
-       icmp, esp, ah, comp, udp, udplite, tcp, dccp, sctp
-     * - Maybe also a match to ip4 / ip6 *)
-    sprintf "tcp protocol %s %s" neg_str (str_of_set protocols)
+    sprintf "meta protocol %s%s" neg_str (str_of_set protocols)
 
   | Ir.IcmpType types ->
-    sprintf "icmpv6 type %s %s" neg_str (str_of_set types)
+    sprintf "icmpv6 type %s%s" neg_str (str_of_set types)
   | Ir.Mark (value, mask) ->
-    sprintf "meta mark and 0x%04x %s 0x%04x" mask neg_str value
-  | Ir.TcpFlags (flags, mask) ->
-    (* TODO: Use adt: fin, syn, rst, psh, ack, urg, ecn, cwr *)
-    let unset = List.filter (fun v -> not (List.mem v flags)) mask in
-    let to_string s =
-      List.map string_of_flag s
-      |> String.concat ","
-      |> sprintf "{ %s }"
-    in
-    sprintf "tcp flags %s tcp flags != %s" (to_string flags) (to_string unset)
+    sprintf "meta mark and 0x%08x %s0x%08x" mask neg_str value
+  | Ir.TcpFlags (flags, mask) when neg = false ->
+      let not_set = List.filter (fun f -> not (List.mem f flags)) mask in
+      let set = flags in
+
+      let to_string neg f =
+        let neg_str = if neg then "!" else "" in
+        sprintf "tcp flags %s= %s" neg_str (string_of_flag f)
+      in
+      List.map (to_string false) set @
+      List.map (to_string true) not_set |>
+      String.concat " "
+  | Ir.TcpFlags (flags, _mask) (* when neg = true *) ->
+      let to_string f =
+        sprintf "tcp flags != %s" (string_of_flag f)
+      in
+      (* TODO: this is wrong. We need to add a temporary table to jump through. Maybe sideeffect? *)
+      (List.map to_string flags |> String.concat " ")
 
 let gen_target = function
-  | Ir.MarkZone (_dir, id) -> sprintf "meta mark set 0x%04x" (get_zone_id id)
+  | Ir.MarkZone (dir, id) ->
+      let shift = match dir with
+        | Ir.SOURCE -> 0
+        | Ir.DESTINATION -> zone_bits
+      in
+      let mask = zone_mask lsl (zone_bits - shift) in
+      sprintf "meta mark set mark & 0x%08x or 0x%08x" mask ((get_zone_id id) lsl shift)
   | Ir.Accept -> "accept"
   | Ir.Drop -> "drop"
   | Ir.Return -> "return"
   | Ir.Notrack -> ""
   | Ir.Jump chain -> sprintf "jump %s" (chain_name chain)
-  | Ir.Reject _rsp -> "reject"
+  | Ir.Reject rsp -> sprintf "reject with  icmpv6 type %d" rsp
   | Ir.Log prefix -> sprintf "log prefix %s group 2" prefix
 
 let gen_rule (conds, target) =
@@ -150,7 +164,7 @@ let gen_rule (conds, target) =
             |> String.concat " "
   in
   let target = gen_target target in
-  sprintf "%s %s" conds target
+  sprintf "%s %s;" conds target
 
 let emit_chain { Ir.id; rules; comment } =
   let rules =
@@ -161,8 +175,13 @@ let emit_chain { Ir.id; rules; comment } =
   [ "#" ^ comment ] @ premable @ rules @ [ "}" ]
 
 let emit_chains (chains : (Ir.chain_id, Ir.chain) Map.t) : string list =
-  Map.values chains
-  |> Enum.map emit_chain
-  |> Enum.map List.enum
-  |> Enum.flatten
-  |> List.of_enum
+  let rules =
+    Map.values chains
+    |> Enum.map emit_chain
+    |> Enum.map List.enum
+    |> Enum.flatten
+    |> List.of_enum
+  in
+  (* Dump zone mapping *)
+  Hashtbl.iter (fun zone id -> printf "#zone %s -> %d\n" zone id) zones;
+  [ "table ip6 filter {" ] @ rules @ [ "}" ]

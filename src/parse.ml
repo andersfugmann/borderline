@@ -15,7 +15,7 @@ let parse file =
   else
     begin
       imported := (File_set.add full_path !imported);
-      print_endline (Printf.sprintf "Parse: %s" full_path);
+      print_endline (Printf.sprintf "#Parse: %s" full_path);
       let lexbuf = Lexing.from_channel (open_in file) in
         lexbuf.Lexing.lex_curr_p <- { lexbuf.Lexing.lex_curr_p with Lexing.pos_fname = full_path; };
         Parser.main Lexer.token lexbuf

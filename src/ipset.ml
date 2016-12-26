@@ -12,13 +12,13 @@ module type Ip_type =
     val field_size : int
     val to_string : int list -> string
   end
-
+(*
 module Ipv4 : Ip_type = struct
   let bits = 32
   let field_size = 8
   let to_string fields = String.concat "." (List.map (sprintf "%d") fields)
 end
-
+*)
 module Ipv6 : Ip_type = struct
   let bits = 128
   let field_size = 16

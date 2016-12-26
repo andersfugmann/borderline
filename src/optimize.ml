@@ -320,7 +320,7 @@ let conds chains =
   Map.fold (fun chn acc -> List.fold_left (fun acc (cl, _) -> List.length cl + acc) (acc + 1) chn.rules) chains 0
 
 let optimize_pass chains =
-  printf "Optim: (%d, %d) " (count_rules chains) (conds chains); flush stdout;
+  printf "#Optim: (%d, %d) " (count_rules chains) (conds chains); flush stdout;
   let optimize_functions = [
     fold_return_statements;
     remove_dublicate_chains;
@@ -340,5 +340,5 @@ let optimize_pass chains =
 let rec optimize chains =
   let chains' = optimize_pass chains in
   match (conds chains) = (conds chains') with
-  | true -> printf "Optimization done\n"; chains'
+  | true -> printf "#Optimization done\n"; chains'
   | false -> optimize chains'

@@ -11,7 +11,7 @@ let _ =
 
   try
     let files = List.tl (Array.to_list Sys.argv) in
-      prerr_endline (Printf.sprintf "Parsing file(s): %s" (String.concat ", " files));
+      prerr_endline (Printf.sprintf "#Parsing file(s): %s" (String.concat ", " files));
 
       let (zones, procs) = Parse.process_files files in
       let zones = List.map (fun ((id, _pos), stms) -> id, stms) zones in
@@ -27,6 +27,6 @@ let _ =
       Chain.optimize Optimize.optimize;
 
       let lines = Chain.emit Nf6tables.emit_chains in
-      Printf.printf "%s\nLines: %d\n" (String.concat "\n" lines) (List.length lines)
+      Printf.printf "%s\n#Lines: %d\n" (String.concat "\n" lines) (List.length lines)
 
   with ParseError err as excpt -> flush stdout; prerr_endline (error2string err); raise excpt

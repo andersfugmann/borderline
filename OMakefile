@@ -7,7 +7,7 @@ USE_OCAMLFIND = true
 CP = cp -f
 MENHIR_ENABLED = true
 MENHIR_FLAGS = --explain --infer
-OCAMLPACKS[] = unix str num oUnit core
+OCAMLPACKS[] = unix str num oUnit batteries
 
 mkdir -p _build
 vmount(-l, src, _build)
@@ -45,7 +45,8 @@ tests: _build/borderline.run
 test: build
     make -C configuration
     _build/bl_configure.opt --output configuration/zones --force
-    _build/borderline.opt configuration/borderline.bl
+    echo "flush ruleset" > test.nft
+    _build/borderline.opt configuration/borderline.bl | tee -a test.nft
 
 build: _build/borderline.run _build/unit_test.run _build/bl_configure.run _build/borderline.opt _build/unit_test.opt _build/bl_configure.opt
 
@@ -71,7 +72,6 @@ build: _build/borderline.run _build/unit_test.run _build/bl_configure.run _build
 	zone
 
   section:
-
       PROGRAM = borderline
       .DEFAULT: $(OCamlProgram $(PROGRAM), $(PROGRAM) $(FILES))
 
