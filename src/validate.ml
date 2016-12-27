@@ -87,20 +87,23 @@ let expand nodes =
   let rec expand_int_list seen = function
     | F.Id id :: xs -> (expand_int_list (mark_seen (fst id) seen) (expand_list id)) @ (expand_int_list seen xs)
     | F.Number _ as n :: xs -> n :: expand_int_list seen xs
-    | F.Ip (_, pos) :: _ -> parse_error ~pos "Found ip address, expected integer"
+    | F.Ip6 (_, pos) :: _ -> parse_error ~pos "Found ipv6 address, expected integer"
+    | F.Ip4 (_, pos) :: _ -> parse_error ~pos "Found ipv4 address, expected integer"
     | [] -> []
   in
   let rec expand_address_list seen = function
     | F.Id id :: xs -> (expand_address_list (mark_seen (fst id) seen) (expand_list id)) @ (expand_address_list seen xs)
     | F.Number (_, pos) :: _ -> parse_error ~pos "Find integer, expected ip address"
-    | F.Ip _ as ip :: xs -> ip :: expand_address_list seen xs
+    | F.Ip6 _ as ip :: xs -> ip :: expand_address_list seen xs
+    | F.Ip4 _ as ip :: xs -> ip :: expand_address_list seen xs
     | [] -> []
   in
   let rec expand_zone_list seen = function
     | (F.Id (id, _)) as x :: xs when BatSet.mem id zones -> x :: expand_zone_list seen xs
     | F.Id id :: xs -> (expand_zone_list (mark_seen (fst id) seen) (expand_list id)) @ (expand_zone_list seen xs)
     | F.Number (_, pos) :: _ -> parse_error ~pos "Find integer, expected ip address"
-    | F.Ip (_, pos) :: _ -> parse_error ~pos "Found ip address, expected integer"
+    | F.Ip6 (_, pos) :: _ -> parse_error ~pos "Found ipv6 address, expected integer"
+    | F.Ip4 (_, pos) :: _ -> parse_error ~pos "Found ipv4 address, expected integer"
     | [] -> []
   in
   let rec expand_policy_list seen = function

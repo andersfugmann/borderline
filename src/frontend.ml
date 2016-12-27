@@ -2,12 +2,14 @@
 open !Batteries
 open Common
 module Ip6 = Ipset.Ip6
+module Ip4 = Ipset.Ip4
 
 type prefix = string
 type id = string * Lexing.position
 
 type processtype = MANGLE | FILTER | NAT
 type policytype = ALLOW | DENY | REJECT | LOG of prefix | Ref of id
+type ip = Ipv6 of Ip6.ip | Ipv4 of Ip4.ip
 
 and node = Import of id
          | Zone of id * zone_stm list
@@ -17,7 +19,7 @@ and node = Import of id
          | Process of processtype * rule_stm list * policytype list
 
 and zone_stm = Interface of id
-             | Network of Ip6.ip
+             | Network of ip
              | ZoneRules of processtype * rule_stm list * policytype list
 
 and filter_stm = Address of data list
@@ -36,7 +38,8 @@ and rule_stm = Filter of Ir.direction * filter_stm * Ir.pol
 
 and data = Number of int * Lexing.position
          | Id of id
-         | Ip of Ip6.ip * Lexing.position
+         | Ip6 of Ip6.ip * Lexing.position
+         | Ip4 of Ip4.ip * Lexing.position
 
 let node_type id = function
   | Zone _ -> 1 = id

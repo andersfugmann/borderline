@@ -1,6 +1,7 @@
 open Batteries
 open Common
 module Ip6 = Ipset.Ip6
+module Ip4 = Ipset.Ip4
 module F = Frontend
 
 
@@ -26,7 +27,7 @@ let rec filter_interface = function
   | [] -> []
 
 let rec filter_network = function
-  | F.Network (a, m) :: xs -> (a, m) :: filter_network xs
+  | F.Network ip :: xs -> ip :: filter_network xs
   | _ :: xs -> filter_network xs
   | [] -> []
 
@@ -37,8 +38,16 @@ let rec filter_zonerules table = function
 
 (** Return a chain that will mark the zone based on direction *)
 let create_zone_chain direction (id, nodes) =
-  let create_network_rule chain ips =
-    ([(Ir.Ip6Set(direction, Ip6.from_ips ips), false)], Ir.Jump chain.Ir.id)
+  let create_network_rules chain ips =
+    let (ip4, ip6) =
+      List.fold_left
+        (fun (ip4, ip6) -> function
+           | F.Ipv4 i -> ( i :: ip4, ip6)
+           | F.Ipv6 i -> (ip4, i :: ip6)) ([], []) ips
+    in
+    [ ([(Ir.Ip6Set(direction, Ip6.from_ips ip6), false)], Ir.Jump chain.Ir.id);
+      ([(Ir.Ip4Set(direction, Ip4.from_ips ip4), false)], Ir.Jump chain.Ir.id) ]
+
   in
   let create_interface_rule chain interface =
     ([(Ir.Interface(direction, Set.singleton interface), false)], Ir.Jump chain.Ir.id)
@@ -49,7 +58,7 @@ let create_zone_chain direction (id, nodes) =
 
   let chain =
     if List.length network_nodes > 0 then
-      Chain.create [ create_network_rule chain (filter_network nodes) ] ("Match networks for zone " ^ id)
+      Chain.create (create_network_rules chain (filter_network nodes)) ("Match networks for zone " ^ id)
     else
       chain
   in

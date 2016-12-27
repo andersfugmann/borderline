@@ -5,6 +5,7 @@
 
 *)
 
+open Batteries
 open Arg
 
 module Interface_map = Map.Make (struct
@@ -14,27 +15,21 @@ module Interface_map = Map.Make (struct
 
 exception Usage_error of string
 
-let command = "/sbin/ip -f inet6 route"
-
-let parse str =
-  try
-    Scanf.sscanf str "%s dev %s" (fun ip net -> (ip, net))
-  with
-  | _ -> Scanf.sscanf str "%s via %s dev %s" (fun ip _ net -> (ip, net))
+let commands = [ "/sbin/ip -f inet6 route";
+                 "/sbin/ip -f inet route" ]
 
 (* Read off lines one by one *)
-let rec parse_routes ch_in map =
-  try
-    let line = input_line ch_in in
-    let net, iface = parse line in
-    let networks =
-      try
-        Interface_map.find iface map
-      with _ -> []
-    in
-      parse_routes ch_in (Interface_map.add iface (net :: networks) map)
-  with
-  | End_of_file -> map
+let parse_route map line =
+  let parse str =
+    try
+      Scanf.sscanf str "%s dev %s" (fun ip net -> (ip, net))
+    with
+    | _ -> Scanf.sscanf str "%s via %s dev %s" (fun ip _ net -> (ip, net))
+  in
+
+  let net, iface = parse line in
+  Printf.printf "Parse line: %s %s\n" net iface;
+  Interface_map.modify_def [ net ] iface (fun nets -> net :: nets) map
 
 let write_external_zone ch_out interface _networks =
     Printf.fprintf ch_out "zone %s {\n" interface;
@@ -44,8 +39,9 @@ let write_external_zone ch_out interface _networks =
     Printf.fprintf ch_out "define external = %s\n" interface
 
 let write_internal_zone ch_out interface networks =
-  let write_network network = Printf.fprintf ch_out "    network = %s;\n" network in
+  let write_network network =
     Printf.fprintf ch_out "zone %s {\n" interface;
+    Printf.fprintf ch_out "    network = %s;\n" network in
     Printf.fprintf ch_out "    interface = %s;\n" interface;
     List.iter write_network networks;
     Printf.fprintf ch_out "    process filter { } policy log_deny;\n";
@@ -87,7 +83,15 @@ let () =
   let _ = Arg.parse arg_spec ignore "Autogenerate Borderline Zone Configuration files." in
     (* Test if the file exist. We only warn (and stop) if override is false *)
 
-  let interfaces = parse_routes (Unix.open_process_in command) Interface_map.empty in
+  let interfaces =
+    let routes =
+      List.map Unix.open_process_in commands
+      |> List.map IO.lines_of
+      |> List.map List.of_enum
+      |> List.flatten
+    in
+    List.fold_left parse_route Interface_map.empty routes
+  in
   let create_file_name iface = !output_dir ^ "/" ^ iface ^ ".bl" in
   let found_external = has_external_zone interfaces in
 

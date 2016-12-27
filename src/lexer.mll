@@ -103,10 +103,7 @@ rule token = parse
     (['0'-'9']+ as b) '.'
     (['0'-'9']+ as c) '.'
     (['0'-'9']+ as d) ('/' ((['0'-'9']+) as mask))?
-    { IPv4( int_of_string a,
-            int_of_string b,
-            int_of_string c,
-            int_of_string d,
+    { IPv4( [a; b; c; d] |> List.map int_of_string,
             Option.map_default int_of_string 32 mask,
             lexbuf.Lexing.lex_curr_p)
     }

@@ -3,6 +3,7 @@
 
 module F = Frontend
 module Ip6 = Ipset.Ip6
+module Ip4 = Ipset.Ip4
 open Lexing
 
 (* Define a function to be called whenever a syntax error is
@@ -27,7 +28,7 @@ let parse_error pos s =
 
 %token <int * Lexing.position> INT
 %token <int list * int * Lexing.position> IPv6
-%token <int * int * int * int * int * Lexing.position> IPv4
+%token <int list * int * Lexing.position> IPv4
 %token <string * Lexing.position> QUOTE
 %token <string * Lexing.position> IDENT
 
@@ -57,7 +58,8 @@ rule_seq:
 (* Scan elements within a zone. *)
 
 zone_stm:
-  | NETWORK EQ ip=IPv6                                 { let (i, p, _pos) = ip in F.Network(Ip6.ip_of_string i, p) }
+  | NETWORK EQ ip=IPv6                                 { let (i, m, _pos) = ip in F.Network(F.Ipv6 (Ip6.ip_of_string i, m)) }
+  | NETWORK EQ ip=IPv4                                 { let (i, m, _pos) = ip in F.Network(F.Ipv4 (Ip4.ip_of_string i, m)) }
   | INTERFACE EQ id=id                                 { F.Interface(id)}
   | PROCESS t=process_type r=rule_seq p=policy_opt     { F.ZoneRules (t,r,p) }
 
@@ -134,7 +136,8 @@ data_list:
 data:
   | i=INT                                              { let n, pos = i in F.Number (n, pos) }
   | id=id                                              { F.Id id }
-  | ip=IPv6                                            { let i, p, pos = ip in F.Ip ((Ip6.ip_of_string i, p), pos) }
+  | ip=IPv6                                            { let i, m, pos = ip in F.Ip6 ((Ip6.ip_of_string i, m), pos) }
+  | ip=IPv4                                            { let i, m, pos = ip in F.Ip4 ((Ip4.ip_of_string i, m), pos) }
 
 separated_list_opt(SEP, T):
   | { [] }
