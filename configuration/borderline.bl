@@ -36,16 +36,14 @@ process filter {
                  rule { use link_address; #if
                         source zone != external;
                         destination zone != external;
-                        icmptype = router-solicitation,
-                                   router-advertisement,
-                                   neighbor-solicitation,
-                                   neighbor-advertisement,
-                                   redirect;
+                        icmp6type = router-solicitation,
+                                    router-advertisement,
+                                    neighbor-solicitation,
+                                    neighbor-advertisement,
+                                    redirect;
                  } policy allow;
                  use common;
                  use zones;
             }
         }
 } policy { log_missed; }
-
-

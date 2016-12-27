@@ -43,7 +43,7 @@ let merge_opers rle =
     | (State _, _), (State _, _) -> true
     | (Ports (dir, _), _), (Ports (dir', _), _) when dir = dir' -> true
     | (Protocol _, _), (Protocol _, _) -> true
-    | (IcmpType _, _), (IcmpType _, _) -> true
+    | (Icmp6Type _, _), (Icmp6Type _, _) -> true
     | (Ip6Set (dir, _), _), (Ip6Set (dir', _), _) when dir = dir' -> true
     | (Zone (dir, _), _), (Zone (dir', _), _) when dir = dir' -> true
     | (TcpFlags _, _), (TcpFlags _, _) -> false
@@ -79,8 +79,8 @@ let merge_opers rle =
         let (ports'', neg'') = merge_sets (ports, neg) (ports', neg') in (Ports (dir, ports''), neg'')
       | (Protocol protos, neg), (Protocol protos', neg') ->
         let (protos'', neg'') = merge_sets (protos, neg) (protos', neg') in (Protocol (protos''), neg'')
-      | (IcmpType types, neg), (IcmpType types', neg') ->
-        let (types'', neg'') = merge_sets (types, neg) (types', neg') in (IcmpType types'', neg'')
+      | (Icmp6Type types, neg), (Icmp6Type types', neg') ->
+        let (types'', neg'') = merge_sets (types, neg) (types', neg') in (Icmp6Type types'', neg'')
       | (Ip6Set (dir, set), neg), (Ip6Set (dir', set'), neg') when dir = dir' ->
         let (set'', neg'') = merge_ipsets (set, neg) (set', neg') in (Ip6Set (dir, set''), neg'')
       | (Zone (dir, zones), neg), (Zone (dir', zones'), neg') when dir = dir' ->

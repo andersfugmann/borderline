@@ -30,7 +30,7 @@ type condition = Interface of direction * id Set.t
                | Ports of direction * int Set.t
                | Ip6Set of direction * Ip6.t
                | Protocol of int Set.t
-               | IcmpType of icmp_type Set.t
+               | Icmp6Type of icmp_type Set.t
                | Mark of int * int
                | TcpFlags of int list * int list (* TODO: Should be sets also *)
 
@@ -75,7 +75,7 @@ let get_dir = function
   | Ports (direction, _) -> Some direction
   | Ip6Set (direction, _) -> Some direction
   | Protocol _ -> None
-  | IcmpType _ -> None
+  | Icmp6Type _ -> None
   | Mark _ -> None
   | TcpFlags _ -> None
 
@@ -86,7 +86,7 @@ let enumerate_cond = function
   | Ports _ -> 4
   | Ip6Set _ -> 5
   | Protocol _ -> 6
-  | IcmpType _ -> 7
+  | Icmp6Type _ -> 7
   | TcpFlags _ -> 8
   | Mark _ -> 9
 
@@ -103,7 +103,7 @@ let is_always value = function
   | Zone (_, s), neg when Set.is_empty s -> neg = value
   | Ports (_, s), neg when Set.is_empty s -> neg = value
   | Protocol s, neg when Set.is_empty s -> neg = value
-  | IcmpType s, neg when Set.is_empty s -> neg = value
+  | Icmp6Type s, neg when Set.is_empty s -> neg = value
   | TcpFlags ([], _x :: _xs), neg -> neg = value
   | TcpFlags (_, []), neg -> neg != value
 
@@ -113,6 +113,6 @@ let is_always value = function
   | Ports _, _
   | Ip6Set _, _
   | Protocol _, _
-  | IcmpType _, _
+  | Icmp6Type _, _
   | TcpFlags _, _
   | Mark _, _ -> false

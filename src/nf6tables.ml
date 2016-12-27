@@ -122,7 +122,7 @@ let gen_cond neg =
   | Ir.Protocol protocols ->
     sprintf "meta protocol %s%s" neg_str (str_of_set protocols)
 
-  | Ir.IcmpType types ->
+  | Ir.Icmp6Type types ->
     sprintf "ip6 nexthdr icmpv6 icmpv6 type %s%s" neg_str (str_of_set types)
   | Ir.Mark (value, mask) ->
     sprintf "meta mark and 0x%08x %s0x%08x" mask neg_str value

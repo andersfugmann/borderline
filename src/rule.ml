@@ -57,11 +57,11 @@ let rec process_rule _table (rules, targets') =
     | F.Filter(dir, F.Address(ips), neg) :: xs -> gen_op targets ( (Ir.Ip6Set(dir, list2ips ips), neg) :: acc ) xs
     | F.Filter(dir, F.FZone(ids), neg) :: xs -> gen_op targets ((Ir.Zone(dir, list2ids ids), neg) :: acc) xs
     | F.Protocol (protos, neg) :: xs -> gen_op targets ((Ir.Protocol(list2ints protos), neg) :: acc) xs
-    | F.IcmpType (types, false) :: xs -> gen_op targets ((Ir.Protocol( Set.singleton icmp), false) :: (Ir.IcmpType(list2ints types), false) :: acc) xs
-    | F.IcmpType (types, true) :: xs ->
+    | F.Icmp6Type (types, false) :: xs -> gen_op targets ((Ir.Protocol( Set.singleton icmp), false) :: (Ir.Icmp6Type(list2ints types), false) :: acc) xs
+    | F.Icmp6Type (types, true) :: xs ->
         let chain = gen_op targets [] xs in
         let chain = Chain.replace chain.Ir.id (([(Ir.Protocol(Set.singleton icmp), false);
-                                                 (Ir.IcmpType(list2ints types), false)], Ir.Return) :: chain.Ir.rules) chain.Ir.comment
+                                                 (Ir.Icmp6Type(list2ints types), false)], Ir.Return) :: chain.Ir.rules) chain.Ir.comment
         in
         Chain.create [ (acc, Ir.Jump chain.Ir.id) ] "Rule"
     | F.TcpFlags((flags, mask), neg) :: xs ->

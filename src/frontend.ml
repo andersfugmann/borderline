@@ -28,7 +28,7 @@ and filter_stm = Address of data list
 and rule_stm = Filter of Ir.direction * filter_stm * Ir.pol
              | State of State.states list * Ir.pol
              | Protocol of data list * Ir.pol
-             | IcmpType of data list * Ir.pol
+             | Icmp6Type of data list * Ir.pol
              | Rule of rule_stm list * policytype list
              | Reference of id
              | TcpFlags of ( data list * data list ) * Ir.pol

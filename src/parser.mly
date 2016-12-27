@@ -21,7 +21,7 @@ let parse_error pos s =
 %token SOURCE DESTINATION ADDRESS STATE USE
 %token NEW ESTABLISHED RELATED INVALID
 %token SEMI PROTOCOL
-%token TCP_PORT UDP_PORT ICMPTYPE TCPFLAGS
+%token TCP_PORT UDP_PORT ICMP6TYPE TCPFLAGS
 %token EQ NE
 
 
@@ -78,7 +78,7 @@ rule_stm:
   | d=filter_direction f=filter_stm                    { F.Filter (d, fst f, snd f) }
   | STATE o=oper states=separated_list(COMMA, state)   { F.State (states, o) }
   | PROTOCOL o=oper d=data_list                        { F.Protocol (d, o) }
-  | ICMPTYPE o=oper d=data_list                        { F.IcmpType (d, o) }
+  | ICMP6TYPE o=oper d=data_list                       { F.Icmp6Type (d, o) }
   | TCPFLAGS o=oper f=data_list SLASH d=data_list      { F.TcpFlags ((f, d), o) }
 
 (* A policy can be a single policy, or a list of policies
