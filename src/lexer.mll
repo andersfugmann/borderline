@@ -4,6 +4,7 @@ open Parser
 open Parsing
 open Frontend
 open Scanf
+open Batteries
 
 exception Lexer_error of int
 
@@ -75,11 +76,8 @@ rule token = parse
     (['0'-'9''a'-'f''A'-'F']+ as x7) ':'
     (['0'-'9''a'-'f''A'-'F']+ as x8) ('/' ((['0'-'9']+) as mask))?
     { let addrs = List.map hex_of_string [x1; x2; x3; x4; x5; x6; x7; x8] in
-      let mask = match mask with
-          Some(mask) -> int_of_string mask
-        | _ -> 128
-      in
-        IPv6(addrs, mask, lexbuf.Lexing.lex_curr_p)
+      let mask = Option.map_default int_of_string 128 mask in
+      IPv6(addrs, mask, lexbuf.Lexing.lex_curr_p)
     }
   | (((['0'-'9''a'-'f''A'-'F']+ ':')* ['0'-'9''a'-'f''A'-'F']+)? as hd)?
     "::"
@@ -87,22 +85,30 @@ rule token = parse
     ('/' ((['0'-'9']+) as mask))?
     {
       let seq2lst = function
-          Some(str) -> List.map hex_of_string (Str.split (Str.regexp ":") str)
+        | Some(str) -> List.map hex_of_string (Str.split (Str.regexp ":") str)
         | None -> []
       in
       let rec gen = function
-          0 -> []
+        | 0 -> []
         | n -> 0 :: gen (n-1)
       in
       let sl = seq2lst hd in
       let el = seq2lst tl in
       let rem = 8 - (List.length sl) - (List.length el) in
-      let mask = match mask with
-          Some(mask) -> int_of_string mask
-        | _ -> 128
-      in
-        assert (rem >= 0); (* No more than eight fields *)
-        IPv6(sl @ (gen rem) @ el, mask, lexbuf.Lexing.lex_curr_p)
+      let mask = Option.map_default int_of_string 128 mask in
+      assert (rem >= 0); (* No more than eight fields *)
+      IPv6(sl @ (gen rem) @ el, mask, lexbuf.Lexing.lex_curr_p)
+    }
+  | (['0'-'9']+ as a) '.'
+    (['0'-'9']+ as b) '.'
+    (['0'-'9']+ as c) '.'
+    (['0'-'9']+ as d) ('/' ((['0'-'9']+) as mask))?
+    { IPv4( int_of_string a,
+            int_of_string b,
+            int_of_string c,
+            int_of_string d,
+            Option.map_default int_of_string 32 mask,
+            lexbuf.Lexing.lex_curr_p)
     }
   | ['0'-'9']+ as lxm { INT(int_of_string lxm, lexbuf.Lexing.lex_curr_p) }
   | ['a'-'z''A'-'Z''_']['a'-'z''A'-'Z''0'-'9''_''.''-']* as lxm { IDENT (lxm, lexbuf.Lexing.lex_curr_p) }

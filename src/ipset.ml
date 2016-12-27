@@ -265,8 +265,8 @@ struct
 
 end
 
-(** Be a IPv6_set.. *)
 module Ip6 = Make(Ipv6)
+module Ip4 = Make(Ipv4)
 
 (** Test *)
 let test =

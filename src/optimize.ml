@@ -4,6 +4,7 @@ open Ir
 open Printf
 open Chain
 module Ip6 = Ipset.Ip6
+module Ip4 = Ipset.Ip4
 
 (** Define the saving in conditions when inlining. *)
 let min_inline_saving = -2
@@ -45,6 +46,7 @@ let merge_opers rle =
     | (Protocol _, _), (Protocol _, _) -> true
     | (Icmp6Type _, _), (Icmp6Type _, _) -> true
     | (Ip6Set (dir, _), _), (Ip6Set (dir', _), _) when dir = dir' -> true
+    | (Ip4Set (dir, _), _), (Ip4Set (dir', _), _) when dir = dir' -> true
     | (Zone (dir, _), _), (Zone (dir', _), _) when dir = dir' -> true
     | (TcpFlags _, _), (TcpFlags _, _) -> false
     | _ -> false
@@ -66,7 +68,8 @@ let merge_opers rle =
   in
 
   let merge_states = merge State.inter State.union State.diff in
-  let merge_ipsets = merge Ip6.inter Ip6.union Ip6.diff in
+  let merge_ip6sets = merge Ip6.inter Ip6.union Ip6.diff in
+  let merge_ip4sets = merge Ip4.inter Ip4.union Ip4.diff in
   let merge_sets a b = merge Set.intersect Set.union Set.diff a b in
 
   let merge_oper a b =
@@ -82,7 +85,9 @@ let merge_opers rle =
       | (Icmp6Type types, neg), (Icmp6Type types', neg') ->
         let (types'', neg'') = merge_sets (types, neg) (types', neg') in (Icmp6Type types'', neg'')
       | (Ip6Set (dir, set), neg), (Ip6Set (dir', set'), neg') when dir = dir' ->
-        let (set'', neg'') = merge_ipsets (set, neg) (set', neg') in (Ip6Set (dir, set''), neg'')
+        let (set'', neg'') = merge_ip6sets (set, neg) (set', neg') in (Ip6Set (dir, set''), neg'')
+      | (Ip4Set (dir, set), neg), (Ip4Set (dir', set'), neg') when dir = dir' ->
+        let (set'', neg'') = merge_ip4sets (set, neg) (set', neg') in (Ip6Set (dir, set''), neg'')
       | (Zone (dir, zones), neg), (Zone (dir', zones'), neg') when dir = dir' ->
         let (zones'', neg'') = merge_sets (zones, neg) (zones', neg') in (Zone (dir, zones''), neg'')
       | (cond, _), (cond', _) -> failwith ("is_sibling failed: " ^ string_of_int (enumerate_cond cond) ^ ", " ^ string_of_int (enumerate_cond cond'))

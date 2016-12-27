@@ -57,13 +57,12 @@ let chain_premable chain =
   | Ir.Named _ ->
     [ sprintf "chain %s {" name ]
 
-(* TODO: Handle negation *)
-let gen_cond neg =
+let gen_cond neg cond =
   let neg_str = match neg with
     | true -> "!= "
     | false -> ""
   in
-  function
+  match cond with
   | Ir.Interface (dir, zones) ->
     let zones = sprintf "{ %s }" (Set.to_list zones |> String.concat ", ") in
     let classifier = match dir with
@@ -119,6 +118,7 @@ let gen_cond neg =
       |> String.concat ", "
     in
     sprintf "ip6 %s %s{ %s }" classifier neg_str ips
+  | Ir.Ip4Set _ -> failwith "Cannot handle ipv4 just yet"
   | Ir.Protocol protocols ->
     sprintf "meta protocol %s%s" neg_str (str_of_set protocols)
 

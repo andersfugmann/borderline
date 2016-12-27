@@ -2,8 +2,8 @@
   (* Include commonly used modules *)
 
 module F = Frontend
-open Lexing
 module Ip6 = Ipset.Ip6
+open Lexing
 
 (* Define a function to be called whenever a syntax error is
    encountered. The function prints line number along with a
@@ -27,6 +27,7 @@ let parse_error pos s =
 
 %token <int * Lexing.position> INT
 %token <int list * int * Lexing.position> IPv6
+%token <int * int * int * int * int * Lexing.position> IPv4
 %token <string * Lexing.position> QUOTE
 %token <string * Lexing.position> IDENT
 

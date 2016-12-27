@@ -3,6 +3,7 @@ open Batteries
 
 open Common
 module Ip6 = Ipset.Ip6
+module Ip4 = Ipset.Ip4
 
 type id = string (* New addition *)
 type zone = id
@@ -11,7 +12,6 @@ type icmp_type = int (* This seems to be missing a sub-type *)
 type prefix = string
 
 type chain_type = INPUT | OUTPUT | FORWARD
-
 type chain_id = Temporary of int
               | Builtin of chain_type
               | Named of string
@@ -29,6 +29,7 @@ type condition = Interface of direction * id Set.t
                | State of State.t
                | Ports of direction * int Set.t
                | Ip6Set of direction * Ip6.t
+               | Ip4Set of direction * Ip4.t
                | Protocol of int Set.t
                | Icmp6Type of icmp_type Set.t
                | Mark of int * int
@@ -69,26 +70,28 @@ let eq_rules a b =
   with Invalid_argument _ -> false
 
 let get_dir = function
-    Interface _ -> None
+  | Interface _ -> None
   | Zone (direction, _) -> Some direction
   | State _ -> None
   | Ports (direction, _) -> Some direction
   | Ip6Set (direction, _) -> Some direction
+  | Ip4Set (direction, _) -> Some direction
   | Protocol _ -> None
   | Icmp6Type _ -> None
   | Mark _ -> None
   | TcpFlags _ -> None
 
 let enumerate_cond = function
-    Interface _ -> 1
+  | Interface _ -> 1
   | Zone _ -> 2
   | State _ -> 3
   | Ports _ -> 4
   | Ip6Set _ -> 5
-  | Protocol _ -> 6
-  | Icmp6Type _ -> 7
-  | TcpFlags _ -> 8
-  | Mark _ -> 9
+  | Ip4Set _ -> 6
+  | Protocol _ -> 7
+  | Icmp6Type _ -> 8
+  | TcpFlags _ -> 9
+  | Mark _ -> 10
 
 let cond_type_identical cond1 cond2 =
   (enumerate_cond cond1) = (enumerate_cond cond2)
@@ -106,12 +109,12 @@ let is_always value = function
   | Icmp6Type s, neg when Set.is_empty s -> neg = value
   | TcpFlags ([], _x :: _xs), neg -> neg = value
   | TcpFlags (_, []), neg -> neg != value
-
   | Interface _, _
   | Zone _, _
   | State _, _
   | Ports _, _
   | Ip6Set _, _
+  | Ip4Set _, _
   | Protocol _, _
   | Icmp6Type _, _
   | TcpFlags _, _
