@@ -19,6 +19,7 @@ type chain_id = Temporary of int
 type tcp_flags = SYN | ACK | FIN | RST | URG | PSH
 type direction = SOURCE | DESTINATION
 type pol       = bool
+type port_type = Tcp | Udp
 
 
 type icmp_packet_type = int
@@ -27,7 +28,7 @@ type icmp_packet_type = int
 type condition = Interface of direction * id Set.t
                | Zone of direction * zone Set.t
                | State of State.t
-               | Ports of direction * int Set.t
+               | Ports of direction * port_type * int Set.t
                | Ip6Set of direction * Ip6.t
                | Ip4Set of direction * Ip4.t
                | Protocol of int Set.t
@@ -73,7 +74,7 @@ let get_dir = function
   | Interface _ -> None
   | Zone (direction, _) -> Some direction
   | State _ -> None
-  | Ports (direction, _) -> Some direction
+  | Ports (direction, _, _) -> Some direction
   | Ip6Set (direction, _) -> Some direction
   | Ip4Set (direction, _) -> Some direction
   | Protocol _ -> None
@@ -104,7 +105,7 @@ let compare (cond1, neg1) (cond2, neg2) =
 let is_always value = function
   | State states, neg when State.is_empty states -> neg = value
   | Zone (_, s), neg when Set.is_empty s -> neg = value
-  | Ports (_, s), neg when Set.is_empty s -> neg = value
+  | Ports (_, _, s), neg when Set.is_empty s -> neg = value
   | Protocol s, neg when Set.is_empty s -> neg = value
   | Icmp6Type s, neg when Set.is_empty s -> neg = value
   | TcpFlags ([], _x :: _xs), neg -> neg = value

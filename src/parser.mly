@@ -109,8 +109,8 @@ filter_direction:
   | DESTINATION                                        { Ir.DESTINATION }
 
 filter_stm:
-  | TCP_PORT o=oper d=data_list                        { (F.TcpPort d, o) }
-  | UDP_PORT o=oper d=data_list                        { (F.UdpPort d, o) }
+  | TCP_PORT o=oper d=data_list                        { (F.Ports (Ir.Tcp, d), o) }
+  | UDP_PORT o=oper d=data_list                        { (F.Ports (Ir.Udp, d), o) }
   | ADDRESS o=oper d=data_list                         { (F.Address d, o) }
   | ZONE o=oper d=data_list                            { (F.FZone d, o) }
   | error                                              { parse_error $startpos "Expected filter" }

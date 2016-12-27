@@ -1,6 +1,7 @@
 open Batteries
 open Common
 module F = Frontend
+module Ip4 = Ipset.Ip4
 module Ip6 = Ipset.Ip6
 
 (* open Chain *)
@@ -23,14 +24,13 @@ let list2ints l =
       | F.Id (id, pos) -> parse_error ~id ~pos "No all ints have been expanded")
     Set.empty l
 
-let list2ip6 l =
-  List.fold_left (fun acc ->
-      function
+let list2ip l =
+  List.fold_left (fun (ip4, ip6) -> function
       | F.Number (_, pos) -> parse_error ~pos "Unexpected int in ip list"
-      | F.Ip6 (ip, _) -> Ip6.add (Ip6.to_elt ip) acc
-      | F.Ip4 (_, pos) -> parse_error ~pos "Cannot mix ipv4 and ipv6 addresses"
+      | F.Ip6 (ip, _) -> ip4, Ip6.add (Ip6.to_elt ip) ip6
+      | F.Ip4 (ip, _) -> Ip4.add (Ip4.to_elt ip) ip4, ip6
       | F.Id (id, pos) -> parse_error ~id ~pos "No all ints have been expanded")
-    Ip6.empty l
+    (Ip4.empty, Ip6.empty) l
 
 let list2ids l =
   List.fold_left (fun acc ->
@@ -47,24 +47,35 @@ let rec process_rule _table (rules, targets') =
      the filter can never be satisfied. *)
   let rec gen_op targets acc = function
     | F.State(states, neg) :: xs -> gen_op targets ((Ir.State( State.of_list states), neg) :: acc) xs
-    | F.Filter(dir, F.TcpPort(ports), false) :: xs -> gen_op targets ( (Ir.Protocol (Set.singleton tcp), false) :: (Ir.Ports(dir, list2ints ports), false) :: acc ) xs
-    | F.Filter(dir, F.UdpPort(ports), false) :: xs-> gen_op targets ( (Ir.Protocol (Set.singleton udp), false) :: (Ir.Ports(dir, list2ints ports), false) :: acc ) xs
-    | F.Filter(dir, F.TcpPort(ports), true) :: xs ->
+    | F.Filter(dir, F.Ports(port_type, ports), false) :: xs -> gen_op targets ( (Ir.Ports(dir, port_type, list2ints ports), false) :: acc ) xs
+    | F.Filter(dir, F.Ports(port_type, ports), true) :: xs ->
         let chain = gen_op targets [] xs in
-        let chain = Chain.replace chain.Ir.id (([(Ir.Protocol (Set.singleton tcp), false); (Ir.Ports(dir, list2ints ports), false)], Ir.Return) :: chain.Ir.rules) chain.Ir.comment in
-          Chain.create [ (acc, Ir.Jump chain.Ir.id) ] "Rule"
-    | F.Filter(dir, F.UdpPort(ports), true) :: xs ->
-        let chain = gen_op targets [] xs in
-        let chain = Chain.replace chain.Ir.id (([(Ir.Protocol( Set.singleton udp ), false); (Ir.Ports(dir, list2ints ports), false)], Ir.Return) :: chain.Ir.rules) chain.Ir.comment in
-          Chain.create [ (acc, Ir.Jump chain.Ir.id) ] "Rule"
-    | F.Filter(dir, F.Address(ips), neg) :: xs -> gen_op targets ( (Ir.Ip6Set(dir, list2ip6 ips), neg) :: acc ) xs
+        let chain = Chain.replace chain.Ir.id (([(Ir.Ports(dir, port_type, list2ints ports), false)], Ir.Return) :: chain.Ir.rules) chain.Ir.comment in
+        Chain.create [ (acc, Ir.Jump chain.Ir.id) ] "Rule"
+    | F.Filter(dir, F.Address(ips), false) :: xs ->
+        (* Split into ipv4 and ipv6 *)
+        let (ip4, ip6) = list2ip ips in
+        let chain = gen_op targets acc xs in
+        (* Neg in this case needs to be chained *)
+        Chain.create [
+          [Ir.Ip6Set (dir, ip6), false], Ir.Jump chain.Ir.id;
+          [Ir.Ip4Set (dir, ip4), false], Ir.Jump chain.Ir.id;
+        ] "Rule"
+    | F.Filter(dir, F.Address(ips), true) :: xs ->
+        (* Split into ipv4 and ipv6 *)
+        let chain = gen_op targets acc xs in
+        let (ip4, ip6) = list2ip ips in
+        (* Add first return rule in target chain *)
+        Chain.replace chain.Ir.id (
+            ([ Ir.Ip4Set (dir, ip4), false], Ir.Return) ::
+            ([ Ir.Ip6Set (dir, ip6), false], Ir.Return) ::
+            chain.Ir.rules) chain.Ir.comment
     | F.Filter(dir, F.FZone(ids), neg) :: xs -> gen_op targets ((Ir.Zone(dir, list2ids ids), neg) :: acc) xs
     | F.Protocol (protos, neg) :: xs -> gen_op targets ((Ir.Protocol(list2ints protos), neg) :: acc) xs
-    | F.Icmp6Type (types, false) :: xs -> gen_op targets ((Ir.Protocol( Set.singleton icmp), false) :: (Ir.Icmp6Type(list2ints types), false) :: acc) xs
+    | F.Icmp6Type (types, false) :: xs -> gen_op targets ((Ir.Icmp6Type(list2ints types), false) :: acc) xs
     | F.Icmp6Type (types, true) :: xs ->
         let chain = gen_op targets [] xs in
-        let chain = Chain.replace chain.Ir.id (([(Ir.Protocol(Set.singleton icmp), false);
-                                                 (Ir.Icmp6Type(list2ints types), false)], Ir.Return) :: chain.Ir.rules) chain.Ir.comment
+        let chain = Chain.replace chain.Ir.id (([(Ir.Icmp6Type(list2ints types), false)], Ir.Return) :: chain.Ir.rules) chain.Ir.comment
         in
         Chain.create [ (acc, Ir.Jump chain.Ir.id) ] "Rule"
     | F.TcpFlags((flags, mask), neg) :: xs ->

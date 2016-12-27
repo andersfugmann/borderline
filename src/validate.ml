@@ -114,8 +114,7 @@ let expand nodes =
   let rec expand_rule_list seen rules =
     let expand_rule = function
       | F.Reference _ -> assert false
-      | F.Filter (dir, F.TcpPort ports, pol) -> F.Filter (dir, F.TcpPort (expand_int_list seen ports), pol)
-      | F.Filter (dir, F.UdpPort ports, pol) -> F.Filter (dir, F.UdpPort (expand_int_list seen ports), pol)
+      | F.Filter (dir, F.Ports (port_type, ports), pol) -> F.Filter (dir, F.Ports (port_type, expand_int_list seen ports), pol)
       | F.Filter (dir, F.FZone zones, pol) -> F.Filter (dir, F.FZone (expand_zone_list seen zones), pol)
       | F.Filter (dir, F.Address addr_list, pol) -> F.Filter (dir, F.Address (expand_address_list seen addr_list), pol)
       | F.Protocol (protos, pol) -> F.Protocol (expand_int_list seen protos, pol)

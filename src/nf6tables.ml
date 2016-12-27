@@ -10,6 +10,7 @@
 open Batteries
 open Printf
 module Ip6 = Ipset.Ip6
+module Ip4 = Ipset.Ip4
 
 let zone_bits = 16
 let zone_mask = 1 lsl zone_bits - 1
@@ -100,12 +101,16 @@ let gen_cond neg cond =
     in
     sprintf "ct state %s{ %s }" neg_str states
 
-  | Ir.Ports (dir, ports) ->
+  | Ir.Ports (dir, port_type, ports) ->
     let cond = match dir with
       | Ir.SOURCE -> "sport"
       | Ir.DESTINATION -> "dport"
     in
-    sprintf "tcp %s%s %s" neg_str cond (str_of_set ports)
+    let classifier = match port_type with
+      | Ir.Tcp -> "tcp"
+      | Ir.Udp -> "udp"
+    in
+    sprintf "%s %s%s %s" classifier neg_str cond (str_of_set ports)
 
   | Ir.Ip6Set (dir, ips) ->
     let classifier = match dir with
@@ -118,7 +123,17 @@ let gen_cond neg cond =
       |> String.concat ", "
     in
     sprintf "ip6 %s %s{ %s }" classifier neg_str ips
-  | Ir.Ip4Set _ -> failwith "Cannot handle ipv4 just yet"
+  | Ir.Ip4Set (dir, ips) ->
+    let classifier = match dir with
+      | Ir.SOURCE -> "saddr"
+      | Ir.DESTINATION  -> "daddr"
+    in
+    let ips =
+      Ip4.to_ips ips
+      |> List.map (fun (ip, mask) -> sprintf "%s/%d" (Ip4.string_of_ip ip) mask)
+      |> String.concat ", "
+    in
+    sprintf "ip %s %s{ %s }" classifier neg_str ips
   | Ir.Protocol protocols ->
     sprintf "meta protocol %s%s" neg_str (str_of_set protocols)
 

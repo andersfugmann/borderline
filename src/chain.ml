@@ -45,7 +45,7 @@ let create rules comment =
   let chain = { id = Temporary(id); rules = rules; comment = comment } in
   add chain; chain
 
-(** Insert a chain with the given id, rules and comment, possibly replacing exising change of the same name *)
+(** Insert a chain with the given id, rules and comment, possibly replacing exising chain of the same name *)
 let replace id rules comment =
   let chain = { id = id; rules = rules; comment = comment } in
   add chain; chain

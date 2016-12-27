@@ -42,7 +42,7 @@ let merge_opers rle =
     match (a, b) with
     | (Interface (dir, _), _), (Interface (dir', _), _) when dir = dir' -> true
     | (State _, _), (State _, _) -> true
-    | (Ports (dir, _), _), (Ports (dir', _), _) when dir = dir' -> true
+    | (Ports (dir, pt, _), _), (Ports (dir', pt', _), _) when dir = dir' && pt = pt' -> true
     | (Protocol _, _), (Protocol _, _) -> true
     | (Icmp6Type _, _), (Icmp6Type _, _) -> true
     | (Ip6Set (dir, _), _), (Ip6Set (dir', _), _) when dir = dir' -> true
@@ -78,8 +78,8 @@ let merge_opers rle =
         let (is'', neg'') = merge_sets (is, neg) (is', neg') in (Interface (dir, is''), neg'')
       | (State s, neg), (State s', neg') ->
         let (s'', neg'') = merge_states (s, neg) (s', neg') in (State s'', neg'')
-      | (Ports (dir, ports), neg), (Ports (dir', ports'), neg') when dir = dir' ->
-        let (ports'', neg'') = merge_sets (ports, neg) (ports', neg') in (Ports (dir, ports''), neg'')
+      | (Ports (dir, pt, ports), neg), (Ports (dir', pt', ports'), neg') when dir = dir' && pt = pt' ->
+        let (ports'', neg'') = merge_sets (ports, neg) (ports', neg') in (Ports (dir, pt, ports''), neg'')
       | (Protocol protos, neg), (Protocol protos', neg') ->
         let (protos'', neg'') = merge_sets (protos, neg) (protos', neg') in (Protocol (protos''), neg'')
       | (Icmp6Type types, neg), (Icmp6Type types', neg') ->

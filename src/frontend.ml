@@ -23,8 +23,7 @@ and zone_stm = Interface of id
              | ZoneRules of processtype * rule_stm list * policytype list
 
 and filter_stm = Address of data list
-               | TcpPort of data list
-               | UdpPort of data list
+               | Ports of Ir.port_type * data list
                | FZone of data list
 
 and rule_stm = Filter of Ir.direction * filter_stm * Ir.pol
