@@ -165,7 +165,6 @@ let reject_to_string = function
   | Ir.AdminProhibited -> "reject with icmpx type admin-prohibited"
   | Ir.PortUnreachable -> "reject with icmpx type port-unreachable"
   | Ir.TcpReset -> "reject with tcp reset"
-  | Ir.Default -> "reject"
 
 let gen_target = function
   | Ir.MarkZone (dir, id) ->

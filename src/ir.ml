@@ -22,7 +22,7 @@ type pol       = bool
 type port_type = Tcp | Udp
 
 
-type reject_type = HostUnreachable | NoRoute | AdminProhibited | PortUnreachable | TcpReset | Default
+type reject_type = HostUnreachable | NoRoute | AdminProhibited | PortUnreachable | TcpReset
 
 type condition = Interface of direction * id Set.t
                | Zone of direction * zone Set.t

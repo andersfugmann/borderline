@@ -12,7 +12,7 @@ let reject_of_string = function
   | Some ("port-unreachable", _pos) -> Ir.PortUnreachable
   | Some ("tcp-reset", _pos) -> Ir.TcpReset
   | Some (s, pos) -> parse_error ~id:s ~pos "Unknown reject type"
-  | None -> Ir.Default
+  | None -> Ir.PortUnreachable
 
 let gen_policy = function
   | F.ALLOW -> Ir.Accept
