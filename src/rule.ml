@@ -4,15 +4,21 @@ module F = Frontend
 module Ip4 = Ipset.Ip4
 module Ip6 = Ipset.Ip6
 
-(* open Chain *)
-
 (* Frontend -> Ir *)
+let reject_of_string = function
+  | Some ("host-unreachable", _pos) -> Ir.HostUnreachable
+  | Some ("no-route", _pos) -> Ir.NoRoute
+  | Some ("admin-prohibited", _pos) -> Ir.AdminProhibited
+  | Some ("port-unreachable", _pos) -> Ir.PortUnreachable
+  | Some ("tcp-reset", _pos) -> Ir.TcpReset
+  | Some (s, pos) -> parse_error ~id:s ~pos "Unknown reject type"
+  | None -> Ir.Default
 
 let gen_policy = function
   | F.ALLOW -> Ir.Accept
   | F.DENY -> Ir.Drop
-  | F.REJECT -> Ir.Reject(0)
-  | F.LOG prefix -> Ir.Log(prefix)
+  | F.REJECT s -> Ir.Reject (reject_of_string s)
+  | F.LOG prefix -> Ir.Log prefix
   | F.Ref (id, pos) -> parse_error ~id ~pos "Not all ids have been expanded"
 
 let list2ints l =

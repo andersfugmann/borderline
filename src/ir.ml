@@ -22,8 +22,7 @@ type pol       = bool
 type port_type = Tcp | Udp
 
 
-type icmp_packet_type = int
-
+type reject_type = HostUnreachable | NoRoute | AdminProhibited | PortUnreachable | TcpReset | Default
 
 type condition = Interface of direction * id Set.t
                | Zone of direction * zone Set.t
@@ -41,7 +40,7 @@ type action = Jump of chain_id
             | Accept
             | Drop
             | Return
-            | Reject of icmp_packet_type
+            | Reject of reject_type
             | Notrack
             | Log of prefix
 

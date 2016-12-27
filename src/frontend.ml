@@ -8,7 +8,12 @@ type prefix = string
 type id = string * Lexing.position
 
 type processtype = MANGLE | FILTER | NAT
-type policytype = ALLOW | DENY | REJECT | LOG of prefix | Ref of id
+type policytype = ALLOW
+                | DENY
+                | REJECT of (string * Lexing.position) option
+                | LOG of prefix
+                | Ref of id
+
 type ip = Ipv6 of Ip6.ip | Ipv4 of Ip4.ip
 
 and node = Import of id

@@ -98,7 +98,8 @@ string:
 policy:
   | ALLOW                                              { F.ALLOW }
   | DENY                                               { F.DENY }
-  | REJECT                                             { F.REJECT }
+  | REJECT s=string                                    { F.REJECT (Some s) }
+  | REJECT                                             { F.REJECT (None) }
   | LOG s=string                                       { F.LOG(fst s) }
   | id=id                                              { F.Ref(id) }
 

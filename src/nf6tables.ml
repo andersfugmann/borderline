@@ -22,7 +22,7 @@ let str_of_set s =
   |> sprintf "{ %s }"
 
 let string_of_flag = function
-  | 1 -> "syn"
+  | 1 -> "syn" (* Numbers really? *)
   | 2 -> "ack"
   | 3 -> "fin"
   | 4 -> "rst"
@@ -159,6 +159,14 @@ let gen_cond neg cond =
       (* TODO: this is wrong. We need to add a temporary table to jump through. Maybe sideeffect? *)
       (List.map to_string flags |> String.concat " ")
 
+let reject_to_string = function
+  | Ir.HostUnreachable -> "reject with icmpx type host-unreachable"
+  | Ir.NoRoute -> "reject with icmpx type no-route"
+  | Ir.AdminProhibited -> "reject with icmpx type admin-prohibited"
+  | Ir.PortUnreachable -> "reject with icmpx type port-unreachable"
+  | Ir.TcpReset -> "reject with tcp reset"
+  | Ir.Default -> "reject"
+
 let gen_target = function
   | Ir.MarkZone (dir, id) ->
       let shift = match dir with
@@ -172,8 +180,8 @@ let gen_target = function
   | Ir.Return -> "return"
   | Ir.Notrack -> ""
   | Ir.Jump chain -> sprintf "jump %s" (chain_name chain)
-  | Ir.Reject rsp -> sprintf "reject with  icmpv6 type %d" rsp
-  | Ir.Log prefix -> sprintf "log prefix %s group 2" prefix
+  | Ir.Reject rsp -> reject_to_string rsp
+  | Ir.Log prefix -> sprintf "log prefix %s level info" prefix
 
 let gen_rule (conds, target) =
   let conds = List.map (fun (op, neg) -> gen_cond neg op) conds
