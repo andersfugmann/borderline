@@ -1,6 +1,8 @@
 open Batteries
 open Common
 module F = Frontend
+module Ip6 = Ipset.Ip6
+
 (* open Chain *)
 
 (* Frontend -> Ir *)
@@ -24,9 +26,9 @@ let list2ips l =
   List.fold_left (fun acc ->
       function
       | F.Number (_, pos) -> parse_error ~pos "Unexpected int in ip list"
-      | F.Ip (ip, _) -> Ipset.add (Ipset.to_elt ip) acc
+      | F.Ip (ip, _) -> Ip6.add (Ip6.to_elt ip) acc
       | F.Id (id, pos) -> parse_error ~id ~pos "No all ints have been expanded")
-    Ipset.empty l
+    Ip6.empty l
 
 let list2ids l =
   List.fold_left (fun acc ->
@@ -52,7 +54,7 @@ let rec process_rule _table (rules, targets') =
         let chain = gen_op targets [] xs in
         let chain = Chain.replace chain.Ir.id (([(Ir.Protocol( Set.singleton udp ), false); (Ir.Ports(dir, list2ints ports), false)], Ir.Return) :: chain.Ir.rules) chain.Ir.comment in
           Chain.create [ (acc, Ir.Jump chain.Ir.id) ] "Rule"
-    | F.Filter(dir, F.Address(ips), neg) :: xs -> gen_op targets ( (Ir.IpSet(dir, list2ips ips), neg) :: acc ) xs
+    | F.Filter(dir, F.Address(ips), neg) :: xs -> gen_op targets ( (Ir.Ip6Set(dir, list2ips ips), neg) :: acc ) xs
     | F.Filter(dir, F.FZone(ids), neg) :: xs -> gen_op targets ((Ir.Zone(dir, list2ids ids), neg) :: acc) xs
     | F.Protocol (protos, neg) :: xs -> gen_op targets ((Ir.Protocol(list2ints protos), neg) :: acc) xs
     | F.IcmpType (types, false) :: xs -> gen_op targets ((Ir.Protocol( Set.singleton icmp), false) :: (Ir.IcmpType(list2ints types), false) :: acc) xs

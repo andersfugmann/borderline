@@ -3,18 +3,19 @@ open Common
 open Ir
 open Printf
 open Chain
+module Ip6 = Ipset.Ip6
 
 (** Define the saving in conditions when inlining. *)
 let min_inline_saving = -2
 let max_inline_size = 0
 
-let rec chain_reference_count id chains =
+let chain_reference_count id chains =
   let count_references rules =
     List.fold_left (fun acc -> function (_, Jump id') when id = id' -> acc + 1 | _ -> acc) 0 rules
   in
   Map.fold (fun chn acc -> acc + (count_references chn.rules)) chains 0
 
-let rec get_referring_rules chain chains =
+let get_referring_rules chain chains =
   let test (_conds, target) = target = Jump (chain.id) in
   let referring_chains = Chain.filter (fun chn -> List.exists test chn.rules) chains in
   List.fold_left (fun acc chn -> (List.filter test chn.rules) @ acc) [] referring_chains
@@ -23,7 +24,7 @@ let rec get_referring_rules chain chains =
 let map_chain_rules func chains =
   Map.map (fun chn -> { id = chn.id; rules = func chn.rules; comment = chn.comment }) chains
 
-let rec map_chain_rules_expand func chains : Ir.chain list =
+let map_chain_rules_expand func chains : Ir.chain list =
   let rec map_rules = function
     | (opers, target) :: xs ->
       (try
@@ -43,7 +44,7 @@ let merge_opers rle =
     | (Ports (dir, _), _), (Ports (dir', _), _) when dir = dir' -> true
     | (Protocol _, _), (Protocol _, _) -> true
     | (IcmpType _, _), (IcmpType _, _) -> true
-    | (IpSet (dir, _), _), (IpSet (dir', _), _) when dir = dir' -> true
+    | (Ip6Set (dir, _), _), (Ip6Set (dir', _), _) when dir = dir' -> true
     | (Zone (dir, _), _), (Zone (dir', _), _) when dir = dir' -> true
     | (TcpFlags _, _), (TcpFlags _, _) -> false
     | _ -> false
@@ -65,26 +66,23 @@ let merge_opers rle =
   in
 
   let merge_states = merge State.inter State.union State.diff in
-  let merge_ipsets = merge Ipset.inter Ipset.union Ipset.diff in
-  (* I cant event begin to describe how much this sucks *)
-  let merge_sets = merge Set.intersect Set.union Set.diff in
-  let merge_sets' = merge Set.intersect Set.union Set.diff in
-  let merge_sets'' = merge Set.intersect Set.union Set.diff in
+  let merge_ipsets = merge Ip6.inter Ip6.union Ip6.diff in
+  let merge_sets a b = merge Set.intersect Set.union Set.diff a b in
 
-  let rec merge_oper a b =
+  let merge_oper a b =
     match a, b with
       |  (Interface (dir, is), neg), (Interface (dir', is'), neg') when dir = dir' ->
         let (is'', neg'') = merge_sets (is, neg) (is', neg') in (Interface (dir, is''), neg'')
       | (State s, neg), (State s', neg') ->
         let (s'', neg'') = merge_states (s, neg) (s', neg') in (State s'', neg'')
       | (Ports (dir, ports), neg), (Ports (dir', ports'), neg') when dir = dir' ->
-        let (ports'', neg'') = merge_sets' (ports, neg) (ports', neg') in (Ports (dir, ports''), neg'')
+        let (ports'', neg'') = merge_sets (ports, neg) (ports', neg') in (Ports (dir, ports''), neg'')
       | (Protocol protos, neg), (Protocol protos', neg') ->
-        let (protos'', neg'') = merge_sets' (protos, neg) (protos', neg') in (Protocol (protos''), neg'')
+        let (protos'', neg'') = merge_sets (protos, neg) (protos', neg') in (Protocol (protos''), neg'')
       | (IcmpType types, neg), (IcmpType types', neg') ->
-        let (types'', neg'') = merge_sets'' (types, neg) (types', neg') in (IcmpType types'', neg'')
-      | (IpSet (dir, set), neg), (IpSet (dir', set'), neg') when dir = dir' ->
-        let (set'', neg'') = merge_ipsets (set, neg) (set', neg') in (IpSet (dir, set''), neg'')
+        let (types'', neg'') = merge_sets (types, neg) (types', neg') in (IcmpType types'', neg'')
+      | (Ip6Set (dir, set), neg), (Ip6Set (dir', set'), neg') when dir = dir' ->
+        let (set'', neg'') = merge_ipsets (set, neg) (set', neg') in (Ip6Set (dir, set''), neg'')
       | (Zone (dir, zones), neg), (Zone (dir', zones'), neg') when dir = dir' ->
         let (zones'', neg'') = merge_sets (zones, neg) (zones', neg') in (Zone (dir, zones''), neg'')
       | (cond, _), (cond', _) -> failwith ("is_sibling failed: " ^ string_of_int (enumerate_cond cond) ^ ", " ^ string_of_int (enumerate_cond cond'))
@@ -209,7 +207,7 @@ let remove_dublicate_chains chains =
 
 (** Move drops to the bottom. This allows improvement to dead code
     elimination, and helps reduce *)
-let rec reorder rules =
+let reorder rules =
   let can_reorder (cl1, act1) (cl2, act2) =
     act1 = act2 || not (is_satisfiable (merge_opers (cl1 @ cl2)))
   in
@@ -299,7 +297,7 @@ let remove_unsatisfiable_rules rules =
 let remove_true_rules rules =
   List.map (fun (conds, target) -> (List.filter (fun cond -> not (is_always true cond)) conds, target)) rules
 
-let rec count_rules chains =
+let count_rules chains =
   Map.fold (fun chn acc -> acc + List.length chn.rules) chains 0
 
 (** Determine if a chain should be linined. The algorithm is based on

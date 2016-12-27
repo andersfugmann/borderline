@@ -12,13 +12,13 @@ module type Ip_type =
     val field_size : int
     val to_string : int list -> string
   end
-(*
+
 module Ipv4 : Ip_type = struct
   let bits = 32
   let field_size = 8
   let to_string fields = String.concat "." (List.map (sprintf "%d") fields)
 end
-*)
+
 module Ipv6 : Ip_type = struct
   let bits = 128
   let field_size = 16
@@ -266,12 +266,13 @@ struct
 end
 
 (** Be a IPv6_set.. *)
-include Make(Ipv6)
+module Ip6 = Make(Ipv6)
 
 (** Test *)
 let test =
-  let r2br (a, b) = (big_int_of_int a, big_int_of_int b) in
+  let open Ip6 in
   let open OUnit2 in
+  let r2br (a, b) = (big_int_of_int a, big_int_of_int b) in
   "Generic ip numbers" >::: [
     "Simple" >:: ( fun _ ->
         let t = empty |> add (r2br (0, 127)) in

@@ -9,6 +9,7 @@
 
 open Batteries
 open Printf
+module Ip6 = Ipset.Ip6
 
 let zone_bits = 16
 let zone_mask = 1 lsl zone_bits - 1
@@ -107,14 +108,14 @@ let gen_cond neg =
     in
     sprintf "tcp %s%s %s" neg_str cond (str_of_set ports)
 
-  | Ir.IpSet (dir, ips) ->
+  | Ir.Ip6Set (dir, ips) ->
     let classifier = match dir with
       | Ir.SOURCE -> "saddr"
       | Ir.DESTINATION  -> "daddr"
     in
     let ips =
-      Ipset.to_ips ips
-      |> List.map (fun (ip, mask) -> sprintf "%s/%d" (Ipset.string_of_ip ip) mask)
+      Ip6.to_ips ips
+      |> List.map (fun (ip, mask) -> sprintf "%s/%d" (Ip6.string_of_ip ip) mask)
       |> String.concat ", "
     in
     sprintf "ip6 %s %s{ %s }" classifier neg_str ips
@@ -122,7 +123,7 @@ let gen_cond neg =
     sprintf "meta protocol %s%s" neg_str (str_of_set protocols)
 
   | Ir.IcmpType types ->
-    sprintf "icmpv6 type %s%s" neg_str (str_of_set types)
+    sprintf "ip6 nexthdr icmpv6 icmpv6 type %s%s" neg_str (str_of_set types)
   | Ir.Mark (value, mask) ->
     sprintf "meta mark and 0x%08x %s0x%08x" mask neg_str value
   | Ir.TcpFlags (flags, mask) when neg = false ->
@@ -184,4 +185,4 @@ let emit_chains (chains : (Ir.chain_id, Ir.chain) Map.t) : string list =
   in
   (* Dump zone mapping *)
   Hashtbl.iter (fun zone id -> printf "#zone %s -> %d\n" zone id) zones;
-  [ "table ip6 filter {" ] @ rules @ [ "}" ]
+  [ "table inet filter {" ] @ rules @ [ "}" ]

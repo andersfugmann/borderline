@@ -1,6 +1,7 @@
 (** Type and utility function for the frontend *)
 open !Batteries
 open Common
+module Ip6 = Ipset.Ip6
 
 type prefix = string
 type id = string * Lexing.position
@@ -16,7 +17,7 @@ and node = Import of id
          | Process of processtype * rule_stm list * policytype list
 
 and zone_stm = Interface of id
-             | Network of Ipset.ip
+             | Network of Ip6.ip
              | ZoneRules of processtype * rule_stm list * policytype list
 
 and filter_stm = Address of data list
@@ -35,7 +36,7 @@ and rule_stm = Filter of Ir.direction * filter_stm * Ir.pol
 
 and data = Number of int * Lexing.position
          | Id of id
-         | Ip of Ipset.ip * Lexing.position
+         | Ip of Ip6.ip * Lexing.position
 
 let node_type id = function
   | Zone _ -> 1 = id

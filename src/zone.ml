@@ -1,5 +1,6 @@
 open Batteries
 open Common
+module Ip6 = Ipset.Ip6
 module F = Frontend
 
 
@@ -37,7 +38,7 @@ let rec filter_zonerules table = function
 (** Return a chain that will mark the zone based on direction *)
 let create_zone_chain direction (id, nodes) =
   let create_network_rule chain ips =
-    ([(Ir.IpSet(direction, Ipset.from_ips ips), false)], Ir.Jump chain.Ir.id)
+    ([(Ir.Ip6Set(direction, Ip6.from_ips ips), false)], Ir.Jump chain.Ir.id)
   in
   let create_interface_rule chain interface =
     ([(Ir.Interface(direction, Set.singleton interface), false)], Ir.Jump chain.Ir.id)

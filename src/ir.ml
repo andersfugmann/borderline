@@ -2,6 +2,7 @@
 open Batteries
 
 open Common
+module Ip6 = Ipset.Ip6
 
 type id = string (* New addition *)
 type zone = id
@@ -27,7 +28,7 @@ type condition = Interface of direction * id Set.t
                | Zone of direction * zone Set.t
                | State of State.t
                | Ports of direction * int Set.t
-               | IpSet of direction * Ipset.t
+               | Ip6Set of direction * Ip6.t
                | Protocol of int Set.t
                | IcmpType of icmp_type Set.t
                | Mark of int * int
@@ -50,7 +51,7 @@ type chain = { id: chain_id; rules : oper list; comment: string; }
 let eq_cond (x, n) (y, m) =
   n = m && (
     match x, y with
-      | IpSet (_d, r), IpSet (_d', r') -> Ipset.equal r r'
+      | Ip6Set (_d, r), Ip6Set (_d', r') -> Ip6.equal r r'
       | Zone(dir, ids), Zone (dir', ids') -> dir = dir' && Set.equal ids ids'
       | Interface(dir, ids), Interface(dir', ids') -> dir = dir' && Set.equal ids ids'
       | x, y -> x = y
@@ -72,7 +73,7 @@ let get_dir = function
   | Zone (direction, _) -> Some direction
   | State _ -> None
   | Ports (direction, _) -> Some direction
-  | IpSet (direction, _) -> Some direction
+  | Ip6Set (direction, _) -> Some direction
   | Protocol _ -> None
   | IcmpType _ -> None
   | Mark _ -> None
@@ -83,7 +84,7 @@ let enumerate_cond = function
   | Zone _ -> 2
   | State _ -> 3
   | Ports _ -> 4
-  | IpSet _ -> 5
+  | Ip6Set _ -> 5
   | Protocol _ -> 6
   | IcmpType _ -> 7
   | TcpFlags _ -> 8
@@ -110,7 +111,7 @@ let is_always value = function
   | Zone _, _
   | State _, _
   | Ports _, _
-  | IpSet _, _
+  | Ip6Set _, _
   | Protocol _, _
   | IcmpType _, _
   | TcpFlags _, _
