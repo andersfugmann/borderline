@@ -37,21 +37,6 @@ let map_chain_rules_expand func chains : Ir.chain list =
   List.map (fun chn -> { id = chn.id; rules = map_rules chn.rules; comment = chn.comment } ) chains
 
 let merge_opers rle =
-  (* A bit dangerous, as the compiler wont warn when new types are added. *)
-  let is_sibling a b =
-    match (a, b) with
-    | (Interface (dir, _), _), (Interface (dir', _), _) -> dir = dir'
-    | (State _, _), (State _, _) -> true
-    | (Ports (dir, pt, _), _), (Ports (dir', pt', _), _) -> dir = dir' && pt = pt'
-    | (Protocol (l, _), _), (Protocol (l', _), _) -> l = l'
-    | (Icmp6 _, _), (Icmp6 _, _) -> true
-    | (Icmp4 _, _), (Icmp4 _, _) -> true
-    | (Ip6Set (dir, _), _), (Ip6Set (dir', _), _) -> dir = dir'
-    | (Ip4Set (dir, _), _), (Ip4Set (dir', _), _) -> dir = dir'
-    | (Zone (dir, _), _), (Zone (dir', _), _) when dir = dir' -> true
-    | (TcpFlags _, neg), (TcpFlags _, neg') -> neg = neg' && false
-    | _ -> false
-  in
   (* !A => !B => X   =>  !(A | B) => X
 
      A => B => X     => A U B => X
@@ -76,30 +61,42 @@ let merge_opers rle =
   let merge_oper a b =
     match a, b with
       |  (Interface (dir, is), neg), (Interface (dir', is'), neg') when dir = dir' ->
-        let (is'', neg'') = merge_sets (is, neg) (is', neg') in (Interface (dir, is''), neg'')
+          let (is'', neg'') = merge_sets (is, neg) (is', neg') in
+          (Interface (dir, is''), neg'') |> Option.some
       | (State s, neg), (State s', neg') ->
-        let (s'', neg'') = merge_states (s, neg) (s', neg') in (State s'', neg'')
+          let (s'', neg'') = merge_states (s, neg) (s', neg') in
+          (State s'', neg'') |> Option.some
       | (Ports (dir, pt, ports), neg), (Ports (dir', pt', ports'), neg') when dir = dir' && pt = pt' ->
-        let (ports'', neg'') = merge_sets (ports, neg) (ports', neg') in (Ports (dir, pt, ports''), neg'')
+          let (ports'', neg'') = merge_sets (ports, neg) (ports', neg') in
+          (Ports (dir, pt, ports''), neg'') |> Option.some
       | (Protocol (l, p), neg), (Protocol (l', p'), neg') when l = l' ->
-        let (p'', neg'') = merge_sets (p, neg) (p', neg') in (Protocol (l, p''), neg'')
-      | (TcpFlags f, neg), (TcpFlags f', neg') when neg = neg' ->
-        let (f'', neg'') = merge_sets (f, neg) (f', neg') in (TcpFlags f'', neg'')
+          let (p'', neg'') = merge_sets (p, neg) (p', neg') in
+          (Protocol (l, p''), neg'') |> Option.some
       | (Icmp6 types, neg), (Icmp6 types', neg') ->
-        let (types'', neg'') = merge_sets (types, neg) (types', neg') in (Icmp6 types'', neg'')
+          let (types'', neg'') = merge_sets (types, neg) (types', neg') in
+          (Icmp6 types'', neg'') |> Option.some
       | (Icmp4 types, neg), (Icmp4 types', neg') ->
-        let (types'', neg'') = merge_sets (types, neg) (types', neg') in (Icmp4 types'', neg'')
+          let (types'', neg'') = merge_sets (types, neg) (types', neg') in
+          (Icmp4 types'', neg'') |> Option.some
       | (Ip6Set (dir, set), neg), (Ip6Set (dir', set'), neg') when dir = dir' ->
-        let (set'', neg'') = merge_ip6sets (set, neg) (set', neg') in (Ip6Set (dir, set''), neg'')
+          let (set'', neg'') = merge_ip6sets (set, neg) (set', neg') in
+          (Ip6Set (dir, set''), neg'') |> Option.some
       | (Ip4Set (dir, set), neg), (Ip4Set (dir', set'), neg') when dir = dir' ->
-        let (set'', neg'') = merge_ip4sets (set, neg) (set', neg') in (Ip6Set (dir, set''), neg'')
+          let (set'', neg'') = merge_ip4sets (set, neg) (set', neg') in
+          (Ip6Set (dir, set''), neg'') |> Option.some
       | (Zone (dir, zones), neg), (Zone (dir', zones'), neg') when dir = dir' ->
-        let (zones'', neg'') = merge_sets (zones, neg) (zones', neg') in (Zone (dir, zones''), neg'')
-      | (cond, _), (cond', _) -> failwith ("is_sibling failed: " ^ string_of_int (enumerate_cond cond) ^ ", " ^ string_of_int (enumerate_cond cond'))
+          let (zones'', neg'') = merge_sets (zones, neg) (zones', neg') in
+          (Zone (dir, zones''), neg'') |> Option.some
+      | (_cond, _), (_cond', _) -> None
   in
   let rec merge_siblings acc = function
-    | x :: xs -> let siblings, rest = List.partition (is_sibling x) xs in
-      merge_siblings ( (List.fold_left merge_oper x siblings) :: acc ) rest
+    | x :: xs ->
+        let (x', xs') = List.fold_left (
+            fun (m, rest) op -> match merge_oper m op with
+              | Some m' -> (m', rest)
+              | None -> (m, op :: rest)
+          ) (x, []) xs in
+        merge_siblings (x' :: acc) xs'
     | [] -> acc
   in
   merge_siblings [] rle
