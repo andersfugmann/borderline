@@ -1,10 +1,4 @@
 (** Output a nft sctipt.
-    nft is very close to our language, and should be easy to write.
-
-    This script will only output ip6 rules - But will in time be
-    functorized to handle ipv4 also.
-
-    This module obsoletes ip6tables module
 *)
 
 open Batteries
@@ -42,12 +36,12 @@ let chain_premable chain =
   let name = chain_name chain in
   match chain with
   | Ir.Builtin _ ->
-    [ sprintf "chain %s {" name;
-      sprintf "  type filter hook %s priority 0;" name;
-      sprintf "  policy drop;" ]
+      [ sprintf "chain %s {" name;
+        sprintf "  type filter hook %s priority 0;" name;
+        sprintf "  policy drop;" ]
   | Ir.Temporary _
   | Ir.Named _ ->
-    [ sprintf "chain %s {" name ]
+      [ sprintf "chain %s {" name ]
 
 let gen_cond neg cond =
   let neg_str = match neg with
@@ -56,77 +50,77 @@ let gen_cond neg cond =
   in
   match cond with
   | Ir.Interface (dir, zones) ->
-    let zones = sprintf "{ %s }" (Set.to_list zones |> String.concat ", ") in
-    let classifier = match dir with
-      | Ir.SOURCE -> "iif"
-      | Ir.DESTINATION -> "oif"
-    in
-    sprintf "meta %s %s%s" classifier neg_str zones
+      let zones = sprintf "{ %s }" (Set.to_list zones |> String.concat ", ") in
+      let classifier = match dir with
+        | Ir.SOURCE -> "iif"
+        | Ir.DESTINATION -> "oif"
+      in
+      sprintf "meta %s %s%s" classifier neg_str zones
 
   | Ir.Zone (dir, zones) ->
-    let shift = match dir with
-      | Ir.SOURCE -> 0
-      | Ir.DESTINATION -> zone_bits
-    in
-    let mask = Set.fold (fun zone acc ->
-        let zone_id = get_zone_id zone in
-        let zone_val = zone_id lsl shift in
-        acc + zone_val) zones 0
-    in
-    let neg_str = match neg with true -> '=' | false -> '>' in
-    sprintf "meta mark & 0x%08x %c 0x0" mask neg_str
+      let shift = match dir with
+        | Ir.SOURCE -> 0
+        | Ir.DESTINATION -> zone_bits
+      in
+      let mask = Set.fold (fun zone acc ->
+          let zone_id = get_zone_id zone in
+          let zone_val = zone_id lsl shift in
+          acc + zone_val) zones 0
+      in
+      let neg_str = match neg with true -> "=" | false -> "!=" in
+      sprintf "meta mark & 0x%08x %s 0x0" mask neg_str
 
   | Ir.State states ->
-    let string_of_state state = match state with
-      | State.NEW -> "new"
-      | State.ESTABLISHED -> "established"
-      | State.RELATED -> "related"
-      | State.INVALID -> "invalid"
-    in
-    let states =
-      State.to_list states
-      |> List.map string_of_state
-      |> String.concat ", "
-    in
-    sprintf "ct state %s{ %s }" neg_str states
+      let string_of_state state = match state with
+        | State.NEW -> "new"
+        | State.ESTABLISHED -> "established"
+        | State.RELATED -> "related"
+        | State.INVALID -> "invalid"
+      in
+      let states =
+        State.to_list states
+        |> List.map string_of_state
+        |> String.concat ", "
+      in
+      sprintf "ct state %s{ %s }" neg_str states
 
   | Ir.Ports (dir, port_type, ports) ->
-    let cond = match dir with
-      | Ir.SOURCE -> "sport"
-      | Ir.DESTINATION -> "dport"
-    in
-    let classifier = match port_type with
-      | Ir.Tcp -> "tcp"
-      | Ir.Udp -> "udp"
-    in
-    sprintf "%s %s%s %s" classifier neg_str cond (str_of_set ports)
+      let cond = match dir with
+        | Ir.SOURCE -> "sport"
+        | Ir.DESTINATION -> "dport"
+      in
+      let classifier = match port_type with
+        | Ir.Tcp -> "tcp"
+        | Ir.Udp -> "udp"
+      in
+      sprintf "%s %s%s %s" classifier neg_str cond (str_of_set ports)
 
   | Ir.Ip6Set (dir, ips) ->
       (* Should define a true ip set. these sets can become very large. *)
 
-    let classifier = match dir with
-      | Ir.SOURCE -> "saddr"
-      | Ir.DESTINATION  -> "daddr"
-    in
-    let ips =
-      Ip6.to_ips ips
-      |> List.map (fun (ip, mask) -> sprintf "%s/%d" (Ip6.string_of_ip ip) mask)
-      |> String.concat ", "
-    in
-    sprintf "ip6 %s %s{ %s }" classifier neg_str ips
+      let classifier = match dir with
+        | Ir.SOURCE -> "saddr"
+        | Ir.DESTINATION  -> "daddr"
+      in
+      let ips =
+        Ip6.to_ips ips
+        |> List.map (fun (ip, mask) -> sprintf "%s/%d" (Ip6.string_of_ip ip) mask)
+        |> String.concat ", "
+      in
+      sprintf "ip6 %s %s{ %s }" classifier neg_str ips
   | Ir.Ip4Set (dir, ips) ->
-    let classifier = match dir with
-      | Ir.SOURCE -> "saddr"
-      | Ir.DESTINATION  -> "daddr"
-    in
-    let ips =
-      Ip4.to_ips ips
-      |> List.map (fun (ip, mask) -> sprintf "%s/%d" (Ip4.string_of_ip ip) mask)
-      |> String.concat ", "
-    in
-    sprintf "ip %s %s{ %s }" classifier neg_str ips
+      let classifier = match dir with
+        | Ir.SOURCE -> "saddr"
+        | Ir.DESTINATION  -> "daddr"
+      in
+      let ips =
+        Ip4.to_ips ips
+        |> List.map (fun (ip, mask) -> sprintf "%s/%d" (Ip4.string_of_ip ip) mask)
+        |> String.concat ", "
+      in
+      sprintf "ip %s %s{ %s }" classifier neg_str ips
   | Ir.Protocol protocols ->
-    sprintf "meta protocol %s%s" neg_str (str_of_set protocols)
+      sprintf "meta protocol %s%s" neg_str (str_of_set protocols) (* TODO: This should be a closed set - not integers *)
 
   | Ir.Icmp6Type types ->
       let set = Set.to_list types
@@ -136,7 +130,7 @@ let gen_cond neg cond =
       in
       sprintf "ip6 nexthdr icmpv6 icmpv6 type %s%s" neg_str set
   | Ir.Mark (value, mask) ->
-    sprintf "meta mark and 0x%08x %s0x%08x" mask neg_str value
+      sprintf "meta mark and 0x%08x %s0x%08x" mask neg_str value
   | Ir.TcpFlags flags ->
       let set = Set.to_list flags
                 |> List.map Ir.string_of_tcpflag
@@ -170,7 +164,7 @@ let gen_target = function
 
 let gen_rule (conds, target) =
   let conds = List.map (fun (op, neg) -> gen_cond neg op) conds
-            |> String.concat " "
+              |> String.concat " "
   in
   let target = gen_target target in
   sprintf "%s %s;" conds target
