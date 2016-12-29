@@ -44,6 +44,7 @@ tests: _build/borderline.run
 
 test: build
     make -C configuration
+    $(RM) configuration/zones/wlan* configuration/zones/eth* configuration/zones/ext*
     _build/bl_configure.opt --output configuration/zones --force
     echo "flush ruleset" > test.nft
     _build/borderline.opt configuration/borderline.bl | tee -a test.nft

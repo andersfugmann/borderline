@@ -1,7 +1,0 @@
-# Tcp flag definitions
-define SYN = 1
-define ACK = 2
-define FIN = 3
-define RST = 4
-define URG = 5
-define PSH = 6

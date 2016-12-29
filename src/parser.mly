@@ -32,7 +32,7 @@ let parse_error pos s =
 %token <string * Lexing.position> QUOTE
 %token <string * Lexing.position> IDENT
 
-%token LBRACE RBRACE COMMA SLASH END
+%token LBRACE RBRACE COMMA END
 
 %start main
 %type <Frontend.node list> main
@@ -46,10 +46,10 @@ main:
 statement:
   | IMPORT s=string                                    { F.Import(s) }
   | ZONE id=id LBRACE stms=separated_list_opt(SEMI, zone_stm) RBRACE { F.Zone(id, stms) }
-  | DEFINE id=id EQ POLICY policies=policy_seq         { F.DefinePolicy(id, policies) }
-  | DEFINE id=id EQ rules=rule_seq                     { F.DefineStms(id, rules) }
-  | DEFINE id=id EQ rule=rule_stm                      { F.DefineStms(id, [ rule ] ) }
-  | DEFINE id=id EQ data=data_list                     { F.DefineList(id, data) }
+  | DEFINE id=id_quote EQ POLICY policies=policy_seq         { F.DefinePolicy(id, policies) }
+  | DEFINE id=id_quote EQ rules=rule_seq                     { F.DefineStms(id, rules) }
+  | DEFINE id=id_quote EQ rule=rule_stm                      { F.DefineStms(id, [ rule ] ) }
+  | DEFINE id=id_quote EQ data=data_list                     { F.DefineList(id, data) }
   | PROCESS t=process_type r=rule_seq POLICY p=policy_seq { F.Process (t,r,p) }
 
 rule_seq:
@@ -82,7 +82,7 @@ rule_stm:
   | STATE o=oper states=separated_list(COMMA, state)   { F.State (states, o) }
   | PROTOCOL o=oper d=data_list                        { F.Protocol (d, o) }
   | ICMP6TYPE o=oper d=data_list                       { F.Icmp6Type (d, o) }
-  | TCPFLAGS o=oper f=data_list SLASH d=data_list      { F.TcpFlags ((f, d), o) }
+  | TCPFLAGS o=oper f=data_list                        { F.TcpFlags (f, o) }
 
 (* A policy can be a single policy, or a list of policies
    enclosed in curly braces seperated by semicolon. *)
@@ -121,7 +121,7 @@ oper:
   | NE                                                 { true }
   | error                                              { parse_error $startpos "Expected = or '!='" }
 
-state:
+state: (* These should not be known by the frontend. *)
   | NEW                                                { State.NEW }
   | ESTABLISHED                                        { State.ESTABLISHED }
   | RELATED                                            { State.RELATED }
@@ -139,6 +139,7 @@ data:
   | id=id                                              { F.Id id }
   | ip=IPv6                                            { let i, m, pos = ip in F.Ip6 ((Ip6.ip_of_string i, m), pos) }
   | ip=IPv4                                            { let i, m, pos = ip in F.Ip4 ((Ip4.ip_of_string i, m), pos) }
+  | s=QUOTE                                            { let s, pos = s in F.String (s, pos) }
 
 separated_list_opt(SEP, T):
   | { [] }
@@ -146,6 +147,10 @@ separated_list_opt(SEP, T):
   | t = T SEP ts = separated_list_opt(SEP, T) { t :: ts }
 
 id:
-  | s = QUOTE { s }
   | i = IDENT { i }
+  | error     { parse_error $startpos "Identifier expected" }
+
+id_quote:
+  | i = IDENT { i }
+  | q = QUOTE { q }
   | error     { parse_error $startpos "Identifier or quoted string expected" }

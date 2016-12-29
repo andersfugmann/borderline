@@ -12,7 +12,7 @@ open Printf
 module Ip6 = Ipset.Ip6
 module Ip4 = Ipset.Ip4
 
-let zone_bits = 16
+let zone_bits = 8 (* 256 zones ought to be enough *)
 let zone_mask = 1 lsl zone_bits - 1
 
 let str_of_set s =
@@ -20,15 +20,6 @@ let str_of_set s =
   |> List.map string_of_int
   |> String.concat ", "
   |> sprintf "{ %s }"
-
-let string_of_flag = function
-  | 1 -> "syn" (* Numbers really? *)
-  | 2 -> "ack"
-  | 3 -> "fin"
-  | 4 -> "rst"
-  | 5 -> "urg"
-  | 6 -> "psh"
-  | flag -> failwith "Unknown tcp flag: " ^ (string_of_int flag)
 
 let zones = Hashtbl.create 100
 let get_zone_id zone =
@@ -77,16 +68,14 @@ let gen_cond neg cond =
       | Ir.SOURCE -> 0
       | Ir.DESTINATION -> zone_bits
     in
-    let zone_ids =
-      Set.to_list zones
-      |> List.map get_zone_id
-      |> List.map (fun i -> i lsl shift)
-      |> List.map (sprintf "0x%08x")
-      |> String.concat ", "
-      |> sprintf "{ %s }"
+    let mask = Set.fold (fun zone acc ->
+        let zone_id = get_zone_id zone in
+        let zone_val = zone_id lsl shift in
+        acc + zone_val) zones 0
     in
-    let mask = zone_mask lsl shift in
-    sprintf "meta mark & 0x%08x %s%s" mask neg_str zone_ids
+    let neg_str = match neg with true -> '=' | false -> '>' in
+    sprintf "meta mark & 0x%08x %c 0x0" mask neg_str
+
   | Ir.State states ->
     let string_of_state state = match state with
       | State.NEW -> "new"
@@ -113,6 +102,8 @@ let gen_cond neg cond =
     sprintf "%s %s%s %s" classifier neg_str cond (str_of_set ports)
 
   | Ir.Ip6Set (dir, ips) ->
+      (* Should define a true ip set. these sets can become very large. *)
+
     let classifier = match dir with
       | Ir.SOURCE -> "saddr"
       | Ir.DESTINATION  -> "daddr"
@@ -138,26 +129,21 @@ let gen_cond neg cond =
     sprintf "meta protocol %s%s" neg_str (str_of_set protocols)
 
   | Ir.Icmp6Type types ->
-    sprintf "ip6 nexthdr icmpv6 icmpv6 type %s%s" neg_str (str_of_set types)
+      let set = Set.to_list types
+                |> List.map Ir.string_of_icmp_type
+                |> String.concat ", "
+                |> sprintf "{ %s }"
+      in
+      sprintf "ip6 nexthdr icmpv6 icmpv6 type %s%s" neg_str set
   | Ir.Mark (value, mask) ->
     sprintf "meta mark and 0x%08x %s0x%08x" mask neg_str value
-  | Ir.TcpFlags (flags, mask) when neg = false ->
-      let not_set = List.filter (fun f -> not (List.mem f flags)) mask in
-      let set = flags in
-
-      let to_string neg f =
-        let neg_str = if neg then "!" else "" in
-        sprintf "tcp flags %s= %s" neg_str (string_of_flag f)
+  | Ir.TcpFlags flags ->
+      let set = Set.to_list flags
+                |> List.map Ir.string_of_tcpflag
+                |> String.concat ", "
+                |> sprintf "{ %s }"
       in
-      List.map (to_string false) set @
-      List.map (to_string true) not_set |>
-      String.concat " "
-  | Ir.TcpFlags (flags, _mask) (* when neg = true *) ->
-      let to_string f =
-        sprintf "tcp flags != %s" (string_of_flag f)
-      in
-      (* TODO: this is wrong. We need to add a temporary table to jump through. Maybe sideeffect? *)
-      (List.map to_string flags |> String.concat " ")
+      sprintf "tcp flags %s%s" neg_str set
 
 let reject_to_string = function
   | Ir.HostUnreachable -> "reject with icmpx type host-unreachable"

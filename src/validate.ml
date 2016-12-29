@@ -63,7 +63,7 @@ let expand nodes =
     end with
     | _ -> parse_error ~id ~pos "Reference to unknown id"
   in
-  let expand_list (id, pos) =
+  let expand (id, pos) =
     try begin match Map.find id defines with
       | F.DefineList (_id', x) -> x
       | _ -> parse_error ~id ~pos "Reference to Id of wrong type"
@@ -83,45 +83,37 @@ let expand nodes =
   (* As part of expanding the rules, a set of function to expand a
      list into more concreete data (such as list of ints, or list of
      addresses) are defined. *)
+  let rec expand_list seen = function
+    | F.Id id :: xs -> (expand_list (mark_seen (fst id) seen) (expand id)) @ (expand_list seen xs)
+    | x :: xs -> x :: expand_list seen xs
+    | [] -> []
+  in
 
-  let rec expand_int_list seen = function
-    | F.Id id :: xs -> (expand_int_list (mark_seen (fst id) seen) (expand_list id)) @ (expand_int_list seen xs)
-    | F.Number _ as n :: xs -> n :: expand_int_list seen xs
-    | F.Ip6 (_, pos) :: _ -> parse_error ~pos "Found ipv6 address, expected integer"
-    | F.Ip4 (_, pos) :: _ -> parse_error ~pos "Found ipv4 address, expected integer"
-    | [] -> []
-  in
-  let rec expand_address_list seen = function
-    | F.Id id :: xs -> (expand_address_list (mark_seen (fst id) seen) (expand_list id)) @ (expand_address_list seen xs)
-    | F.Number (_, pos) :: _ -> parse_error ~pos "Find integer, expected ip address"
-    | F.Ip6 _ as ip :: xs -> ip :: expand_address_list seen xs
-    | F.Ip4 _ as ip :: xs -> ip :: expand_address_list seen xs
-    | [] -> []
-  in
   let rec expand_zone_list seen = function
     | (F.Id (id, _)) as x :: xs when BatSet.mem id zones -> x :: expand_zone_list seen xs
-    | F.Id id :: xs -> (expand_zone_list (mark_seen (fst id) seen) (expand_list id)) @ (expand_zone_list seen xs)
-    | F.Number (_, pos) :: _ -> parse_error ~pos "Find integer, expected ip address"
-    | F.Ip6 (_, pos) :: _ -> parse_error ~pos "Found ipv6 address, expected integer"
-    | F.Ip4 (_, pos) :: _ -> parse_error ~pos "Found ipv4 address, expected integer"
+    | F.Id id :: xs -> (expand_zone_list (mark_seen (fst id) seen) (expand id)) @ (expand_zone_list seen xs)
+    | F.Number (_, pos) :: _ -> parse_error ~pos "Find integer, expected zone name"
+    | F.Ip6 (_, pos) :: _ -> parse_error ~pos "Found ipv6 address, expected zone name"
+    | F.Ip4 (_, pos) :: _ -> parse_error ~pos "Found ipv4 address, expected zone name"
+    | F.String (_, pos) :: _ -> parse_error ~pos "Found string, expected zone name"
     | [] -> []
   in
   let rec expand_policy_list seen = function
-  F.Ref id :: xs -> (expand_policy_list (mark_seen (fst id) seen) (expand_policy id)) @ (expand_policy_list seen xs)
+    | F.Ref id :: xs -> (expand_policy_list (mark_seen (fst id) seen) (expand_policy id)) @ (expand_policy_list seen xs)
     | x :: xs -> x :: expand_policy_list seen xs
     | [] -> []
   in
   let rec expand_rule_list seen rules =
     let expand_rule = function
       | F.Reference _ -> assert false
-      | F.Filter (dir, F.Ports (port_type, ports), pol) -> F.Filter (dir, F.Ports (port_type, expand_int_list seen ports), pol)
+      | F.Filter (dir, F.Ports (port_type, ports), pol) -> F.Filter (dir, F.Ports (port_type, expand_list seen ports), pol)
       | F.Filter (dir, F.FZone zones, pol) -> F.Filter (dir, F.FZone (expand_zone_list seen zones), pol)
-      | F.Filter (dir, F.Address addr_list, pol) -> F.Filter (dir, F.Address (expand_address_list seen addr_list), pol)
-      | F.Protocol (protos, pol) -> F.Protocol (expand_int_list seen protos, pol)
-      | F.Icmp6Type (types, pol) -> F.Icmp6Type (expand_int_list seen types, pol)
+      | F.Filter (dir, F.Address addr_list, pol) -> F.Filter (dir, F.Address (expand_list seen addr_list), pol)
+      | F.Protocol (protos, pol) -> F.Protocol (expand_list seen protos, pol)
+      | F.Icmp6Type (types, pol) -> F.Icmp6Type (expand_list seen types, pol)
       | F.State _ as state -> state
       | F.Rule (rls, pols) -> F.Rule (expand_rule_list seen rls, expand_policy_list seen pols)
-      | F.TcpFlags ((flags, mask), pol) -> F.TcpFlags ((expand_int_list seen flags, expand_int_list seen mask), pol)
+      | F.TcpFlags (flags, pol) -> F.TcpFlags (expand_list seen flags, pol)
     in
     match rules with
     | F.Reference id :: xs -> (expand_rule_list (mark_seen (fst id) seen) (expand_rules id)) @ (expand_rule_list seen xs)

@@ -37,13 +37,14 @@ and rule_stm = Filter of Ir.direction * filter_stm * Ir.pol
              | Icmp6Type of data list * Ir.pol
              | Rule of rule_stm list * policytype list
              | Reference of id
-             | TcpFlags of ( data list * data list ) * Ir.pol
+             | TcpFlags of data list * Ir.pol
 
 
 and data = Number of int * Lexing.position
          | Id of id
          | Ip6 of Ip6.ip * Lexing.position
          | Ip4 of Ip4.ip * Lexing.position
+         | String of string * Lexing.position
 
 let node_type id = function
   | Zone _ -> 1 = id

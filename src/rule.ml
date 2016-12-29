@@ -25,29 +25,42 @@ let list2ints l =
   List.fold_left (fun acc ->
       function
       | F.Number (nr, _) -> Set.add nr acc
-      | F.Ip4 (_, pos) -> parse_error ~pos "Unexpected ipv4 in int list"
-      | F.Ip6 (_, pos) -> parse_error ~pos "Unexpected ipv6 in int list"
-      | F.Id (id, pos) -> parse_error ~id ~pos "No all ints have been expanded")
-    Set.empty l
+      | F.String (_, pos) -> parse_error ~pos "Found string, expected integer while parsing list item"
+      | F.Ip4 (_, pos) -> parse_error ~pos "Found ipv4 address, expected integer while parsing list item"
+      | F.Ip6 (_, pos) -> parse_error ~pos "Found ipv6 address, expected integer while parsing list item"
+      | F.Id _ -> failwith "No all ids have been expanded correctly"
+    ) Set.empty l
 
 let list2ip l =
   List.fold_left (fun (ip4, ip6) -> function
-      | F.Number (_, pos) -> parse_error ~pos "Unexpected int in ip list"
+      | F.Number (_, pos) -> parse_error ~pos "Found integer, expected ip address while parsing list item"
+      | F.String (_, pos) -> parse_error ~pos "Found string, expected ip address while parsing list item"
       | F.Ip6 (ip, _) -> ip4, Ip6.add (Ip6.to_elt ip) ip6
       | F.Ip4 (ip, _) -> Ip4.add (Ip4.to_elt ip) ip4, ip6
-      | F.Id (id, pos) -> parse_error ~id ~pos "No all ints have been expanded")
-    (Ip4.empty, Ip6.empty) l
+      | F.Id _ -> failwith "No all ids have been expanded correctly"
+    ) (Ip4.empty, Ip6.empty) l
 
 let list2ids l =
   List.fold_left (fun acc ->
       function
-      | F.Number (_, pos) -> parse_error ~pos "Unexpected int in id list"
-      | F.Ip6 (_, pos) -> parse_error ~pos "Unexpected ipv6 in id list"
-      | F.Ip4 (_, pos) -> parse_error ~pos "Unexpected ipv4 in id list"
-      | F.Id (id, _) -> Set.add id acc)
-    Set.empty l
+      | F.Number (_, pos) -> parse_error ~pos "Found integer, expected id while parsing list item"
+      | F.String (_, pos) -> parse_error ~pos "Found string, expected id while parsing list item"
+      | F.Ip4 (_, pos) -> parse_error ~pos "Found ipv4 address, expected id while parsing list item"
+      | F.Ip6 (_, pos) -> parse_error ~pos "Found ipv6 address, expected id while parsing list item"
+      | F.Id (id, _) -> Set.add id acc
+    ) Set.empty l
 
-let rec process_rule _table (rules, targets') =
+let list2string l =
+  List.fold_left (fun acc ->
+      function
+      | F.Number (_, pos) -> parse_error ~pos "Found integer, expected string while parsing list item"
+      | F.String (s, pos) -> Set.add (s, pos) acc
+      | F.Ip4 (_, pos) -> parse_error ~pos "Found ipv4 address, expected string while parsing list item"
+      | F.Ip6 (_, pos) -> parse_error ~pos "Found ipv6 address, expected string while parsing list item"
+      | F.Id _ -> failwith "No all ids have been expanded correctly"
+    ) Set.empty l
+
+let process_rule _table (rules, targets') =
   (* Generate the result of a rules that does not depend on the
      packet. If the packet must match some element in an empty list,
      the filter can never be satisfied. *)
@@ -78,14 +91,18 @@ let rec process_rule _table (rules, targets') =
             chain.Ir.rules) chain.Ir.comment
     | F.Filter(dir, F.FZone(ids), neg) :: xs -> gen_op targets ((Ir.Zone(dir, list2ids ids), neg) :: acc) xs
     | F.Protocol (protos, neg) :: xs -> gen_op targets ((Ir.Protocol(list2ints protos), neg) :: acc) xs
-    | F.Icmp6Type (types, false) :: xs -> gen_op targets ((Ir.Icmp6Type(list2ints types), false) :: acc) xs
+    | F.Icmp6Type (types, false) :: xs ->
+        let types = list2string types |> Set.map Ir.icmp_type_of_string in
+        gen_op targets ((Ir.Icmp6Type types, false) :: acc) xs
     | F.Icmp6Type (types, true) :: xs ->
+        let types = list2string types |> Set.map Ir.icmp_type_of_string in
         let chain = gen_op targets [] xs in
-        let chain = Chain.replace chain.Ir.id (([(Ir.Icmp6Type(list2ints types), false)], Ir.Return) :: chain.Ir.rules) chain.Ir.comment
+        let chain = Chain.replace chain.Ir.id (([(Ir.Icmp6Type types, false)], Ir.Return) :: chain.Ir.rules) chain.Ir.comment
         in
         Chain.create [ (acc, Ir.Jump chain.Ir.id) ] "Rule"
-    | F.TcpFlags((flags, mask), neg) :: xs ->
-      gen_op targets ((Ir.TcpFlags(list2ints flags |> Set.to_list, list2ints mask |> Set.to_list), neg) :: acc) xs
+    | F.TcpFlags(flags, neg) :: xs ->
+        let flags = list2string flags |> Set.map Ir.tcpflag_of_string in
+      gen_op targets ((Ir.TcpFlags flags, neg) :: acc) xs
     | F.Rule(rls, tgs) :: xs ->
       let rule_chain = gen_op tgs [] rls in
       let cont = gen_op targets [] xs in

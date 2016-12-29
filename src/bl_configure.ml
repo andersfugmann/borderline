@@ -52,7 +52,7 @@ let write_zone filename interface networks =
   print_endline ("Writing file: " ^ filename);
   let ch_out = open_out filename in
     (match is_external_zone networks with
-      |  true -> write_external_zone ch_out interface networks
+      | true  -> write_external_zone ch_out interface networks
       | false -> write_internal_zone ch_out interface networks
     ); close_out ch_out
 

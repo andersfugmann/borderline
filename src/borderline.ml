@@ -27,6 +27,7 @@ let _ =
       Chain.optimize Optimize.optimize;
 
       let lines = Chain.emit Nf6tables.emit_chains in
-      Printf.printf "%s\n#Lines: %d\n" (String.concat "\n" lines) (List.length lines)
+      List.iter (fun l -> print_endline l) lines;
+      Printf.printf "\n#Lines: %d\n" (List.length lines)
 
   with ParseError err as excpt -> flush stdout; prerr_endline (error2string err); raise excpt

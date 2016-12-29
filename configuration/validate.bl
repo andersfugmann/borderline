@@ -5,15 +5,13 @@ define validate =
             } policy { log_invalid };
             rule {
                  state = new;
-                 rule {
-                     protocol = tcp;
-                     tcpflags != SYN / SYN,ACK,FIN,RST
-                 } policy { log_invalid };
+                 rule { tcpflags != "SYN" } policy { log_invalid };
+                 rule { tcpflags = "ACK", "FIN", "RST" } policy { log_invalid };
 
                  rule {
                      use bogons; #if
                      rule {
-                         source zone = external;
+                         #source zone = external;
                          source address = bogon;
                      } policy { log_bogon };
                      rule {

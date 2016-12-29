@@ -116,7 +116,6 @@ rule token = parse
   | '{'            { LBRACE }
   | '}'            { RBRACE }
   | ','            { COMMA }
-  | '/'            { SLASH }
   | "!="           { NE }
   | '='            { EQ }
   | ';'            { SEMI }
