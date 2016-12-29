@@ -40,15 +40,16 @@ let merge_opers rle =
   (* A bit dangerous, as the compiler wont warn when new types are added. *)
   let is_sibling a b =
     match (a, b) with
-    | (Interface (dir, _), _), (Interface (dir', _), _) when dir = dir' -> true
+    | (Interface (dir, _), _), (Interface (dir', _), _) -> dir = dir'
     | (State _, _), (State _, _) -> true
-    | (Ports (dir, pt, _), _), (Ports (dir', pt', _), _) when dir = dir' && pt = pt' -> true
-    | (Protocol _, _), (Protocol _, _) -> true
-    | (Icmp6Type _, _), (Icmp6Type _, _) -> true
-    | (Ip6Set (dir, _), _), (Ip6Set (dir', _), _) when dir = dir' -> true
-    | (Ip4Set (dir, _), _), (Ip4Set (dir', _), _) when dir = dir' -> true
+    | (Ports (dir, pt, _), _), (Ports (dir', pt', _), _) -> dir = dir' && pt = pt'
+    | (Protocol (l, _), _), (Protocol (l', _), _) -> l = l'
+    | (Icmp6 _, _), (Icmp6 _, _) -> true
+    | (Icmp4 _, _), (Icmp4 _, _) -> true
+    | (Ip6Set (dir, _), _), (Ip6Set (dir', _), _) -> dir = dir'
+    | (Ip4Set (dir, _), _), (Ip4Set (dir', _), _) -> dir = dir'
     | (Zone (dir, _), _), (Zone (dir', _), _) when dir = dir' -> true
-    | (TcpFlags _, _), (TcpFlags _, _) -> false
+    | (TcpFlags _, neg), (TcpFlags _, neg') -> neg = neg' && false
     | _ -> false
   in
   (* !A => !B => X   =>  !(A | B) => X
@@ -80,10 +81,14 @@ let merge_opers rle =
         let (s'', neg'') = merge_states (s, neg) (s', neg') in (State s'', neg'')
       | (Ports (dir, pt, ports), neg), (Ports (dir', pt', ports'), neg') when dir = dir' && pt = pt' ->
         let (ports'', neg'') = merge_sets (ports, neg) (ports', neg') in (Ports (dir, pt, ports''), neg'')
-      | (Protocol protos, neg), (Protocol protos', neg') ->
-        let (protos'', neg'') = merge_sets (protos, neg) (protos', neg') in (Protocol (protos''), neg'')
-      | (Icmp6Type types, neg), (Icmp6Type types', neg') ->
-        let (types'', neg'') = merge_sets (types, neg) (types', neg') in (Icmp6Type types'', neg'')
+      | (Protocol (l, p), neg), (Protocol (l', p'), neg') when l = l' ->
+        let (p'', neg'') = merge_sets (p, neg) (p', neg') in (Protocol (l, p''), neg'')
+      | (TcpFlags f, neg), (TcpFlags f', neg') when neg = neg' ->
+        let (f'', neg'') = merge_sets (f, neg) (f', neg') in (TcpFlags f'', neg'')
+      | (Icmp6 types, neg), (Icmp6 types', neg') ->
+        let (types'', neg'') = merge_sets (types, neg) (types', neg') in (Icmp6 types'', neg'')
+      | (Icmp4 types, neg), (Icmp4 types', neg') ->
+        let (types'', neg'') = merge_sets (types, neg) (types', neg') in (Icmp4 types'', neg'')
       | (Ip6Set (dir, set), neg), (Ip6Set (dir', set'), neg') when dir = dir' ->
         let (set'', neg'') = merge_ip6sets (set, neg) (set', neg') in (Ip6Set (dir, set''), neg'')
       | (Ip4Set (dir, set), neg), (Ip4Set (dir', set'), neg') when dir = dir' ->

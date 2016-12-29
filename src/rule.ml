@@ -90,19 +90,45 @@ let process_rule _table (rules, targets') =
             ([ Ir.Ip6Set (dir, ip6), false], Ir.Return) ::
             chain.Ir.rules) chain.Ir.comment
     | F.Filter(dir, F.FZone(ids), neg) :: xs -> gen_op targets ((Ir.Zone(dir, list2ids ids), neg) :: acc) xs
-    | F.Protocol (protos, neg) :: xs -> gen_op targets ((Ir.Protocol(list2ints protos), neg) :: acc) xs
-    | F.Icmp6Type (types, false) :: xs ->
-        let types = list2string types |> Set.map Ir.icmp_type_of_string in
-        gen_op targets ((Ir.Icmp6Type types, false) :: acc) xs
-    | F.Icmp6Type (types, true) :: xs ->
-        let types = list2string types |> Set.map Ir.icmp_type_of_string in
+    | F.Protocol (l, p, neg) :: xs ->
+        let protocols = list2string p |> Set.map Ir.Protocol.of_string in
+        gen_op targets ((Ir.Protocol(l, protocols), neg) :: acc) xs
+    | F.Icmp6 (types, false) :: xs ->
+        let types = list2string types |> Set.map Icmp.V6.of_string in
+        gen_op targets ((Ir.Icmp6 types, false) :: acc) xs
+    | F.Icmp6 (types, true) :: xs ->
+        let types = list2string types |> Set.map Icmp.V6.of_string in
         let chain = gen_op targets [] xs in
-        let chain = Chain.replace chain.Ir.id (([(Ir.Icmp6Type types, false)], Ir.Return) :: chain.Ir.rules) chain.Ir.comment
+        let chain = Chain.replace
+            chain.Ir.id
+            (([(Ir.Icmp6 types, false)], Ir.Return) :: chain.Ir.rules)
+            chain.Ir.comment
         in
         Chain.create [ (acc, Ir.Jump chain.Ir.id) ] "Rule"
-    | F.TcpFlags(flags, neg) :: xs ->
+    | F.Icmp4 (types, false) :: xs ->
+        let types = list2string types |> Set.map Icmp.V4.of_string in
+        gen_op targets ((Ir.Icmp4 types, false) :: acc) xs
+    | F.Icmp4 (types, true) :: xs ->
+        let types = list2string types |> Set.map Icmp.V4.of_string in
+        let chain = gen_op targets [] xs in
+        let chain = Chain.replace
+            chain.Ir.id
+            (([(Ir.Icmp4 types, false)], Ir.Return) :: chain.Ir.rules)
+            chain.Ir.comment
+        in
+        Chain.create [ (acc, Ir.Jump chain.Ir.id) ] "Rule"
+    | F.TcpFlags(flags, false) :: xs ->
         let flags = list2string flags |> Set.map Ir.tcpflag_of_string in
-      gen_op targets ((Ir.TcpFlags flags, neg) :: acc) xs
+        gen_op targets ((Ir.TcpFlags flags, false) :: acc) xs
+    | F.TcpFlags(flags, true) :: xs ->
+        let flags = list2string flags |> Set.map Ir.tcpflag_of_string in
+        let chain = gen_op targets [] xs in
+        let chain = Chain.replace
+            chain.Ir.id
+            (([(Ir.TcpFlags flags, false)], Ir.Return) :: chain.Ir.rules)
+            chain.Ir.comment
+        in
+        Chain.create [ (acc, Ir.Jump chain.Ir.id) ] "Rule"
     | F.Rule(rls, tgs) :: xs ->
       let rule_chain = gen_op tgs [] rls in
       let cont = gen_op targets [] xs in

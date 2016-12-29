@@ -21,8 +21,8 @@ let parse_error pos s =
 %token POLICY
 %token SOURCE DESTINATION ADDRESS STATE USE
 %token NEW ESTABLISHED RELATED INVALID
-%token SEMI PROTOCOL
-%token TCP_PORT UDP_PORT ICMP6TYPE TCPFLAGS
+%token SEMI PROTOCOL4 PROTOCOL6
+%token TCP_PORT UDP_PORT ICMP6 ICMP4 TCPFLAGS
 %token EQ NE
 
 
@@ -80,8 +80,10 @@ rule_stm:
   | USE id=id                                          { F.Reference (id) }
   | d=filter_direction f=filter_stm                    { F.Filter (d, fst f, snd f) }
   | STATE o=oper states=separated_list(COMMA, state)   { F.State (states, o) }
-  | PROTOCOL o=oper d=data_list                        { F.Protocol (d, o) }
-  | ICMP6TYPE o=oper d=data_list                       { F.Icmp6Type (d, o) }
+  | PROTOCOL4 o=oper d=data_list                       { F.Protocol (Ir.Protocol.Ip4, d, o) }
+  | PROTOCOL6 o=oper d=data_list                       { F.Protocol (Ir.Protocol.Ip6, d, o) }
+  | ICMP6 o=oper d=data_list                           { F.Icmp6 (d, o) }
+  | ICMP4 o=oper d=data_list                           { F.Icmp4 (d, o) }
   | TCPFLAGS o=oper f=data_list                        { F.TcpFlags (f, o) }
 
 (* A policy can be a single policy, or a list of policies

@@ -70,6 +70,7 @@ build: _build/borderline.run _build/unit_test.run _build/bl_configure.run _build
 	optimize
 	state
 	zone
+	icmp
 
   section:
       PROGRAM = borderline

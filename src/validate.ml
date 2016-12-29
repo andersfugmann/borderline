@@ -109,8 +109,9 @@ let expand nodes =
       | F.Filter (dir, F.Ports (port_type, ports), pol) -> F.Filter (dir, F.Ports (port_type, expand_list seen ports), pol)
       | F.Filter (dir, F.FZone zones, pol) -> F.Filter (dir, F.FZone (expand_zone_list seen zones), pol)
       | F.Filter (dir, F.Address addr_list, pol) -> F.Filter (dir, F.Address (expand_list seen addr_list), pol)
-      | F.Protocol (protos, pol) -> F.Protocol (expand_list seen protos, pol)
-      | F.Icmp6Type (types, pol) -> F.Icmp6Type (expand_list seen types, pol)
+      | F.Protocol (l, protos, pol) -> F.Protocol (l, expand_list seen protos, pol)
+      | F.Icmp6 (types, pol) -> F.Icmp6 (expand_list seen types, pol)
+      | F.Icmp4 (types, pol) -> F.Icmp4 (expand_list seen types, pol)
       | F.State _ as state -> state
       | F.Rule (rls, pols) -> F.Rule (expand_rule_list seen rls, expand_policy_list seen pols)
       | F.TcpFlags (flags, pol) -> F.TcpFlags (expand_list seen flags, pol)

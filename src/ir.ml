@@ -19,57 +19,28 @@ type tcp_flag = Syn | Ack | Fin | Rst | Urg | Psh
 type direction = SOURCE | DESTINATION
 type pol       = bool
 type port_type = Tcp | Udp
-type icmp_type = DestinationUnreachable
-               | PacketTooBig
-               | TimeExceeded
-               | EchoRequest
-               | EchoReply
-               | ListenerQuery
-               | ListenerReport
-               | ListenerReduction
-               | RouterSolicitation
-               | RouterAdvertisement
-               | NeighborSolicitation
-               | NeighborAdvertisement
-               | Redirect
-               | ParameterProblem
-               | RouterRenumbering
 
-let string_of_icmp_type = function
-  | DestinationUnreachable -> "destination-unreachable"
-  | PacketTooBig -> "packet-too-big"
-  | TimeExceeded -> "time-exceeded"
-  | EchoRequest -> "echo-request"
-  | EchoReply -> "echo-reply"
-  | ListenerQuery -> "mld-listener-query"
-  | ListenerReport -> "mld-listener-report"
-  | ListenerReduction -> "mld-listener-reduction"
-  | RouterSolicitation -> "nd-router-solicit"
-  | RouterAdvertisement -> "nd-router-advert"
-  | NeighborSolicitation -> "nd-neighbor-solicit"
-  | NeighborAdvertisement -> "nd-neighbor-advert"
-  | Redirect -> "nd-redirect"
-  | ParameterProblem -> "parameter-problem"
-  | RouterRenumbering -> "router-renumbering"
+let tcpflag_of_string (flag, pos) =
+  match String.lowercase flag with
+  | "syn" -> Syn
+  | "ack" -> Ack
+  | "fin" -> Fin
+  | "rst" -> Rst
+  | "urg" -> Urg
+  | "psh" -> Psh
+  | _ -> parse_error ~id:flag ~pos "Unknown icmp type"
 
-let icmp_type_of_string (s, pos) =
-  match String.lowercase s with
-  | "destination-unreachable" -> DestinationUnreachable
-  | "packet-too-big" -> PacketTooBig
-  | "time-exceeded" -> TimeExceeded
-  | "echo-request" -> EchoRequest
-  | "echo-reply" -> EchoReply
-  | "listener-query" -> ListenerQuery
-  | "listener-report" -> ListenerReport
-  | "listener-reduction" -> ListenerReduction
-  | "router-solicitation" -> RouterSolicitation
-  | "router-advertisement" -> RouterAdvertisement
-  | "neighbor-solicitation" -> NeighborSolicitation
-  | "neighbor-advertisement" -> NeighborAdvertisement
-  | "redirect" -> Redirect
-  | "parameter-problem" -> ParameterProblem
-  | "router-renumbering" -> RouterRenumbering
-  | _ -> parse_error ~id:s ~pos "Unknown icmp type"
+module Protocol = struct
+  type layer = Ip4 | Ip6
+  type t = Icmp | Tcp | Udp
+
+  let of_string (s, pos) =
+    match String.lowercase s with
+    | "icmp" -> Icmp
+    | "tcp" -> Tcp
+    | "udp" -> Udp
+    | s -> parse_error ~id:s ~pos "Unknown protocol identifier"
+end
 
 type reject_type = HostUnreachable | NoRoute | AdminProhibited | PortUnreachable | TcpReset
 
@@ -79,10 +50,11 @@ type condition = Interface of direction * id Set.t
                | Ports of direction * port_type * int Set.t
                | Ip6Set of direction * Ip6.t
                | Ip4Set of direction * Ip4.t
-               | Protocol of int Set.t
-               | Icmp6Type of icmp_type Set.t
+               | Protocol of Protocol.layer * Protocol.t Set.t
+               | Icmp6 of Icmp.V6.t Set.t
+               | Icmp4 of Icmp.V4.t Set.t
                | Mark of int * int
-               | TcpFlags of tcp_flag Set.t (* TODO: Flags should not be integers, but rather atoms *)
+               | TcpFlags of tcp_flag Set.t
 
 type action = Jump of chain_id
             | MarkZone of direction * zone
@@ -97,23 +69,6 @@ type oper = (condition * bool) list * action
 
 type chain = { id: chain_id; rules : oper list; comment: string; }
 
-let tcpflag_of_string (flag, pos) =
-  match String.lowercase flag with
-  | "syn" -> Syn
-  | "ack" -> Ack
-  | "fin" -> Fin
-  | "rst" -> Rst
-  | "urg" -> Urg
-  | "psh" -> Psh
-  | _ -> parse_error ~id:flag ~pos "Unknown icmp type"
-
-let string_of_tcpflag = function
-  | Syn -> "syn"
-  | Ack -> "ack"
-  | Fin -> "fin"
-  | Rst -> "rst"
-  | Urg -> "urg"
-  | Psh -> "psh"
 
 (** Test if two conditions are idential *)
 let eq_cond (x, n) (y, m) =
@@ -144,7 +99,8 @@ let get_dir = function
   | Ip6Set (direction, _) -> Some direction
   | Ip4Set (direction, _) -> Some direction
   | Protocol _ -> None
-  | Icmp6Type _ -> None
+  | Icmp6 _ -> None
+  | Icmp4 _ -> None
   | Mark _ -> None
   | TcpFlags _ -> None
 
@@ -156,9 +112,10 @@ let enumerate_cond = function
   | Ip6Set _ -> 5
   | Ip4Set _ -> 6
   | Protocol _ -> 7
-  | Icmp6Type _ -> 8
-  | TcpFlags _ -> 9
-  | Mark _ -> 10
+  | Icmp6 _ -> 8
+  | Icmp4 _ -> 9
+  | TcpFlags _ -> 10
+  | Mark _ -> 11
 
 let cond_type_identical cond1 cond2 =
   (enumerate_cond cond1) = (enumerate_cond cond2)
@@ -172,8 +129,9 @@ let is_always value = function
   | State states, neg when State.is_empty states -> neg = value
   | Zone (_, s), neg when Set.is_empty s -> neg = value
   | Ports (_, _, s), neg when Set.is_empty s -> neg = value
-  | Protocol s, neg when Set.is_empty s -> neg = value
-  | Icmp6Type s, neg when Set.is_empty s -> neg = value
+  | Protocol (_, s), neg when Set.is_empty s -> neg = value
+  | Icmp6 s, neg when Set.is_empty s -> neg = value
+  | Icmp4 s, neg when Set.is_empty s -> neg = value
   | TcpFlags s, neg when Set.is_empty s -> neg = value
   | Interface _, _
   | Zone _, _
@@ -182,6 +140,7 @@ let is_always value = function
   | Ip6Set _, _ (* Could match for /0 *)
   | Ip4Set _, _ (* Could match for /0 *)
   | Protocol _, _
-  | Icmp6Type _, _
+  | Icmp6 _, _
+  | Icmp4 _, _
   | TcpFlags _, _
   | Mark _, _ -> false

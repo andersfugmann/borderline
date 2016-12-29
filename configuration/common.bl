@@ -3,5 +3,6 @@ define common = {
    rule { src zone = self; } policy log_allow;
    rule { destination tcp port = global_tcp_ports; } policy log_allow;
    rule { destination udp port = global_udp_ports; } policy log_allow;
-   rule { icmp6type = "echo-request", "echo-reply" } policy { log_allow; };
+   rule { icmp6 = "echo-request", "echo-reply" } policy log_allow;
+   rule { icmp4 = "echo-request", "echo-reply" } policy log_allow;
 }

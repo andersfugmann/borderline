@@ -1,4 +1,6 @@
-(** Output a nft sctipt.
+(**
+   Output a nft sctipt.
+   TODO: Fix negation of tcpflags
 *)
 
 open Batteries
@@ -6,7 +8,7 @@ open Printf
 module Ip6 = Ipset.Ip6
 module Ip4 = Ipset.Ip4
 
-let zone_bits = 8 (* 256 zones ought to be enough *)
+let zone_bits = 8 (* Number of zones *)
 let zone_mask = 1 lsl zone_bits - 1
 
 let str_of_set s =
@@ -20,7 +22,7 @@ let get_zone_id zone =
   match Hashtbl.find_option zones zone with
   | Some id -> id
   | None ->
-      let id = Hashtbl.length zones + 1 in
+      let id = 1 lsl (Hashtbl.length zones + 1)  in
       Hashtbl.add zones zone id;
       id
 
@@ -42,6 +44,58 @@ let chain_premable chain =
   | Ir.Temporary _
   | Ir.Named _ ->
       [ sprintf "chain %s {" name ]
+
+let string_of_icmp6_type = function
+  | Icmp.V6.DestinationUnreachable -> "destination-unreachable"
+  | Icmp.V6.PacketTooBig -> "packet-too-big"
+  | Icmp.V6.TimeExceeded -> "time-exceeded"
+  | Icmp.V6.EchoRequest -> "echo-request"
+  | Icmp.V6.EchoReply -> "echo-reply"
+  | Icmp.V6.ListenerQuery -> "mld-listener-query"
+  | Icmp.V6.ListenerReport -> "mld-listener-report"
+  | Icmp.V6.ListenerReduction -> "mld-listener-reduction"
+  | Icmp.V6.RouterSolicitation -> "nd-router-solicit"
+  | Icmp.V6.RouterAdvertisement -> "nd-router-advert"
+  | Icmp.V6.NeighborSolicitation -> "nd-neighbor-solicit"
+  | Icmp.V6.NeighborAdvertisement -> "nd-neighbor-advert"
+  | Icmp.V6.Redirect -> "nd-redirect"
+  | Icmp.V6.ParameterProblem -> "parameter-problem"
+  | Icmp.V6.RouterRenumbering -> "router-renumbering"
+
+let string_of_icmp4_type = function
+  | Icmp.V4.EchoRequest -> "echo-request"
+  | Icmp.V4.EchoReply -> "echo-reply"
+  | Icmp.V4.DestinationUnreachable -> "destination-unreachable"
+  | Icmp.V4.SourceQuench -> "source-quench"
+  | Icmp.V4.Redirect -> "redirect"
+  | Icmp.V4.TimeExceeded -> "time-exceeded"
+  | Icmp.V4.ParameterProblem -> "parameter-problem"
+  | Icmp.V4.TimestampRequest -> "timestamp-request"
+  | Icmp.V4.TimestampReply -> "timestamp-reply"
+  | Icmp.V4.InfoRequest -> "info-request"
+  | Icmp.V4.InfoReply -> "info-reply"
+  | Icmp.V4.RouterAdvertisement -> "router-advertisement"
+  | Icmp.V4.RouterSolicitation -> "router-solicication"
+  | Icmp.V4.AddressMaskRequest -> "address-mask-request"
+  | Icmp.V4.AddressMaskReply -> "address-mask-reply"
+
+let string_of_tcpflag = function
+  | Ir.Syn -> "syn"
+  | Ir.Ack -> "ack"
+  | Ir.Fin -> "fin"
+  | Ir.Rst -> "rst"
+  | Ir.Urg -> "urg"
+  | Ir.Psh -> "psh"
+
+let string_of_layer = function
+  | Ir.Protocol.Ip4 -> "ip protocol"
+  | Ir.Protocol.Ip6 -> "ip6 nexthdr"
+
+let string_of_protocol l = function
+  | Ir.Protocol.Icmp when l = Ir.Protocol.Ip4 -> "icmpv6"
+  | Ir.Protocol.Icmp -> "icmp"
+  | Ir.Protocol.Tcp -> "tcp"
+  | Ir.Protocol.Udp -> "udp"
 
 let gen_cond neg cond =
   let neg_str = match neg with
@@ -67,7 +121,7 @@ let gen_cond neg cond =
           let zone_val = zone_id lsl shift in
           acc + zone_val) zones 0
       in
-      let neg_str = match neg with true -> "=" | false -> "!=" in
+      let neg_str = match neg with true -> "==" | false -> "!=" in
       sprintf "meta mark & 0x%08x %s 0x0" mask neg_str
 
   | Ir.State states ->
@@ -119,21 +173,37 @@ let gen_cond neg cond =
         |> String.concat ", "
       in
       sprintf "ip %s %s{ %s }" classifier neg_str ips
-  | Ir.Protocol protocols ->
-      sprintf "meta protocol %s%s" neg_str (str_of_set protocols) (* TODO: This should be a closed set - not integers *)
+  | Ir.Protocol (l, p) ->
+      let prefix = string_of_layer l in
+      let set = Set.to_list p |> List.map (string_of_protocol l) |> String.concat "," in
+      sprintf "%s %s { %s }" prefix neg_str set
 
-  | Ir.Icmp6Type types ->
+
+  | Ir.Icmp6 types ->
       let set = Set.to_list types
-                |> List.map Ir.string_of_icmp_type
+                |> List.map string_of_icmp6_type
                 |> String.concat ", "
                 |> sprintf "{ %s }"
       in
       sprintf "ip6 nexthdr icmpv6 icmpv6 type %s%s" neg_str set
+  | Ir.Icmp4 types ->
+      let set = Set.to_list types
+                |> List.map string_of_icmp4_type
+                |> String.concat ", "
+                |> sprintf "{ %s }"
+      in
+      sprintf "ip protocol icmp icmp type %s%s" neg_str set
   | Ir.Mark (value, mask) ->
       sprintf "meta mark and 0x%08x %s0x%08x" mask neg_str value
+  | Ir.TcpFlags flags when neg ->
+      let set = Set.to_list flags
+                |> List.map string_of_tcpflag
+                |> List.hd
+      in
+      sprintf "tcp flags %s%s" neg_str set
   | Ir.TcpFlags flags ->
       let set = Set.to_list flags
-                |> List.map Ir.string_of_tcpflag
+                |> List.map string_of_tcpflag
                 |> String.concat ", "
                 |> sprintf "{ %s }"
       in
@@ -160,7 +230,7 @@ let gen_target = function
   | Ir.Notrack -> ""
   | Ir.Jump chain -> sprintf "jump %s" (chain_name chain)
   | Ir.Reject rsp -> reject_to_string rsp
-  | Ir.Log prefix -> sprintf "log prefix %s level info" prefix
+  | Ir.Log prefix -> sprintf "log prefix \"%s: \" level info" prefix
 
 let gen_rule (conds, target) =
   let conds = List.map (fun (op, neg) -> gen_cond neg op) conds
@@ -178,6 +248,7 @@ let emit_chain { Ir.id; rules; comment } =
   [ "#" ^ comment ] @ premable @ rules @ [ "}" ]
 
 let emit_chains (chains : (Ir.chain_id, Ir.chain) Map.t) : string list =
+  (* How does this work. Dont we need a strict ordering of chains here? *)
   let rules =
     Map.values chains
     |> Enum.map emit_chain
