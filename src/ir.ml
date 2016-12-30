@@ -34,6 +34,8 @@ module Protocol = struct
   type layer = Ip4 | Ip6
   type t = Icmp | Tcp | Udp
 
+  let all = [ Icmp; Tcp; Udp ] |> Set.of_list
+
   let of_string (s, pos) =
     match String.lowercase s with
     | "icmp" -> Icmp
@@ -140,14 +142,16 @@ let is_always value = function
       | true -> Set.is_empty mask && not neg = value
       | false -> neg = value
     end
+  | Ip6Set (_, s), neg when Ip6.is_empty s -> Printf.printf "X"; value = neg
+  | Ip4Set (_, s), neg when Ip4.is_empty s -> Printf.printf "x"; value = neg
   | Interface _, _
   | Zone _, _
   | State _, _
   | Ports _, _
-  | Ip6Set _, _ (* Could match for /0 *)
-  | Ip4Set _, _ (* Could match for /0 *)
   | Protocol _, _
   | Icmp6 _, _
   | Icmp4 _, _
+  | Ip6Set _, _
+  | Ip4Set _, _
   | Mark _, _ -> false
   | True, neg -> not neg = value

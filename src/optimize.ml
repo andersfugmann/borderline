@@ -23,7 +23,7 @@ let get_referring_rules chain chains =
 
 (** Optimize rules in each chain. No chain insertion or removal is possible *)
 let map_chain_rules func chains =
-  Map.map (fun chn -> { id = chn.id; rules = func chn.rules; comment = chn.comment }) chains
+  Map.map (fun chn -> { chn with rules = func chn.rules }) chains
 
 let map_chain_rules_expand func chains : Ir.chain list =
   let rec map_rules = function
@@ -259,6 +259,59 @@ let reorder rules =
   in
   reorder_rules [] rules
 
+let filter_protocol chain =
+  let expand (l, p) = Set.to_list p |> List.map ( fun p -> (l, p) ) in
+  let all =
+    (expand (Protocol.Ip4, Protocol.all)) @
+    (expand (Protocol.Ip6, Protocol.all))  |> Set.of_list
+  in
+
+  let to_protocol = function
+    | Ir.Protocol (Protocol.Ip4, p), true ->
+        (expand (Protocol.Ip4, Set.diff Protocol.all p)) @
+        (expand (Protocol.Ip6, Protocol.all)) |> Set.of_list
+    | Ir.Protocol (Protocol.Ip6, p), true ->
+        (expand (Protocol.Ip6, Set.diff Protocol.all p)) @
+        (expand (Protocol.Ip4, Protocol.all)) |> Set.of_list
+    | Ir.Protocol (l, p), false -> expand (l, p) |> Set.of_list
+    | Ir.True, _ -> all
+    | Ir.Interface (_,_), _ -> all
+    | Ir.Zone (_,_), _ -> all
+    | Ir.State _, _ -> all
+    | Ir.Ports (_,Ir.Tcp, _), false -> [
+        Ir.Protocol.Ip4, Ir.Protocol.Tcp;
+        Ir.Protocol.Ip6, Ir.Protocol.Tcp;
+      ] |> Set.of_list
+    | Ir.Ports (_,Ir.Udp, _), false -> [
+        Ir.Protocol.Ip4, Ir.Protocol.Udp;
+        Ir.Protocol.Ip6, Ir.Protocol.Udp;
+      ] |> Set.of_list
+    | Ir.Ports (_, _ , _), true -> all
+    | Ir.Ip6Set (_,_), false ->
+        expand (Ir.Protocol.Ip6, Ir.Protocol.all) |> Set.of_list
+    | Ir.Ip6Set (_,_), true -> all
+    | Ir.Ip4Set (_,_), false ->
+        expand (Ir.Protocol.Ip4, Ir.Protocol.all)  |> Set.of_list
+    | Ir.Ip4Set (_,_), true -> all
+    | Ir.Icmp6 _, _ -> Set.singleton (Ir.Protocol.Ip6, Ir.Protocol.Icmp)
+    | Ir.Icmp4 _, _ -> Set.singleton (Ir.Protocol.Ip4, Ir.Protocol.Icmp)
+    | Ir.Mark (_,_), _ -> all
+    | Ir.TcpFlags (_,_), _ -> [
+        Ir.Protocol.Ip6, Ir.Protocol.Tcp;
+        Ir.Protocol.Ip4, Ir.Protocol.Tcp;
+      ] |> Set.of_list
+  in
+  let rec filter_chain = function
+    | (rules, target) :: xs -> begin
+        let protocols = List.fold_left (fun ps r -> Set.intersect ps (to_protocol r)) all rules in
+        match Set.is_empty protocols with
+        | true -> printf "P"; filter_chain xs
+        | false -> (rules, target) :: filter_chain xs
+      end
+    | [] -> []
+  in
+  filter_chain chain
+
 (** Inline chains that satifies p *)
 let rec inline p chains =
   let has_target target rules =
@@ -309,9 +362,14 @@ let rec eliminate_dublicate_rules = function
 let remove_unsatisfiable_rules rules =
   List.filter (fun (conds, _) -> is_satisfiable conds) rules
 
-(** All conditions which a tautologically true are removed *)
+(** All conditions which is always true are removed *)
 let remove_true_rules rules =
   List.map (fun (conds, target) -> (List.filter (fun cond -> not (is_always true cond)) conds, target)) rules
+
+let rec remove_false_chains = function
+  | (ops, _) :: xs when List.exists (is_always false) ops -> printf "r"; remove_false_chains xs
+  | x :: xs -> x :: remove_false_chains xs
+  | [] -> []
 
 let count_rules chains =
   Map.fold (fun chn acc -> acc + List.length chn.rules) chains 0
@@ -340,13 +398,16 @@ let optimize_pass chains =
     remove_dublicate_chains;
     map_chain_rules remove_unsatisfiable_rules;
     map_chain_rules remove_true_rules;
+    map_chain_rules remove_false_chains;
     map_chain_rules eliminate_dead_rules;
     map_chain_rules eliminate_dublicate_rules;
     map_chain_rules reorder;
+    map_chain_rules filter_protocol;
     reduce;
     inline should_inline;
     map_chain_rules (fun rls -> Common.map_filter_exceptions (fun (opers, tg) -> (merge_opers opers, tg)) rls);
-    remove_unreferenced_chains ] in
+    remove_unreferenced_chains;
+  ] in
   let chains' = List.fold_left (fun chains' optim_func -> optim_func chains') chains optimize_functions in
   printf " (%d, %d)\n" (count_rules chains') (conds chains');
   chains'

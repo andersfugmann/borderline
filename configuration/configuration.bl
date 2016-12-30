@@ -20,7 +20,6 @@ define global_udp_ports =
 define public_tcp_ports = smtp, ssmtp, domain, imaps, http, https, ntp
 define public_udp_ports = domain, ntp
 
-
 # Rembember to define which zone is the external zone. If bl_configure is
 # used, the system will autimatically assign the external zone.
 # The 'configure' program will automatically set this variable in the

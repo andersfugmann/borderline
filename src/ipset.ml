@@ -158,7 +158,8 @@ struct
 
   let remove = delete
 
-  let cardinal t = BatAvlTree.fold (fun _ a -> a +| 1) t 0
+  let cardinal t = Int.(BatAvlTree.fold (fun _ a -> a + 1) t 0)
+  let is_empty t = Int.(cardinal t = 0)
 
   let union a b = BatAvlTree.fold add b a
   let diff a b = BatAvlTree.fold delete b a
@@ -226,8 +227,6 @@ struct
     sprintf "%s/%i %s"
       (Big_int.string_of_big_int i) mask
       (elt2str (to_elt (i, mask)))
-
-  let _ = ip2str
 
   let to_string t =
     BatAvlTree.fold (fun elt s -> (elt2str elt) :: s) t [] |> List.rev |> String.join ", "
