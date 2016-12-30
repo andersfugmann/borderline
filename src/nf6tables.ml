@@ -201,7 +201,7 @@ let gen_cond neg cond =
                       |> String.concat "|"
       in
       let neg_str = match neg with true -> "!=" | false -> "==" in
-      sprintf "tcp flags & %s %s %s" (to_list mask) neg_str (to_list flags)
+      sprintf "tcp flags & (%s) %s %s" (to_list mask) neg_str (to_list flags)
   | Ir.True when neg ->
       (* Any false statement *)
       "meta mark | 0x1 == 0x0"
