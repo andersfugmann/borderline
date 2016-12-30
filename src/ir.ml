@@ -54,7 +54,8 @@ type condition = Interface of direction * id Set.t
                | Icmp6 of Icmp.V6.t Set.t
                | Icmp4 of Icmp.V4.t Set.t
                | Mark of int * int
-               | TcpFlags of tcp_flag Set.t
+               | TcpFlags of tcp_flag Set.t * tcp_flag Set.t
+               | True
 
 type action = Jump of chain_id
             | MarkZone of direction * zone
@@ -103,6 +104,7 @@ let get_dir = function
   | Icmp4 _ -> None
   | Mark _ -> None
   | TcpFlags _ -> None
+  | True -> None
 
 let enumerate_cond = function
   | Interface _ -> 1
@@ -116,6 +118,7 @@ let enumerate_cond = function
   | Icmp4 _ -> 9
   | TcpFlags _ -> 10
   | Mark _ -> 11
+  | True -> 12
 
 let cond_type_identical cond1 cond2 =
   (enumerate_cond cond1) = (enumerate_cond cond2)
@@ -132,7 +135,11 @@ let is_always value = function
   | Protocol (_, s), neg when Set.is_empty s -> neg = value
   | Icmp6 s, neg when Set.is_empty s -> neg = value
   | Icmp4 s, neg when Set.is_empty s -> neg = value
-  | TcpFlags s, neg when Set.is_empty s -> neg = value
+  | TcpFlags (flags, mask), neg -> begin
+      match Set.diff flags mask |> Set.is_empty with
+      | true -> Set.is_empty mask && not neg = value
+      | false -> neg = value
+    end
   | Interface _, _
   | Zone _, _
   | State _, _
@@ -142,5 +149,5 @@ let is_always value = function
   | Protocol _, _
   | Icmp6 _, _
   | Icmp4 _, _
-  | TcpFlags _, _
   | Mark _, _ -> false
+  | True, neg -> not neg = value

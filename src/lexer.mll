@@ -61,6 +61,8 @@ rule token = parse
   | "protocol4"    { Parser.PROTOCOL4 }
   | "protocol6"    { Parser.PROTOCOL6 }
   | "tcpflags"     { Parser.TCPFLAGS }
+  | "true"         { Parser.TRUE }
+  | "false"        { Parser.FALSE }
 
 (* State types *)
   | "new"          { Parser.NEW }
@@ -122,6 +124,7 @@ rule token = parse
   | '='            { EQ }
   | ';'            { SEMI }
   | '#'            { comment lexbuf }
+  | '/'            { SLASH }
   | eof            { END }
 
 and comment = parse

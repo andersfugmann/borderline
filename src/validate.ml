@@ -114,7 +114,9 @@ let expand nodes =
       | F.Icmp4 (types, pol) -> F.Icmp4 (expand_list seen types, pol)
       | F.State _ as state -> state
       | F.Rule (rls, pols) -> F.Rule (expand_rule_list seen rls, expand_policy_list seen pols)
-      | F.TcpFlags (flags, pol) -> F.TcpFlags (expand_list seen flags, pol)
+      | F.TcpFlags (flags, mask, pol) -> F.TcpFlags (expand_list seen flags, expand_list seen mask, pol)
+      | F.True -> F.True
+      | F.False -> F.False
     in
     match rules with
     | F.Reference id :: xs -> (expand_rule_list (mark_seen (fst id) seen) (expand_rules id)) @ (expand_rule_list seen xs)

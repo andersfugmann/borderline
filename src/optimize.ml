@@ -83,10 +83,19 @@ let merge_opers rle =
           (Ip6Set (dir, set''), neg'') |> Option.some
       | (Ip4Set (dir, set), neg), (Ip4Set (dir', set'), neg') when dir = dir' ->
           let (set'', neg'') = merge_ip4sets (set, neg) (set', neg') in
-          (Ip6Set (dir, set''), neg'') |> Option.some
+          Some (Ip6Set (dir, set''), neg'')
       | (Zone (dir, zones), neg), (Zone (dir', zones'), neg') when dir = dir' ->
           let (zones'', neg'') = merge_sets (zones, neg) (zones', neg') in
-          (Zone (dir, zones''), neg'') |> Option.some
+          Some (Zone (dir, zones''), neg'')
+      | (TcpFlags (f, m), false), (TcpFlags (f', m'), false) -> begin
+          let set_flags = Set.union f f' in
+          let unset_flags = Set.union (Set.diff m f) (Set.diff m' f') in
+          match Set.intersect set_flags unset_flags |> Set.is_empty with
+          | true ->
+              Some (TcpFlags (set_flags, Set.union m m'), false)
+          | false -> Some (True, true)
+        end
+      | (True, neg), (True, neg') -> Some (True, neg || neg')
       | (_cond, _), (_cond', _) -> None
   in
   let rec merge_siblings acc = function

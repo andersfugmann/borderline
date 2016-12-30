@@ -195,20 +195,18 @@ let gen_cond neg cond =
       sprintf "ip protocol icmp icmp type %s%s" neg_str set
   | Ir.Mark (value, mask) ->
       sprintf "meta mark and 0x%08x %s0x%08x" mask neg_str value
-  | Ir.TcpFlags flags when neg ->
-      let set = Set.to_list flags
-                |> List.map string_of_tcpflag
-                |> List.hd
+  | Ir.TcpFlags (flags, mask) ->
+      let to_list f = Set.to_list f
+                      |> List.map string_of_tcpflag
+                      |> String.concat "|"
       in
-      sprintf "tcp flags %s%s" neg_str set
-  | Ir.TcpFlags flags ->
-      let set = Set.to_list flags
-                |> List.map string_of_tcpflag
-                |> String.concat ", "
-                |> sprintf "{ %s }"
-      in
-      sprintf "tcp flags %s%s" neg_str set
-
+      let neg_str = match neg with true -> "!=" | false -> "==" in
+      sprintf "tcp flags & %s %s %s" (to_list mask) neg_str (to_list flags)
+  | Ir.True when neg ->
+      (* Any false statement *)
+      "meta mark | 0x1 == 0x0"
+  | Ir.True ->
+      ""
 let reject_to_string = function
   | Ir.HostUnreachable -> "reject with icmpx type host-unreachable"
   | Ir.NoRoute -> "reject with icmpx type no-route"

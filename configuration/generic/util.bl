@@ -1,3 +1,0 @@
-#Define true and false, which can be used to enable or disable rules
-define true = { state != }
-define false = { state = }

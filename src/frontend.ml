@@ -38,7 +38,9 @@ and rule_stm = Filter of Ir.direction * filter_stm * Ir.pol
              | Icmp4 of data list * Ir.pol
              | Rule of rule_stm list * policytype list
              | Reference of id
-             | TcpFlags of data list * Ir.pol
+             | TcpFlags of data list * data list * Ir.pol
+             | True
+             | False
 
 
 and data = Number of int * Lexing.position

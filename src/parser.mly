@@ -22,7 +22,7 @@ let parse_error pos s =
 %token SOURCE DESTINATION ADDRESS STATE USE
 %token NEW ESTABLISHED RELATED INVALID
 %token SEMI PROTOCOL4 PROTOCOL6
-%token TCP_PORT UDP_PORT ICMP6 ICMP4 TCPFLAGS
+%token TCP_PORT UDP_PORT ICMP6 ICMP4 TCPFLAGS TRUE FALSE
 %token EQ NE
 
 
@@ -32,7 +32,7 @@ let parse_error pos s =
 %token <string * Lexing.position> QUOTE
 %token <string * Lexing.position> IDENT
 
-%token LBRACE RBRACE COMMA END
+%token LBRACE RBRACE COMMA END SLASH
 
 %start main
 %type <Frontend.node list> main
@@ -84,7 +84,9 @@ rule_stm:
   | PROTOCOL6 o=oper d=data_list                       { F.Protocol (Ir.Protocol.Ip6, d, o) }
   | ICMP6 o=oper d=data_list                           { F.Icmp6 (d, o) }
   | ICMP4 o=oper d=data_list                           { F.Icmp4 (d, o) }
-  | TCPFLAGS o=oper f=data_list                        { F.TcpFlags (f, o) }
+  | TCPFLAGS o=oper f=data_list SLASH m=data_list      { F.TcpFlags (f, m, o) }
+  | TRUE                                               { F.True }
+  | FALSE                                              { F.False }
 
 (* A policy can be a single policy, or a list of policies
    enclosed in curly braces seperated by semicolon. *)

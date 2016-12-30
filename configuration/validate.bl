@@ -5,8 +5,7 @@ define validate =
             } policy { log_invalid };
             rule {
                  state = new;
-                 rule { tcpflags != "SYN" } policy { log_invalid };
-                 rule { tcpflags = "ACK", "FIN", "RST" } policy { log_invalid };
+                 rule { tcpflags != "SYN" / "SYN", "ACK", "FIN", "RST" } policy { log_invalid };
 
                  rule {
                      use bogons; #if

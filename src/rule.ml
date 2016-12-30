@@ -4,6 +4,13 @@ module F = Frontend
 module Ip4 = Ipset.Ip4
 module Ip6 = Ipset.Ip6
 
+let pos_of = function
+  | F.Number (_, pos)
+  | F.String (_, pos)
+  | F.Ip4 (_, pos)
+  | F.Ip6 (_, pos)
+  | F.Id (_, pos) -> pos
+
 (* Frontend -> Ir *)
 let reject_of_string = function
   | Some ("host-unreachable", _pos) -> Ir.HostUnreachable
@@ -117,18 +124,21 @@ let process_rule _table (rules, targets') =
             chain.Ir.comment
         in
         Chain.create [ (acc, Ir.Jump chain.Ir.id) ] "Rule"
-    | F.TcpFlags(flags, false) :: xs ->
-        let flags = list2string flags |> Set.map Ir.tcpflag_of_string in
-        gen_op targets ((Ir.TcpFlags flags, false) :: acc) xs
-    | F.TcpFlags(flags, true) :: xs ->
-        let flags = list2string flags |> Set.map Ir.tcpflag_of_string in
-        let chain = gen_op targets [] xs in
-        let chain = Chain.replace
-            chain.Ir.id
-            (([(Ir.TcpFlags flags, false)], Ir.Return) :: chain.Ir.rules)
-            chain.Ir.comment
-        in
-        Chain.create [ (acc, Ir.Jump chain.Ir.id) ] "Rule"
+    | F.TcpFlags(flags, mask, neg) :: xs -> begin
+        let flags' = list2string flags |> Set.map Ir.tcpflag_of_string in
+        let mask' = list2string mask |> Set.map Ir.tcpflag_of_string in
+
+        (* Test that flags are all in mask *)
+        match Set.subset flags' mask' with
+        | false ->
+            parse_error ~pos:(flags @ mask |> List.hd |> pos_of) "Tcp flag not in mask"
+        | true ->
+            gen_op targets ((Ir.TcpFlags (flags', mask'), neg) :: acc) xs
+      end
+    | F.True :: xs ->
+        gen_op targets ((Ir.True, false) :: acc) xs
+    | F.False :: xs ->
+        gen_op targets ((Ir.True, true) :: acc) xs
     | F.Rule(rls, tgs) :: xs ->
       let rule_chain = gen_op tgs [] rls in
       let cont = gen_op targets [] xs in
