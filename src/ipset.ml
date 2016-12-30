@@ -23,11 +23,11 @@ module Ipv6 : Ip_type = struct
   let bits = 128
   let field_size = 16
   let to_string fields =
-    let (hd, tl) = List.partition (fun part -> part != 0) fields in
+    let (hd, tl) = BatList.span (fun part -> part != 0) fields in
     (* Now strip 0 from tl *)
-    let (_, tl) = List.partition (fun part -> part = 0) tl in
-    (String.concat ":" (List.map (sprintf "%04x") hd)) ^ "::" ^
-    (String.concat ":" (List.map (sprintf "%04x") tl))
+    let (_, tl) = List.span (fun part -> part = 0) tl in
+    (String.concat ":" (List.map (sprintf "%x") hd)) ^ "::" ^
+    (String.concat ":" (List.map (sprintf "%x") tl))
 
 end
 
