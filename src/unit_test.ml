@@ -2,9 +2,9 @@
 open OUnit2
 
 let suite = "Borderline" >:::
-  [
-    Ipset.test;
-  ]
+            [
+              Ipset.Test.unittest;
+            ]
 
 let _ =
   Random.self_init ();

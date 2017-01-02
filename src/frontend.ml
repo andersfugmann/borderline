@@ -14,7 +14,7 @@ type policytype = ALLOW
                 | LOG of prefix
                 | Ref of id
 
-type ip = Ipv6 of Ip6.ip | Ipv4 of Ip4.ip
+type ip = Ipv6 of Ip6.elt | Ipv4 of Ip4.elt
 
 and node = Import of id
          | Zone of id * zone_stm list
@@ -45,8 +45,7 @@ and rule_stm = Filter of Ir.direction * filter_stm * Ir.pol
 
 and data = Number of int * Lexing.position
          | Id of id
-         | Ip6 of Ip6.ip * Lexing.position
-         | Ip4 of Ip4.ip * Lexing.position
+         | Ip of ip * Lexing.position
          | String of string * Lexing.position
 
 let node_type id = function

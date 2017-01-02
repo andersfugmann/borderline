@@ -7,7 +7,7 @@ USE_OCAMLFIND = true
 CP = cp -f
 MENHIR_ENABLED = true
 MENHIR_FLAGS = --explain --infer
-OCAMLPACKS[] = unix str num oUnit batteries
+OCAMLPACKS[] = unix str num oUnit batteries ipaddr
 
 mkdir -p _build
 vmount(-l, src, _build)

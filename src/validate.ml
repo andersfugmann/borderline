@@ -93,8 +93,7 @@ let expand nodes =
     | (F.Id (id, _)) as x :: xs when BatSet.mem id zones -> x :: expand_zone_list seen xs
     | F.Id id :: xs -> (expand_zone_list (mark_seen (fst id) seen) (expand id)) @ (expand_zone_list seen xs)
     | F.Number (_, pos) :: _ -> parse_error ~pos "Find integer, expected zone name"
-    | F.Ip6 (_, pos) :: _ -> parse_error ~pos "Found ipv6 address, expected zone name"
-    | F.Ip4 (_, pos) :: _ -> parse_error ~pos "Found ipv4 address, expected zone name"
+    | F.Ip (_, pos) :: _ -> parse_error ~pos "Found ip address, expected zone name"
     | F.String (_, pos) :: _ -> parse_error ~pos "Found string, expected zone name"
     | [] -> []
   in

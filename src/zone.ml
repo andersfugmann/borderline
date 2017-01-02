@@ -45,8 +45,8 @@ let create_zone_chain direction (id, nodes) =
            | F.Ipv4 i -> ( i :: ip4, ip6)
            | F.Ipv6 i -> (ip4, i :: ip6)) ([], []) ips
     in
-    [ ([(Ir.Ip6Set(direction, Ip6.from_ips ip6), false)], Ir.Jump chain.Ir.id);
-      ([(Ir.Ip4Set(direction, Ip4.from_ips ip4), false)], Ir.Jump chain.Ir.id) ]
+    [ ([(Ir.Ip6Set(direction, Ip6.of_list ip6), false)], Ir.Jump chain.Ir.id);
+      ([(Ir.Ip4Set(direction, Ip4.of_list ip4), false)], Ir.Jump chain.Ir.id) ]
 
   in
   let create_interface_rule chain interface =

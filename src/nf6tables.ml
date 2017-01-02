@@ -156,10 +156,9 @@ let gen_cond neg cond =
         | Ir.SOURCE -> "saddr"
         | Ir.DESTINATION  -> "daddr"
       in
-      let ips =
-        Ip6.to_ips ips
-        |> List.map (fun (ip, mask) -> sprintf "%s/%d" (Ip6.string_of_ip ip) mask)
-        |> String.concat ", "
+      let ips = Ip6.to_list ips
+                |> List.map Ipaddr.V6.Prefix.to_string
+                |> String.concat ", "
       in
       sprintf "ip6 %s %s{ %s }" classifier neg_str ips
   | Ir.Ip4Set (dir, ips) ->
@@ -167,10 +166,9 @@ let gen_cond neg cond =
         | Ir.SOURCE -> "saddr"
         | Ir.DESTINATION  -> "daddr"
       in
-      let ips =
-        Ip4.to_ips ips
-        |> List.map (fun (ip, mask) -> sprintf "%s/%d" (Ip4.string_of_ip ip) mask)
-        |> String.concat ", "
+      let ips = Ip4.to_list ips
+                |> List.map Ipaddr.V4.Prefix.to_string
+                |> String.concat ", "
       in
       sprintf "ip %s %s{ %s }" classifier neg_str ips
   | Ir.Protocol (l, p) ->

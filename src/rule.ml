@@ -7,8 +7,7 @@ module Ip6 = Ipset.Ip6
 let pos_of = function
   | F.Number (_, pos)
   | F.String (_, pos)
-  | F.Ip4 (_, pos)
-  | F.Ip6 (_, pos)
+  | F.Ip (_, pos)
   | F.Id (_, pos) -> pos
 
 (* Frontend -> Ir *)
@@ -33,8 +32,7 @@ let list2ints l =
       function
       | F.Number (nr, _) -> Set.add nr acc
       | F.String (_, pos) -> parse_error ~pos "Found string, expected integer while parsing list item"
-      | F.Ip4 (_, pos) -> parse_error ~pos "Found ipv4 address, expected integer while parsing list item"
-      | F.Ip6 (_, pos) -> parse_error ~pos "Found ipv6 address, expected integer while parsing list item"
+      | F.Ip (_, pos) -> parse_error ~pos "Found ip address, expected integer while parsing list item"
       | F.Id _ -> failwith "No all ids have been expanded correctly"
     ) Set.empty l
 
@@ -42,18 +40,17 @@ let list2ip l =
   List.fold_left (fun (ip4, ip6) -> function
       | F.Number (_, pos) -> parse_error ~pos "Found integer, expected ip address while parsing list item"
       | F.String (_, pos) -> parse_error ~pos "Found string, expected ip address while parsing list item"
-      | F.Ip6 (ip, _) -> ip4, Ip6.add (Ip6.to_elt ip) ip6
-      | F.Ip4 (ip, _) -> Ip4.add (Ip4.to_elt ip) ip4, ip6
+      | F.Ip (F.Ipv6 ip, _) -> ip4, ip :: ip6
+      | F.Ip (F.Ipv4 ip, _) -> ip :: ip4, ip6
       | F.Id _ -> failwith "No all ids have been expanded correctly"
-    ) (Ip4.empty, Ip6.empty) l
+    ) ([], []) l
 
 let list2ids l =
   List.fold_left (fun acc ->
       function
       | F.Number (_, pos) -> parse_error ~pos "Found integer, expected id while parsing list item"
       | F.String (_, pos) -> parse_error ~pos "Found string, expected id while parsing list item"
-      | F.Ip4 (_, pos) -> parse_error ~pos "Found ipv4 address, expected id while parsing list item"
-      | F.Ip6 (_, pos) -> parse_error ~pos "Found ipv6 address, expected id while parsing list item"
+      | F.Ip (_, pos) -> parse_error ~pos "Found ip address, expected id while parsing list item"
       | F.Id (id, _) -> Set.add id acc
     ) Set.empty l
 
@@ -62,8 +59,7 @@ let list2string l =
       function
       | F.Number (_, pos) -> parse_error ~pos "Found integer, expected string while parsing list item"
       | F.String (s, pos) -> Set.add (s, pos) acc
-      | F.Ip4 (_, pos) -> parse_error ~pos "Found ipv4 address, expected string while parsing list item"
-      | F.Ip6 (_, pos) -> parse_error ~pos "Found ipv6 address, expected string while parsing list item"
+      | F.Ip (_, pos) -> parse_error ~pos "Found ip address, expected string while parsing list item"
       | F.Id _ -> failwith "No all ids have been expanded correctly"
     ) Set.empty l
 
@@ -84,8 +80,8 @@ let process_rule _table (rules, targets') =
         let chain = gen_op targets acc xs in
         (* Neg in this case needs to be chained *)
         Chain.create [
-          [Ir.Ip6Set (dir, ip6), false], Ir.Jump chain.Ir.id;
-          [Ir.Ip4Set (dir, ip4), false], Ir.Jump chain.Ir.id;
+          [Ir.Ip6Set (dir, Ipset.Ip6.of_list ip6), false], Ir.Jump chain.Ir.id;
+          [Ir.Ip4Set (dir, Ipset.Ip4.of_list ip4), false], Ir.Jump chain.Ir.id;
         ] "Rule"
     | F.Filter(dir, F.Address(ips), true) :: xs ->
         (* Split into ipv4 and ipv6 *)
@@ -93,8 +89,8 @@ let process_rule _table (rules, targets') =
         let (ip4, ip6) = list2ip ips in
         (* Add first return rule in target chain *)
         Chain.replace chain.Ir.id (
-            ([ Ir.Ip4Set (dir, ip4), false], Ir.Return) ::
-            ([ Ir.Ip6Set (dir, ip6), false], Ir.Return) ::
+            ([ Ir.Ip4Set (dir, Ipset.Ip4.of_list ip4), false], Ir.Return) ::
+            ([ Ir.Ip6Set (dir, Ipset.Ip6.of_list ip6), false], Ir.Return) ::
             chain.Ir.rules) chain.Ir.comment
     | F.Filter(dir, F.FZone(ids), neg) :: xs -> gen_op targets ((Ir.Zone(dir, list2ids ids), neg) :: acc) xs
     | F.Protocol (l, p, neg) :: xs ->

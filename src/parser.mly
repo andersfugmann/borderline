@@ -2,8 +2,6 @@
   (* Include commonly used modules *)
 
 module F = Frontend
-module Ip6 = Ipset.Ip6
-module Ip4 = Ipset.Ip4
 open Lexing
 
 (* Define a function to be called whenever a syntax error is
@@ -27,8 +25,8 @@ let parse_error pos s =
 
 
 %token <int * Lexing.position> INT
-%token <int list * int * Lexing.position> IPv6
-%token <int list * int * Lexing.position> IPv4
+%token <string * int * Lexing.position> IPv6
+%token <string * int * Lexing.position> IPv4
 %token <string * Lexing.position> QUOTE
 %token <string * Lexing.position> IDENT
 
@@ -58,8 +56,7 @@ rule_seq:
 (* Scan elements within a zone. *)
 
 zone_stm:
-  | NETWORK EQ ip=IPv6                                 { let (i, m, _pos) = ip in F.Network(F.Ipv6 (Ip6.ip_of_string i, m)) }
-  | NETWORK EQ ip=IPv4                                 { let (i, m, _pos) = ip in F.Network(F.Ipv4 (Ip4.ip_of_string i, m)) }
+  | NETWORK EQ ip=ip                                   { F.Network (fst ip) }
   | INTERFACE EQ id=id                                 { F.Interface(id)}
   | PROCESS t=process_type r=rule_seq p=policy_opt     { F.ZoneRules (t,r,p) }
 
@@ -141,8 +138,7 @@ data_list:
 data:
   | i=INT                                              { let n, pos = i in F.Number (n, pos) }
   | id=id                                              { F.Id id }
-  | ip=IPv6                                            { let i, m, pos = ip in F.Ip6 ((Ip6.ip_of_string i, m), pos) }
-  | ip=IPv4                                            { let i, m, pos = ip in F.Ip4 ((Ip4.ip_of_string i, m), pos) }
+  | ip=ip                                              { F.Ip (fst ip, snd ip) }
   | s=QUOTE                                            { let s, pos = s in F.String (s, pos) }
 
 separated_list_opt(SEP, T):
@@ -158,3 +154,17 @@ id_quote:
   | i = IDENT { i }
   | q = QUOTE { q }
   | error     { parse_error $startpos "Identifier or quoted string expected" }
+
+ip:
+  | ip=IPv6     { let (i, mask, pos) = ip in
+                  let addr = Ipaddr.V6.Prefix.make mask
+                    (Ipaddr.V6.of_string_exn i)
+                  in
+                  F.Ipv6 addr, pos
+                }
+  | ip=IPv4     { let (i, mask, pos) = ip in
+                  let addr = Ipaddr.V4.Prefix.make mask
+                    (Ipaddr.V4.of_string_exn i)
+                  in
+                  F.Ipv4 addr, pos
+                }

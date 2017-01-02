@@ -53,9 +53,9 @@ let merge_opers rle =
     | (true, false) ->  (diff s' s, false)
   in
 
-  let merge_states = merge State.inter State.union State.diff in
-  let merge_ip6sets = merge Ip6.inter Ip6.union Ip6.diff in
-  let merge_ip4sets = merge Ip4.inter Ip4.union Ip4.diff in
+  let merge_states = merge State.intersect State.union State.diff in
+  let merge_ip6sets = merge Ip6.intersect Ip6.union Ip6.diff in
+  let merge_ip4sets = merge Ip4.intersect Ip4.union Ip4.diff in
   let merge_sets a b = merge Set.intersect Set.union Set.diff a b in
 
   let merge_oper a b =
@@ -83,7 +83,7 @@ let merge_opers rle =
           (Ip6Set (dir, set''), neg'') |> Option.some
       | (Ip4Set (dir, set), neg), (Ip4Set (dir', set'), neg') when dir = dir' ->
           let (set'', neg'') = merge_ip4sets (set, neg) (set', neg') in
-          Some (Ip6Set (dir, set''), neg'')
+          Some (Ip4Set (dir, set''), neg'')
       | (Zone (dir, zones), neg), (Zone (dir', zones'), neg') when dir = dir' ->
           let (zones'', neg'') = merge_sets (zones, neg) (zones', neg') in
           Some (Zone (dir, zones''), neg'')

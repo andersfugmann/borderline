@@ -8,5 +8,6 @@ module State_set = Set.Make(
   end)
 
 include State_set
+let intersect = inter
 
 let all = of_list [ NEW; ESTABLISHED; RELATED; INVALID ]
