@@ -36,8 +36,8 @@ let map_chain_rules_expand func chains : Ir.chain list =
   in
   List.map (fun chn -> { id = chn.id; rules = map_rules chn.rules; comment = chn.comment } ) chains
 
-let merge_opers rle =
-  (* !A => !B => X   =>  !(A | B) => X
+let merge_oper ?(tpe=`Inter) a b =
+    (* !A => !B => X   =>  !(A | B) => X
 
      A => B => X     => A U B => X
 
@@ -45,59 +45,70 @@ let merge_opers rle =
      !A => B => X    => (B / A) => X
 
   *)
-  let merge inter union diff (s, neg) (s', neg') =
+  let merge_inter inter union diff (s, neg) (s', neg') =
     match neg, neg' with
-    | (false, false) -> (inter s s', false)
-    | (true, true) ->   (union s s', true)
-    | (false, true) ->  (diff s  s', false)
-    | (true, false) ->  (diff s' s, false)
+    | false, false -> (inter s s', false)
+    | true, true ->   (union s s', true)
+    | false, true ->  (diff s  s', false)
+    | true, false ->  (diff s' s, false)
+  in
+
+  let merge_union inter union diff (s, neg) (s', neg') =
+    match neg, neg' with
+    | false, false -> (union s s', false)
+    | true, true ->   (inter s s', true)
+    | false, true ->  (diff s' s, false)
+    | true, false ->  (diff s  s', false)
+  in
+  let merge = match tpe with
+    | `Inter -> merge_inter
+    | `Union -> merge_union
   in
 
   let merge_states = merge State.intersect State.union State.diff in
   let merge_ip6sets = merge Ip6.intersect Ip6.union Ip6.diff in
   let merge_ip4sets = merge Ip4.intersect Ip4.union Ip4.diff in
   let merge_sets a b = merge Set.intersect Set.union Set.diff a b in
+  match a, b with
+  |  (Interface (dir, is), neg), (Interface (dir', is'), neg') when dir = dir' ->
+      let (is'', neg'') = merge_sets (is, neg) (is', neg') in
+      (Interface (dir, is''), neg'') |> Option.some
+  | (State s, neg), (State s', neg') ->
+      let (s'', neg'') = merge_states (s, neg) (s', neg') in
+      (State s'', neg'') |> Option.some
+  | (Ports (dir, pt, ports), neg), (Ports (dir', pt', ports'), neg') when dir = dir' && pt = pt' ->
+      let (ports'', neg'') = merge_sets (ports, neg) (ports', neg') in
+      (Ports (dir, pt, ports''), neg'') |> Option.some
+  | (Protocol (l, p), neg), (Protocol (l', p'), neg') when l = l' ->
+      let (p'', neg'') = merge_sets (p, neg) (p', neg') in
+      (Protocol (l, p''), neg'') |> Option.some
+  | (Icmp6 types, neg), (Icmp6 types', neg') ->
+      let (types'', neg'') = merge_sets (types, neg) (types', neg') in
+      (Icmp6 types'', neg'') |> Option.some
+  | (Icmp4 types, neg), (Icmp4 types', neg') ->
+      let (types'', neg'') = merge_sets (types, neg) (types', neg') in
+      (Icmp4 types'', neg'') |> Option.some
+  | (Ip6Set (dir, set), neg), (Ip6Set (dir', set'), neg') when dir = dir' ->
+      let (set'', neg'') = merge_ip6sets (set, neg) (set', neg') in
+      (Ip6Set (dir, set''), neg'') |> Option.some
+  | (Ip4Set (dir, set), neg), (Ip4Set (dir', set'), neg') when dir = dir' ->
+      let (set'', neg'') = merge_ip4sets (set, neg) (set', neg') in
+      Some (Ip4Set (dir, set''), neg'')
+  | (Zone (dir, zones), neg), (Zone (dir', zones'), neg') when dir = dir' ->
+      let (zones'', neg'') = merge_sets (zones, neg) (zones', neg') in
+      Some (Zone (dir, zones''), neg'')
+  | (TcpFlags (f, m), false), (TcpFlags (f', m'), false) -> begin
+      let set_flags = Set.union f f' in
+      let unset_flags = Set.union (Set.diff m f) (Set.diff m' f') in
+      match Set.intersect set_flags unset_flags |> Set.is_empty with
+      | true ->
+          Some (TcpFlags (set_flags, Set.union m m'), false)
+      | false -> Some (True, true)
+    end
+  | (True, neg), (True, neg') -> Some (True, neg || neg')
+  | (_cond, _), (_cond', _) -> None
 
-  let merge_oper a b =
-    match a, b with
-      |  (Interface (dir, is), neg), (Interface (dir', is'), neg') when dir = dir' ->
-          let (is'', neg'') = merge_sets (is, neg) (is', neg') in
-          (Interface (dir, is''), neg'') |> Option.some
-      | (State s, neg), (State s', neg') ->
-          let (s'', neg'') = merge_states (s, neg) (s', neg') in
-          (State s'', neg'') |> Option.some
-      | (Ports (dir, pt, ports), neg), (Ports (dir', pt', ports'), neg') when dir = dir' && pt = pt' ->
-          let (ports'', neg'') = merge_sets (ports, neg) (ports', neg') in
-          (Ports (dir, pt, ports''), neg'') |> Option.some
-      | (Protocol (l, p), neg), (Protocol (l', p'), neg') when l = l' ->
-          let (p'', neg'') = merge_sets (p, neg) (p', neg') in
-          (Protocol (l, p''), neg'') |> Option.some
-      | (Icmp6 types, neg), (Icmp6 types', neg') ->
-          let (types'', neg'') = merge_sets (types, neg) (types', neg') in
-          (Icmp6 types'', neg'') |> Option.some
-      | (Icmp4 types, neg), (Icmp4 types', neg') ->
-          let (types'', neg'') = merge_sets (types, neg) (types', neg') in
-          (Icmp4 types'', neg'') |> Option.some
-      | (Ip6Set (dir, set), neg), (Ip6Set (dir', set'), neg') when dir = dir' ->
-          let (set'', neg'') = merge_ip6sets (set, neg) (set', neg') in
-          (Ip6Set (dir, set''), neg'') |> Option.some
-      | (Ip4Set (dir, set), neg), (Ip4Set (dir', set'), neg') when dir = dir' ->
-          let (set'', neg'') = merge_ip4sets (set, neg) (set', neg') in
-          Some (Ip4Set (dir, set''), neg'')
-      | (Zone (dir, zones), neg), (Zone (dir', zones'), neg') when dir = dir' ->
-          let (zones'', neg'') = merge_sets (zones, neg) (zones', neg') in
-          Some (Zone (dir, zones''), neg'')
-      | (TcpFlags (f, m), false), (TcpFlags (f', m'), false) -> begin
-          let set_flags = Set.union f f' in
-          let unset_flags = Set.union (Set.diff m f) (Set.diff m' f') in
-          match Set.intersect set_flags unset_flags |> Set.is_empty with
-          | true ->
-              Some (TcpFlags (set_flags, Set.union m m'), false)
-          | false -> Some (True, true)
-        end
-      | (True, neg), (True, neg') -> Some (True, neg || neg')
-      | (_cond, _), (_cond', _) -> None
-  in
+let merge_opers rle =
   let rec merge_siblings acc = function
     | x :: xs ->
         let (x', xs') = List.fold_left (
@@ -109,6 +120,28 @@ let merge_opers rle =
     | [] -> acc
   in
   merge_siblings [] rle
+
+let rec bind_list acc = function
+  | Some x :: xs -> bind_list (x :: acc) xs
+  | None :: _ -> None
+  | [ ] -> Some (List.rev acc)
+
+
+let rec merge_adjecent_rules = function
+  | (ops, tg) :: (ops', tg') :: xs when tg = tg' -> begin
+      let ops'' =
+        List.group
+          (fun a b -> Int.compare (enumerate_cond @@ fst a) (enumerate_cond @@ fst b))
+          (ops @ ops')
+        |> List.map (function [ op; op' ] -> merge_oper ~tpe:`Union op op' | _ -> None)
+        |> bind_list []
+      in
+      match ops'' with
+      | Some ops -> printf "M"; merge_adjecent_rules ((ops, tg) :: xs)
+      | None -> (ops, tg) :: merge_adjecent_rules ((ops', tg') :: xs)
+    end
+  | x :: xs -> x :: merge_adjecent_rules xs
+  | [] -> []
 
 let is_satisfiable conds =
   not (List.exists (is_always false) conds)
@@ -403,6 +436,7 @@ let optimize_pass chains =
     map_chain_rules eliminate_dublicate_rules;
     map_chain_rules reorder;
     map_chain_rules filter_protocol;
+    map_chain_rules merge_adjecent_rules;
     reduce;
     inline should_inline;
     map_chain_rules (fun rls -> Common.map_filter_exceptions (fun (opers, tg) -> (merge_opers opers, tg)) rls);

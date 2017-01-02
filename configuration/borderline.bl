@@ -46,7 +46,7 @@ process filter {
                  use zones;
             };
             rule {
-              source address = ::2, ::1, ::3;
+              source address = ::2;
             } policy allow;
             rule {
               source address = ::1;

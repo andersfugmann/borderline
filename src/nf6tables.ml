@@ -157,6 +157,7 @@ let gen_cond neg cond =
         | Ir.DESTINATION  -> "daddr"
       in
       let ips = Ip6.to_list ips
+                |> Ip6.reduce
                 |> List.map Ipaddr.V6.Prefix.to_string
                 |> String.concat ", "
       in
@@ -167,6 +168,7 @@ let gen_cond neg cond =
         | Ir.DESTINATION  -> "daddr"
       in
       let ips = Ip4.to_list ips
+                |> Ip4.reduce
                 |> List.map Ipaddr.V4.Prefix.to_string
                 |> String.concat ", "
       in
