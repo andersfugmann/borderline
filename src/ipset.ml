@@ -22,67 +22,41 @@ module type Ip = sig
 end
 
 module Make(Ip : Ip) = struct
+  module IpSet = Set.Make(Ip.Prefix)
   type elt = Ip.Prefix.t
-  type tree = Node of tree * elt * tree
-            | Nil
-  type t = tree
+  type t = IpSet.t
 
-  let rec to_list = function
-    | Nil -> []
-    | Node (l, t, r) ->
-        (to_list l) @ [t] @ (to_list r)
-
-  let empty = Nil
-
-  let rec add t elt = match t with
-    | Nil -> Node (Nil, elt, Nil)
-    | Node (_, e, _) when Ip.Prefix.subset ~subnet:elt ~network:e -> t
-    | Node (l, e, r) when Ip.Prefix.subset ~subnet:e ~network:elt ->
-        (to_list l) @ (to_list r) |> List.enum |> Random.shuffle
-        |> Array.fold_left add (add Nil elt)
-    | Node (l, e, r) when Ip.Prefix.compare elt e < 0 ->
-        Node ( add l elt, e, r)
-    | Node (l, e, r) when Ip.Prefix.compare elt e > 0 ->
-        Node ( l, e, add r elt)
-    | Node (l, e, r) (* when Ip.Prefix.compare elt e = 0 *) ->
-        Node (l, e, r)
+  let to_list t = IpSet.to_list t
+  let empty = IpSet.empty
+  let add t elt = IpSet.add elt t
 
   let of_list l =
-    List.enum l |> Random.shuffle
-    |> Array.fold_left add empty
+    List.fold_left add empty l
 
-  let is_empty = function
-    | Nil -> true
-    | Node _ -> false
+  let is_empty t = IpSet.is_empty t
 
   (* Call reduce as long as there are changes *)
   let reduce t =
-    let reduce_pair x y =
-      match Ip.Prefix.bits x = Ip.Prefix.bits y  with
-      | true -> begin
+    let rec reduce = function
+      | x :: y :: xs when Ip.Prefix.bits x = Ip.Prefix.bits y -> begin
           let e = Ip.Prefix.make (Ip.Prefix.bits x - 1) (Ip.Prefix.network x) in
           match Ip.Prefix.subset ~network:e ~subnet:y with
-          | true -> Some e
-          | false -> None
+          | true -> e :: reduce xs
+          | false -> x :: reduce (y :: xs)
         end
-      | false -> None
-    in
-
-    let rec reduce = function
-      | x :: y :: xs -> begin
-          match reduce_pair x y with
-          | Some e -> e :: reduce xs
-          | None -> x :: reduce (y :: xs)
-        end
-      | [ x ] -> [ x ]
+      | x :: y :: xs when Ip.Prefix.subset ~network:y ~subnet:x ->
+          reduce (y :: xs)
+      | x :: y :: xs when Ip.Prefix.subset ~network:x ~subnet:y ->
+          reduce (x :: xs)
+      | x :: xs -> x :: reduce xs
       | [ ] -> []
     in
     let rec loop lst =
       let lst' = reduce lst in
+      (* Hmm. No need for that I guess *)
       match List.length lst = List.length lst' with
       | true -> lst'
       | false -> loop lst'
-
     in
     loop t
 
@@ -198,7 +172,7 @@ module Test = struct
         let expect = [ "127.0.0.0/24"; ]
                      |> List.map Ipaddr.V4.Prefix.of_string_exn
         in
-        Ip4List.assert_equal expect (ips |> Ip4.of_list |> Ip4.to_list)
+        Ip4List.assert_equal expect (ips |> Ip4.of_list |> Ip4.to_list |> Ip4.reduce)
       end;
       "Union" >:: begin fun _ ->
         let observ = [ "127.0.0.1/32"; "127.0.0.0/24"; "127.0.0.2/32";  ]
