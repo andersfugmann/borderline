@@ -57,8 +57,8 @@ let merge_oper ?(tpe=`Inter) a b =
     match neg, neg' with
     | false, false -> (union s s', false)
     | true, true ->   (inter s s', true)
-    | false, true ->  (diff s' s, false)
-    | true, false ->  (diff s  s', false)
+    | false, true ->  (diff s'  s, true)
+    | true, false ->  (diff s s',  true)
   in
   let merge = match tpe with
     | `Inter -> merge_inter
@@ -93,6 +93,7 @@ let merge_oper ?(tpe=`Inter) a b =
       (Ip6Set (dir, set''), neg'') |> Option.some
   | (Ip4Set (dir, set), neg), (Ip4Set (dir', set'), neg') when dir = dir' ->
       let (set'', neg'') = merge_ip4sets (set, neg) (set', neg') in
+      (if Ip4.is_empty set'' then printf "*");
       Some (Ip4Set (dir, set''), neg'')
   | (Zone (dir, zones), neg), (Zone (dir', zones'), neg') when dir = dir' ->
       let (zones'', neg'') = merge_sets (zones, neg) (zones', neg') in
@@ -218,13 +219,24 @@ let reduce chains =
 (** Remove all return statements, by creating new chains for each
     return statement *)
 let fold_return_statements chains =
-  let neg = List.map (fun (x, a) -> (x, not a)) in
+  (* This is wrong. *)
+  (* So we have:
+       a ^ b -> return
+       X
+  must be
+    !a jump 1
+    !b jump 1
+  1: X
+
+  *)
+  let neg tg = List.map (fun (x, a) -> [(x, not a)], tg) in
   let rec fold_return acc = function
     | (cl, Return) :: xs ->
       printf "F";
       let rls, chns = fold_return [] xs in
       let chn = Chain.create rls "Return stm inlined" in
-      (acc @ [(neg cl, Jump(chn.id))], chn :: chns)
+      let jumps = neg (Jump (chn.id)) cl in
+      (acc @ jumps, chn :: chns)
     | rle :: xs -> fold_return (acc @ [rle]) xs
     | [] -> (acc, [])
   in
@@ -434,9 +446,9 @@ let optimize_pass chains =
     map_chain_rules remove_false_chains;
     map_chain_rules eliminate_dead_rules;
     map_chain_rules eliminate_dublicate_rules;
+    map_chain_rules merge_adjecent_rules;
     map_chain_rules reorder;
     map_chain_rules filter_protocol;
-    map_chain_rules merge_adjecent_rules;
     reduce;
     inline should_inline;
     map_chain_rules (fun rls -> Common.map_filter_exceptions (fun (opers, tg) -> (merge_opers opers, tg)) rls);

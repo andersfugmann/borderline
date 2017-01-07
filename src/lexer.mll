@@ -106,6 +106,7 @@ rule token = parse
   | ';'            { SEMI }
   | '#'            { comment lexbuf }
   | '/'            { SLASH }
+  | '!'            { NOT }
   | eof            { END }
 
 and comment = parse

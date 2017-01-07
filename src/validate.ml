@@ -57,7 +57,7 @@ let expand nodes =
            cyclic reference dectection will prevent infinite loops,
            and allow error reporting to the users. *)
 
-      | F.DefineList (_, [ F.Id id ]) -> [ F.Reference id ]
+      | F.DefineList (_, [ F.Id id ]) -> [ F.Reference (id, false) ]
       | F.DefineStms (_, x) -> x
       | _ -> parse_error ~id ~pos "Reference to Id of wrong type"
     end with
@@ -118,7 +118,15 @@ let expand nodes =
       | F.False -> F.False
     in
     match rules with
-    | F.Reference id :: xs -> (expand_rule_list (mark_seen (fst id) seen) (expand_rules id)) @ (expand_rule_list seen xs)
+    | F.Reference (id, neg) :: xs ->
+        let rules =
+          match expand_rules id, neg with
+          | x, false -> x
+          | [ F.True ], true -> [ F.False ]
+          | [ F.False ], true -> [ F.True ]
+          | _, true -> parse_error ~pos:(snd id) "Only true / false aliases can be negated"
+        in
+        (expand_rule_list (mark_seen (fst id) seen) rules) @ (expand_rule_list seen xs)
     | x :: xs -> expand_rule x :: expand_rule_list seen xs
     | [] -> []
   in

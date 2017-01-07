@@ -1,3 +1,5 @@
+define rfc1918_addr = 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
+define multicast_addr = 224.0.0.0/4
 define validate =
        rule {
             rule {
@@ -8,27 +10,55 @@ define validate =
                  rule { tcpflags != "SYN" / "SYN", "ACK", "FIN", "RST" } policy { log_invalid };
 
                  rule {
-                     use bogons; #if
                      rule {
-                         #source zone = external;
-                         source address = bogon;
-                     } policy { log_bogon };
+                       source zone = external;
+                       rule {
+                         use bogons6; #if
+                         source address = bogon6;
+                       } policy { log_bogon };
+                       rule {
+                         use bogons4; #if
+                         source address != rfc1918_addr;
+                         source address != multicast_addr;
+                         source address = bogon4;
+                       } policy { log_bogon };
+                       rule {
+                         ! use rfc1918;
+                         source address = rfc1918_addr;
+                       } policy { log_bogon };
+                       rule {
+                         ! use multicast;
+                         source address = multicast_addr;
+                       } policy { log_bogon };
+                     };
                      rule {
-                         destination zone = external;
-                         destination address = bogon;
-                     } policy { log_bogon };
+                       destination zone = external;
+                       rule {
+                         use bogons6; #if
+                         destination address = bogon6;
+                       } policy { log_bogon };
+
+                       rule {
+                         use bogons4; #if
+                         destination address = bogon4;
+                         destination address != rfc1918_addr;
+                         destination address != multicast_addr;
+                       } policy { log_bogon };
+                       rule {
+                         ! use rfc1918;
+                         destination address = rfc1918_addr;
+                       } policy { log_bogon };
+                       rule {
+                         ! use multicast;
+                         destination address = multicast_addr;
+                       } policy { log_bogon };
+                     };
                  };
 
                  rule {
                      use allocations; #if
-                     rule {
-                         source zone = external;
-                         source address != allocated;
-                     } policy { log_bogon };
-                     rule {
-                         destination zone = external;
-                         destination address != allocated;
-                     } policy { log_bogon };
-                 };
+                     source zone = external;
+                     source address != allocated6;
+                 } policy { log_bogon };
             };
       }

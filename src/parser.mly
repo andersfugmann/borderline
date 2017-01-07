@@ -21,8 +21,7 @@ let parse_error pos s =
 %token NEW ESTABLISHED RELATED INVALID
 %token SEMI PROTOCOL4 PROTOCOL6
 %token TCP_PORT UDP_PORT ICMP6 ICMP4 TCPFLAGS TRUE FALSE
-%token EQ NE
-
+%token EQ NE NOT
 
 %token <int * Lexing.position> INT
 %token <string * int * Lexing.position> IPv6
@@ -42,7 +41,7 @@ main:
   | stms = terminated(list(statement), END)            { stms }
 
 statement:
-  | IMPORT s=string                                    { F.Import(s) }
+  | IMPORT s=string                                          { F.Import(s) }
   | ZONE id=id LBRACE stms=separated_list_opt(SEMI, zone_stm) RBRACE { F.Zone(id, stms) }
   | DEFINE id=id_quote EQ POLICY policies=policy_seq         { F.DefinePolicy(id, policies) }
   | DEFINE id=id_quote EQ rules=rule_seq                     { F.DefineStms(id, rules) }
@@ -74,7 +73,8 @@ process_type:
 
 rule_stm:
   | RULE r=rule_seq p=policy_opt                       { F.Rule (r, p) }
-  | USE id=id                                          { F.Reference (id) }
+  | NOT USE id=id                                      { F.Reference (id, true) }
+  | USE id=id                                          { F.Reference (id, false) }
   | d=filter_direction f=filter_stm                    { F.Filter (d, fst f, snd f) }
   | STATE o=oper states=separated_list(COMMA, state)   { F.State (states, o) }
   | PROTOCOL4 o=oper d=data_list                       { F.Protocol (Ir.Protocol.Ip4, d, o) }
@@ -83,6 +83,8 @@ rule_stm:
   | ICMP4 o=oper d=data_list                           { F.Icmp4 (d, o) }
   | TCPFLAGS o=oper f=data_list SLASH m=data_list      { F.TcpFlags (f, m, o) }
   | TRUE                                               { F.True }
+  | NOT FALSE                                          { F.True }
+  | NOT TRUE                                           { F.False }
   | FALSE                                              { F.False }
 
 (* A policy can be a single policy, or a list of policies

@@ -37,7 +37,7 @@ and rule_stm = Filter of Ir.direction * filter_stm * Ir.pol
              | Icmp6 of data list * Ir.pol
              | Icmp4 of data list * Ir.pol
              | Rule of rule_stm list * policytype list
-             | Reference of id
+             | Reference of id * bool
              | TcpFlags of data list * data list * Ir.pol
              | True
              | False

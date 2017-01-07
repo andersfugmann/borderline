@@ -45,14 +45,5 @@ process filter {
                  use common;
                  use zones;
             };
-            rule {
-              source address = ::2;
-            } policy allow;
-            rule {
-              source address = ::1;
-            } policy allow;
-            rule {
-              source address = ::3;
-            } policy allow;
         }
 } policy { log_missed; }
