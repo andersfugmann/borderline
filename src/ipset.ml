@@ -60,17 +60,6 @@ module Make(Ip : Ip) = struct
     in
     loop t
 
-  let equal a b =
-    let rec inner = function
-      | x :: xs, y :: ys when Ip.Prefix.subset ~network:y ~subnet:x ->
-          inner (xs, (y :: ys))
-      | x :: xs, y :: ys when Ip.Prefix.subset ~network:x ~subnet:y ->
-          inner ((x::xs), ys)
-      | [], [] -> true
-      | _ -> false
-    in
-    inner (to_list a, to_list b)
-
   let split ip =
     let bits = Ip.Prefix.bits ip in
     let addr = Ip.Prefix.network ip in
@@ -78,12 +67,27 @@ module Make(Ip : Ip) = struct
     let rem = bits mod 8 in
     let addr2 =
       let s = Ip.to_bytes addr in
+      if offset >= String.length s then raise (Invalid_argument "Cannot split ip address");
       let v = String.get s offset |> Char.code |> (lor) (1 lsl (7-rem)) |> Char.chr in
       String.set s offset v;
       Ip.of_bytes_exn s;
     in
     (Ip.Prefix.make (bits+1) addr, Ip.Prefix.make (bits+1) addr2)
 
+  let equal a b =
+    let rec inner = function
+      | x :: xs, y :: ys when Ip.Prefix.compare x y = 0 ->
+          inner (xs, ys)
+      | x :: xs, y :: ys when Ip.Prefix.subset ~network:y ~subnet:x ->
+          let (y1, y2) = split y in
+          inner (x :: xs, y1 :: y2 :: ys)
+      | x :: xs, y :: ys when Ip.Prefix.subset ~network:x ~subnet:y ->
+          let (x1, x2) = split x in
+          inner (x1 :: x2 :: xs, y :: ys)
+      | [], [] -> true
+      | _ -> false
+    in
+    inner (to_list a, to_list b)
 
   (* Intersection, Union, Diff *)
   let diff a b =
@@ -157,8 +161,8 @@ module Test = struct
 
   let unittest = "Ip set" >::: [
       "Split" >:: begin fun _ ->
-        let ip = Ipaddr.V4.Prefix.of_string_exn "127.0.0.0/24" in
-        let expect = [ "127.0.0.0/25"; "127.0.0.128/25" ]
+        let ip = Ipaddr.V4.Prefix.of_string_exn "127.0.0.0/23" in
+        let expect = [ "127.0.0.0/24"; "127.0.1.0/24" ]
                      |> List.map Ipaddr.V4.Prefix.of_string_exn
         in
         let observ = Ip4.split ip |> fun x -> [ fst x; snd x] in
@@ -209,21 +213,6 @@ module Test = struct
         in
         Ip4List.assert_equal expect observ
       end;
-      "Diff2" >:: begin fun _ ->
-        let ip_a = [ "224.0.0.1/4"; ]
-                   |> List.map Ipaddr.V4.Prefix.of_string_exn
-                   |> Ip4.of_list
-        in
-        let ip_b = [ "224.0.0.1/32"; ]
-                   |> List.map Ipaddr.V4.Prefix.of_string_exn
-                   |> Ip4.of_list
-        in
-        let observ = Ip4.diff ip_a ip_b |> Ip4.to_list in
-        let expect = ["224.0.0.0/32"; "224.0.0.2/31"; "224.0.0.4/30"; "224.0.0.8/29"; "224.0.0.16/28"; "224.0.0.32/27"; "224.0.0.64/26"; "224.0.0.128/25"; "224.0.1.0/24"; "224.0.2.0/23"; "224.0.4.0/22"; "224.0.8.0/21"; "224.0.16.0/20"; "224.0.32.0/19"; "224.0.64.0/18"; "224.0.128.0/17"; "224.1.0.0/16"; "224.2.0.0/15"; "224.4.0.0/14"; "224.8.0.0/13"; "224.16.0.0/12"; "224.32.0.0/11"; "224.64.0.0/10"; "224.128.0.0/9"; "225.0.0.0/8"; "226.0.0.0/7"; "228.0.0.0/6"; "232.0.0.0/5";]
-                     |> List.map Ipaddr.V4.Prefix.of_string_exn
-        in
-        Ip4List.assert_equal expect observ
-      end;
       "Intersect" >:: begin fun _ ->
         let ip_a = [ "127.0.0.1/32"; "128.0.0.0/24"; "127.0.0.3/32";  ]
                    |> List.map Ipaddr.V4.Prefix.of_string_exn
@@ -238,6 +227,25 @@ module Test = struct
                      |> List.map Ipaddr.V4.Prefix.of_string_exn
         in
         Ip4List.assert_equal expect observ
+      end;
+      "Equal" >:: begin fun _ ->
+        let ip_a = [ "127.0.0.0/24"; "128.0.0.0/23" ]
+                   |> List.map Ipaddr.V4.Prefix.of_string_exn
+                   |> Ip4.of_list
+        in
+        let ip_b = [ "127.0.0.128/25"; "127.0.0.0/25"; "128.0.0.0/24"]
+                   |> List.map Ipaddr.V4.Prefix.of_string_exn
+                   |> Ip4.of_list
+        in
+        assert_bool "Should not be equal" (not (Ip4.equal ip_a ip_b));
+        assert_bool "Should not be equal" (not (Ip4.equal ip_b ip_a));
+        let ip_b =
+          "128.0.1.0/24"
+          |> Ipaddr.V4.Prefix.of_string_exn
+          |> Ip4.add ip_b
+        in
+        assert_bool "Should be equal" (Ip4.equal ip_a ip_b);
+        assert_bool "Should be equal" (Ip4.equal ip_b ip_a);
       end;
     ]
 

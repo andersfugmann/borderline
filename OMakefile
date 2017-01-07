@@ -39,6 +39,7 @@ install: _build/borderline.opt _build/bl_configure.opt
 unittest: _build/unit_test.run
     _build/unit_test.run
 
+.PHONY: tests
 tests: _build/borderline.run
     cd tests; BORDERLINE=../_build/borderline.run ./test.sh
 
