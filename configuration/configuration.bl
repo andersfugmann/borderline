@@ -22,7 +22,6 @@ define global_udp_ports =
 
 # List of ports accessable on the firewall itself, accessable from the
 # outside.
-# See zones/self.bl
 define public_tcp_ports = smtp, ssmtp, domain, imaps, http, https, ntp
 define public_udp_ports = domain, ntp
 
@@ -34,3 +33,6 @@ define allow_outbound = true
 
 # Further configuration is best made in the zone files, where zone inbound
 # traffic can be defined on a per zone basis.
+
+# For general rules, insert rules in borderline.bl, or modify the custom rule alias:
+define custom = rule { }
