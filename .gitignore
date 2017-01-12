@@ -1,3 +1,5 @@
+*.nft
+src/parser.mli
 *~
 _build
 doc

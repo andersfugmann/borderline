@@ -1,0 +1,5 @@
+zone he-ipv6 {
+    interface = he-ipv6;
+    process filter { } policy log_deny;
+}
+define external += he-ipv6

@@ -21,7 +21,7 @@ let parse_error pos s =
 %token NEW ESTABLISHED RELATED INVALID
 %token SEMI PROTOCOL4 PROTOCOL6
 %token TCP_PORT UDP_PORT ICMP6 ICMP4 TCPFLAGS TRUE FALSE
-%token EQ NE NOT
+%token EQ NE NOT APPEND
 
 %token <int * Lexing.position> INT
 %token <string * int * Lexing.position> IPv6
@@ -47,6 +47,7 @@ statement:
   | DEFINE id=id_quote EQ rules=rule_seq                     { F.DefineStms(id, rules) }
   | DEFINE id=id_quote EQ rule=rule_stm                      { F.DefineStms(id, [ rule ] ) }
   | DEFINE id=id_quote EQ data=data_list                     { F.DefineList(id, data) }
+  | DEFINE id=id_quote APPEND data=data_list                 { F.AppendList(id, data) }
   | PROCESS t=process_type r=rule_seq POLICY p=policy_seq { F.Process (t,r,p) }
 
 rule_seq:

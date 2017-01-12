@@ -1,0 +1,6 @@
+zone wlan {
+     interface = int;
+     network = 2001:470:dc46:2::/64;
+     network = 10.0.1.0/24;
+     process filter { } policy log_deny;
+}

@@ -32,7 +32,7 @@ let rec filter_network = function
   | [] -> []
 
 let rec filter_zonerules table = function
-  | F.ZoneRules (t, r, p) :: xs when t = table-> (r, p) :: filter_zonerules table xs
+  | F.ZoneRules (t, r, p) :: xs when t = table -> (r, p) :: filter_zonerules table xs
   | _ :: xs -> filter_zonerules table xs
   | [] -> []
 
@@ -84,7 +84,7 @@ let create_zone_set nodes =
 let emit_nodes table zones =
   let rec gen_rule_stems (zone_id, nodes) =
     List.map (
-      fun (rules, policy) -> F.Rule( [ F.Filter(Ir.DESTINATION, F.FZone([F.Id zone_id]), false) ] @ rules, policy )
+      fun (rules, policy) -> F.Rule( F.Filter(Ir.DESTINATION, F.FZone([F.Id zone_id]), false) :: rules, policy )
     ) (filter_zonerules table nodes)
   in
     [ F.DefineStms ((all_zones, Lexing.dummy_pos), List.flatten (List.map gen_rule_stems zones)) ]

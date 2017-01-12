@@ -21,16 +21,32 @@ let mark_seen id seen =
     already. If the id was present, a ParseError exception is raised in
     order to stop processing).
 *)
-let add_id_to_map id def map =
+let add_id_to_map (id, pos) def map =
   match Map.mem id map with
-  | true -> parse_error ~id "Defintion shadows previous definition"
+  | true -> parse_error ~id ~pos "Defintion shadows previous definition"
   | false -> Map.add id def map
 
+let extend_id_to_map (id, pos) lst map =
+  let create = function
+    | None -> Some (F.DefineList((id, pos), lst))
+    | Some F.DefineList(_, lst') -> Some (F.DefineList((id, pos), lst' @ lst))
+    | Some F.Import _
+    | Some F.Zone (_,_)
+    | Some F.DefineStms (_,_)
+    | Some F.AppendList (_,_)
+    | Some F.DefinePolicy (_,_)
+    | Some F.Process (_,_,_) -> parse_error ~id ~pos "Can only append to prevous list definition"
+  in
+  Map.modify_opt id create map
+
 let rec create_define_map_rec acc = function
-  | F.DefineStms ((id, _pos), _) as def :: xs -> create_define_map_rec (Map.add id def acc) xs
-  | F.DefineList ((id, _pos), _) as def :: xs -> create_define_map_rec (Map.add id def acc) xs
-  | F.DefinePolicy ((id, _pos), _) as def :: xs -> create_define_map_rec (Map.add id def acc) xs
-  | _ :: xs -> create_define_map_rec acc xs
+  | F.DefineStms (id, _) as def :: xs -> create_define_map_rec (add_id_to_map id def acc) xs
+  | F.DefineList (id, _) as def :: xs -> create_define_map_rec (add_id_to_map id def acc) xs
+  | F.DefinePolicy (id, _) as def :: xs -> create_define_map_rec (add_id_to_map id def acc) xs
+  | F.AppendList (id, lst) :: xs -> create_define_map_rec (extend_id_to_map id lst acc) xs
+  | F.Import _ :: xs
+  | F.Zone (_,_) :: xs
+  | F.Process (_,_,_) :: xs -> create_define_map_rec acc xs
   | [] -> acc
 
 (** As the recursive version of the fuction needs an accumulator, add
@@ -59,7 +75,12 @@ let expand nodes =
 
       | F.DefineList (_, [ F.Id id ]) -> [ F.Reference (id, false) ]
       | F.DefineStms (_, x) -> x
-      | _ -> parse_error ~id ~pos "Reference to Id of wrong type"
+      | F.DefinePolicy (_, _)
+      | F.Import _
+      | F.Zone (_,_)
+      | F.DefineList (_,_)
+      | F.AppendList (_,_)
+      | F.Process (_,_,_) -> parse_error ~id ~pos "Reference to Id of wrong type"
     end with
     | _ -> parse_error ~id ~pos "Reference to unknown id"
   in
@@ -75,7 +96,12 @@ let expand nodes =
         (* As before; allow simple defines work as aliases. *)
       | F.DefineList (_, [ F.Id id ]) -> [ F.Ref id ]
       | F.DefinePolicy (_id', x) -> x
-      | _ -> parse_error ~id ~pos "Reference to Id of wrong type"
+      | F.DefineStms (_, _)
+      | F.Import _
+      | F.Zone (_, _)
+      | F.DefineList (_, _)
+      | F.AppendList (_, _)
+      | F.Process (_, _, _) -> parse_error ~id ~pos "Reference to Id of wrong type"
     end with
     | Not_found -> parse_error ~id ~pos "Reference to unknown id"
   in
@@ -138,12 +164,13 @@ let expand nodes =
     | F.Interface _ as i :: xs -> i :: expand_zone_stms xs
     | F.Network _ as i :: xs -> i :: expand_zone_stms xs
     | F.ZoneRules (t, rules, policies) :: xs ->
-      F.ZoneRules (t, expand_rule_list [] rules, expand_policy_list [] policies) :: expand_zone_stms xs
+        F.ZoneRules (t, expand_rule_list [] rules, expand_policy_list [] policies) :: expand_zone_stms xs
     | [] -> []
   in
   let rec expand_nodes = function
-    | F.DefineStms (_, _) :: xs -> expand_nodes xs
-    | F.DefineList (_, _) :: xs -> expand_nodes xs
+    | F.DefineStms (_, _) :: xs
+    | F.DefineList (_, _) :: xs
+    | F.AppendList (_, _) :: xs
     | F.DefinePolicy (_, _) :: xs -> expand_nodes xs
     | F.Process (t, rules, policies) :: xs -> F.Process (t, expand_rule_list [] rules, expand_policy_list [] policies) :: expand_nodes xs
     | F.Import _ :: _ -> assert false

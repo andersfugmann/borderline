@@ -15,7 +15,7 @@ generic/services.bl: /etc/services
 	@egrep -v "^#" $< | while read name number rest; do \
           if [ "$${number##*/}" = "tcp" -o "$${number##*/}" = "udp" ]; then \
 	    for n in $${name} $${rest%#*}; do \
-              echo "define \"$${n}\" = $${number%%/*}"; \
+              echo "define \"$${n}\" += $${number%%/*}"; \
             done; \
           fi; \
         done | sort -u > $@

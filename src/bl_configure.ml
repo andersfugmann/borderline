@@ -1,8 +1,5 @@
 (* Parse output from ip route, and create zone example files for easy
    setup.
-
-   ip -f inet6 route
-
 *)
 
 open Batteries
@@ -36,7 +33,7 @@ let write_external_zone ch_out interface _networks =
     Printf.fprintf ch_out "    interface = %s;\n" interface;
     Printf.fprintf ch_out "    process filter { } policy log_allow;\n";
     Printf.fprintf ch_out "}\n";
-    Printf.fprintf ch_out "define external = %s\n" interface
+    Printf.fprintf ch_out "define external += %s\n" interface
 
 let write_internal_zone ch_out interface networks =
   let write_network network =
@@ -44,7 +41,7 @@ let write_internal_zone ch_out interface networks =
     Printf.fprintf ch_out "    network = %s;\n" network in
     Printf.fprintf ch_out "    interface = %s;\n" interface;
     List.iter write_network networks;
-    Printf.fprintf ch_out "    process filter { } policy log_deny;\n";
+    Printf.fprintf ch_out "    process filter { } policy log_allow;\n";
     Printf.fprintf ch_out "}\n"
 
 let is_external_zone networks = List.mem "default" networks

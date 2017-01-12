@@ -1,8 +1,39 @@
 # Rules for all zones.
 define common = {
-   rule { src zone = self; } policy log_allow;
-   rule { destination tcp port = global_tcp_ports; } policy log_allow;
-   rule { destination udp port = global_udp_ports; } policy log_allow;
-   rule { icmp6 = "echo-request", "echo-reply" } policy log_allow;
-   rule { icmp4 = "echo-request", "echo-reply" } policy log_allow;
+    # Drop any martian packets
+    rule { src zone = mars; } policy log_martian;
+    rule { dst zone = mars; } policy log_martian;
+
+    rule { state = related, established; } policy log_allow;
+    use validate;
+
+    rule {
+        state = new;
+        # Allow router information for fe80 networks, and Neighbor Discovery (rfc 2461)
+        rule { use link_address; #if
+               source zone != external;
+               destination zone != external;
+               icmp6 = "router-solicitation",
+                       "router-advertisement",
+                       "neighbor-solicitation",
+                       "neighbor-advertisement",
+                       "redirect";
+        } policy allow;
+
+        rule { source zone = self; } policy log_allow;
+        rule { icmp6 = "echo-request", "echo-reply" } policy log_allow;
+        rule { icmp4 = "echo-request", "echo-reply" } policy log_allow;
+
+        rule { destination tcp port = global_tcp_ports; } policy log_allow;
+        rule { destination udp port = global_udp_ports; } policy log_allow;
+        rule {
+            destination zone = self;
+            rule { destination tcp port = public_tcp_ports } policy log_allow;
+            rule { destination udp port = public_udp_ports } policy log_allow;
+        };
+        rule {
+            use allow_outbound; #if
+            destination zone = external;
+        } policy allow;
+    };
 }

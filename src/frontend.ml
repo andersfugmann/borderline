@@ -20,6 +20,7 @@ and node = Import of id
          | Zone of id * zone_stm list
          | DefineStms of id * rule_stm list
          | DefineList of id * data list
+         | AppendList of id * data list
          | DefinePolicy of id * policytype list
          | Process of processtype * rule_stm list * policytype list
 
@@ -53,6 +54,7 @@ let node_type id = function
   | Process _ -> 2 = id
   | DefineStms _ -> 3 = id
   | DefineList _ -> 4 = id
+  | AppendList _ -> 5 = id
   | _ -> false
 
 let rec fold_rules func acc = function

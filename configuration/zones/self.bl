@@ -1,10 +1,10 @@
-zone self { 
+zone self {
      interface = lo;
      process filter {
-         rule { 
-             src zone = external; 
-             rule { destination tcp port = public_tcp_ports } policy log_allow;
-             rule { destination udp port = public_udp_ports } policy log_allow;
-         } policy log_deny;
-     } policy log_allow;
+         rule { source zone = int } policy log_allow;
+         rule {
+             destination address = 90.184.102.126;
+             destination tcp port = 54323;
+         } policy log_allow;
+     } policy log_deny;
 }

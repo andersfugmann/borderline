@@ -102,6 +102,7 @@ rule token = parse
   | '}'            { RBRACE }
   | ','            { COMMA }
   | "!="           { NE }
+  | "+="           { APPEND }
   | '='            { EQ }
   | ';'            { SEMI }
   | '#'            { comment lexbuf }

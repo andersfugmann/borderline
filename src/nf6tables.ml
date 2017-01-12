@@ -1,6 +1,5 @@
 (**
    Output a nft sctipt.
-   TODO: Fix negation of tcpflags
 *)
 
 open Batteries
@@ -255,5 +254,5 @@ let emit_chains (chains : (Ir.chain_id, Ir.chain) Map.t) : string list =
     |> List.of_enum
   in
   (* Dump zone mapping *)
-  Hashtbl.iter (fun zone id -> printf "#zone %s -> %d\n" zone id) zones;
+  Hashtbl.iter (fun zone id -> printf "#zone %s -> 0x%04x\n" zone id) zones;
   [ "table inet filter {" ] @ rules @ [ "}" ]

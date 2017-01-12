@@ -93,7 +93,6 @@ let merge_oper ?(tpe=`Inter) a b =
       (Ip6Set (dir, set''), neg'') |> Option.some
   | (Ip4Set (dir, set), neg), (Ip4Set (dir', set'), neg') when dir = dir' ->
       let (set'', neg'') = merge_ip4sets (set, neg) (set', neg') in
-      (if Ip4.is_empty set'' then printf "*");
       Some (Ip4Set (dir, set''), neg'')
   | (Zone (dir, zones), neg), (Zone (dir', zones'), neg') when dir = dir' ->
       let (zones'', neg'') = merge_sets (zones, neg) (zones', neg') in
@@ -460,6 +459,6 @@ let optimize_pass chains =
 
 let rec optimize chains =
   let chains' = optimize_pass chains in
-  match (conds chains) = (conds chains') with
+  match (conds chains, count_rules chains) = (conds chains', count_rules chains') with
   | true -> printf "#Optimization done\n"; chains'
   | false -> optimize chains'
