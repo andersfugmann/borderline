@@ -10,25 +10,37 @@ type zone = id
 type mask = int
 type prefix = string
 
-type chain_type = INPUT | OUTPUT | FORWARD
+module Chain_type = struct
+  type t = Input | Output | Forward
+end
+
 type chain_id = Temporary of int
-              | Builtin of chain_type
+              | Builtin of Chain_type.t
               | Named of string
 
-type tcp_flag = Syn | Ack | Fin | Rst | Urg | Psh
-type direction = SOURCE | DESTINATION
 type pol       = bool
-type port_type = Tcp | Udp
 
-let tcpflag_of_string (flag, pos) =
-  match String.lowercase flag with
-  | "syn" -> Syn
-  | "ack" -> Ack
-  | "fin" -> Fin
-  | "rst" -> Rst
-  | "urg" -> Urg
-  | "psh" -> Psh
-  | _ -> parse_error ~id:flag ~pos "Unknown icmp type"
+module Port_type = struct
+  type t = Tcp | Udp
+  let of_string (id, pos) =
+    match String.lowercase id with
+    | "tcp" -> Tcp
+    | "udp" -> Udp
+    | _ -> parse_error ~id ~pos "'tcp' or 'udp' expected"
+end
+
+module Tcp_flags = struct
+  type t = Syn | Ack | Fin | Rst | Urg | Psh
+  let of_string (flag, pos) =
+    match String.lowercase flag with
+    | "syn" -> Syn
+    | "ack" -> Ack
+    | "fin" -> Fin
+    | "rst" -> Rst
+    | "urg" -> Urg
+    | "psh" -> Psh
+    | _ -> parse_error ~id:flag ~pos "Unknown icmp type"
+end
 
 module Protocol = struct
   type layer = Ip4 | Ip6
@@ -44,27 +56,47 @@ module Protocol = struct
     | s -> parse_error ~id:s ~pos "Unknown protocol identifier"
 end
 
-type reject_type = HostUnreachable | NoRoute | AdminProhibited | PortUnreachable | TcpReset
+module Direction = struct
+  type t = Source | Destination
+  let of_string (s, pos) =
+    match String.lowercase s with
+    | "src" | "source" -> Source
+    | "dst" | "destination" -> Destination
+    | s -> parse_error ~id:s ~pos "'source' or 'destination' expected"
+end
 
-type condition = Interface of direction * id Set.t
-               | Zone of direction * zone Set.t
+module Reject = struct
+  type t = HostUnreachable | NoRoute | AdminProhibited | PortUnreachable | TcpReset
+  let of_string (id, pos) =
+    match String.lowercase id with
+    | "host-unreachable" -> HostUnreachable
+    | "no-route" -> NoRoute
+    | "admin-prohibited" -> AdminProhibited
+    | "port-unreachable" -> PortUnreachable
+    | "tcp-reset" -> TcpReset
+    | _ -> parse_error ~id ~pos "Unknown reject type"
+end
+
+
+type condition = Interface of Direction.t * id Set.t
+               | Zone of Direction.t * zone Set.t
                | State of State.t
-               | Ports of direction * port_type * int Set.t
-               | Ip6Set of direction * Ip6.t
-               | Ip4Set of direction * Ip4.t
+               | Ports of Direction.t * Port_type.t * int Set.t
+               | Ip6Set of Direction.t * Ip6.t
+               | Ip4Set of Direction.t * Ip4.t
                | Protocol of Protocol.layer * Protocol.t Set.t
                | Icmp6 of Icmp.V6.t Set.t
                | Icmp4 of Icmp.V4.t Set.t
                | Mark of int * int
-               | TcpFlags of tcp_flag Set.t * tcp_flag Set.t
+               | TcpFlags of Tcp_flags.t Set.t * Tcp_flags.t Set.t
                | True
 
 type action = Jump of chain_id
-            | MarkZone of direction * zone
+            | MarkZone of Direction.t * zone
             | Accept
             | Drop
             | Return
-            | Reject of reject_type
+            | Reject of Reject.t
             | Notrack
             | Log of prefix
 

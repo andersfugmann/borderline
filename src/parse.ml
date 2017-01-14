@@ -15,7 +15,7 @@ let parse file =
   else
     begin
       imported := (File_set.add full_path !imported);
-      print_endline (Printf.sprintf "#Parse: %s" full_path);
+      Printf.eprintf "#Parse: %s\n%!" full_path;
       let lexbuf = Lexing.from_channel (open_in file) in
         lexbuf.Lexing.lex_curr_p <- { lexbuf.Lexing.lex_curr_p with Lexing.pos_fname = full_path; };
         Parser.main Lexer.token lexbuf
@@ -54,7 +54,7 @@ and expand = function
 let process_files files =
   let nodes =
     let n = List.flatten (List.map parse_file files) in
-    (Zone.emit_nodes Frontend.FILTER (Zone.filter n)) @ n
+    (Zone.emit_nodes ("filter", Lexing.dummy_pos) (Zone.filter n)) :: n
     |> Validate.expand
   in
   (Zone.filter nodes, Rule.filter_process nodes)

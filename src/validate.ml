@@ -61,28 +61,25 @@ let expand nodes =
   let defines = create_define_map nodes in
 
   let expand_rules (id, pos) =
-    try begin match Map.find id defines with
-
-        (* Expand single id reference into something sematically
-           corect. This allows simple definitions to work as aliases
-           for other types of definitions. It is important that the
-           function does not resolve the id here, as the system would
-           then end up in a infinite loop on recursive aliases (e.g
-           \verb|define a = a|. Returning a virtual node allows the
-           id to be inserted into the list of visited nodes, and
-           cyclic reference dectection will prevent infinite loops,
-           and allow error reporting to the users. *)
-
-      | F.DefineList (_, [ F.Id id ]) -> [ F.Reference (id, false) ]
-      | F.DefineStms (_, x) -> x
-      | F.DefinePolicy (_, _)
-      | F.Import _
-      | F.Zone (_,_)
-      | F.DefineList (_,_)
-      | F.AppendList (_,_)
-      | F.Process (_,_,_) -> parse_error ~id ~pos "Reference to Id of wrong type"
-    end with
-    | _ -> parse_error ~id ~pos "Reference to unknown id"
+    (* Expand single id reference into something sematically
+       corect. This allows simple definitions to work as aliases
+       for other types of definitions. It is important that the
+       function does not resolve the id here, as the system would
+       then end up in a infinite loop on recursive aliases (e.g
+       \verb|define a = a|. Returning a virtual node allows the
+       id to be inserted into the list of visited nodes, and
+       cyclic reference dectection will prevent infinite loops,
+       and allow error reporting to the users. *)
+    match Map.find id defines with
+    | F.DefineList (_, [ F.Id id ]) -> [ F.Reference (id, false) ]
+    | F.DefineStms (_, x) -> x
+    | F.DefinePolicy (_, _)
+    | F.Import _
+    | F.Zone (_,_)
+    | F.DefineList (_,_)
+    | F.AppendList (_,_)
+    | F.Process (_,_,_) -> parse_error ~id ~pos "Reference to Id of wrong type"
+    | exception _ -> parse_error ~id ~pos "Reference to unknown id"
   in
   let expand (id, pos) =
     try begin match Map.find id defines with
@@ -152,7 +149,7 @@ let expand nodes =
           | [ F.False ], true -> [ F.True ]
           | _, true -> parse_error ~pos:(snd id) "Only true / false aliases can be negated"
         in
-        (expand_rule_list (mark_seen (fst id) seen) rules) @ (expand_rule_list seen xs)
+        (expand_rule_list (mark_seen (fst id) seen) rules ) @ (expand_rule_list seen xs)
     | x :: xs -> expand_rule x :: expand_rule_list seen xs
     | [] -> []
   in

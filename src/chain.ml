@@ -14,9 +14,9 @@ let get_chain_name = function
   | Named(name) -> name
   | Builtin(tpe) ->
     begin match tpe with
-      | INPUT   -> "INPUT"
-      | OUTPUT  -> "OUTPUT"
-      | FORWARD -> "FORWARD"
+      | Chain_type.Input   -> "INPUT"
+      | Chain_type.Output  -> "OUTPUT"
+      | Chain_type.Forward -> "FORWARD"
     end
 
 (** Test if a chain is builtin*)

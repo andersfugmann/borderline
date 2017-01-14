@@ -7,11 +7,20 @@ module Ip4 = Ipset.Ip4
 type prefix = string
 type id = string * Lexing.position
 
-type processtype = MANGLE | FILTER | NAT
-type policytype = ALLOW
-                | DENY
-                | REJECT of (string * Lexing.position) option
-                | LOG of prefix
+module Process = struct
+  type t = Mangle | Filter | Nat
+  let of_stringy (id, pos) =
+    match String.lowercase id with
+    | "mangle" -> Mangle
+    | "filter" -> Filter
+    | "nat" -> Nat
+    | _ -> parse_error ~id ~pos "Unknown process type"
+end
+
+type policytype = Allow
+                | Deny
+                | Reject of (string * Lexing.position) option
+                | Log of prefix
                 | Ref of id
 
 type ip = Ipv6 of Ip6.elt | Ipv4 of Ip4.elt
@@ -22,18 +31,18 @@ and node = Import of id
          | DefineList of id * data list
          | AppendList of id * data list
          | DefinePolicy of id * policytype list
-         | Process of processtype * rule_stm list * policytype list
+         | Process of id * rule_stm list * policytype list
 
 and zone_stm = Interface of id
              | Network of ip
-             | ZoneRules of processtype * rule_stm list * policytype list
+             | ZoneRules of id * rule_stm list * policytype list
 
 and filter_stm = Address of data list
-               | Ports of Ir.port_type * data list
+               | Ports of id * data list
                | FZone of data list
 
-and rule_stm = Filter of Ir.direction * filter_stm * Ir.pol
-             | State of State.states list * Ir.pol
+and rule_stm = Filter of id * filter_stm * Ir.pol
+             | State of data list * Ir.pol
              | Protocol of Ir.Protocol.layer * data list * Ir.pol
              | Icmp6 of data list * Ir.pol
              | Icmp4 of data list * Ir.pol

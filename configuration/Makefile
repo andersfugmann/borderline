@@ -34,15 +34,12 @@ generic/bogon6.bl:
 	@echo -n "define \"bogon6\" = " >> $@
 	@curl -s $(URL) | grep -v "^#" | sed 's/$$/,/g' >> $@
 
-
 generic/bogon4.bl: URL = http://www.team-cymru.org/Services/Bogons/fullbogons-ipv4.txt
 generic/bogon4.bl:
 	@echo "Gen     :" $@
 	@echo "#Extracted from $(URL)" > $@
 	@echo -n "define \"bogon4\" = " >> $@
 	@curl -s $(URL) | grep -v "^#" | sed 's/$$/,/g' >> $@
-
-
 
 clean:
 	@find . -name \*~ | xargs $(RM)

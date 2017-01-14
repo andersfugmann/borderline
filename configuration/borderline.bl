@@ -25,6 +25,7 @@ process filter {
     rule {
         use common;
         use zones;
-        use custom;
+
+        # Insert custom rules here
     } policy log_deny;
 } policy log_missed

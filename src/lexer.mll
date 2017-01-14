@@ -32,11 +32,6 @@ rule token = parse
   | "network"      { NETWORK }
   | "interface"    { INTERFACE }
 
-(* process targets *)
-  | "mangle"       { Parser.MANGLE }
-  | "filter"       { Parser.FILTER }
-  | "nat"          { Parser.NAT }
-
 (* Policy *)
   | "policy"       { Parser.POLICY }
   | "allow"        { Parser.ALLOW }
@@ -47,12 +42,7 @@ rule token = parse
   | "log"          { Parser.LOG }
 
 (* filters *)
-  | "source"
-  | "src"          { Parser.SOURCE }
-  | "destination"
-  | "dst"          { Parser.DESTINATION }
-  | "udp port"     { Parser.UDP_PORT }
-  | "tcp port"     { Parser.TCP_PORT }
+  | "port"         { Parser.PORT }
   | "icmp6"        { Parser.ICMP6 }
   | "icmp4"        { Parser.ICMP4 }
   | "state"        { Parser.STATE }
@@ -63,12 +53,6 @@ rule token = parse
   | "tcpflags"     { Parser.TCPFLAGS }
   | "true"         { Parser.TRUE }
   | "false"        { Parser.FALSE }
-
-(* State types *)
-  | "new"          { Parser.NEW }
-  | "established"  { Parser.ESTABLISHED }
-  | "related"      { Parser.RELATED }
-  | "invalid"      { Parser.INVALID }
 
 (* Data *)
   | (['0'-'9''a'-'f''A'-'F']+ ':'

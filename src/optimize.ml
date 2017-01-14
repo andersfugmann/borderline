@@ -322,11 +322,11 @@ let filter_protocol chain =
     | Ir.Interface (_,_), _ -> all
     | Ir.Zone (_,_), _ -> all
     | Ir.State _, _ -> all
-    | Ir.Ports (_,Ir.Tcp, _), false -> [
+    | Ir.Ports (_, Ir.Port_type.Tcp, _), false -> [
         Ir.Protocol.Ip4, Ir.Protocol.Tcp;
         Ir.Protocol.Ip6, Ir.Protocol.Tcp;
       ] |> Set.of_list
-    | Ir.Ports (_,Ir.Udp, _), false -> [
+    | Ir.Ports (_,Ir.Port_type.Udp, _), false -> [
         Ir.Protocol.Ip4, Ir.Protocol.Udp;
         Ir.Protocol.Ip6, Ir.Protocol.Udp;
       ] |> Set.of_list

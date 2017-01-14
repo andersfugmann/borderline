@@ -27,9 +27,9 @@ let get_zone_id zone =
 
 let chain_name = function
   | Ir.Temporary n -> sprintf "temp_%d" n
-  | Ir.Builtin Ir.INPUT -> "input"
-  | Ir.Builtin Ir.OUTPUT -> "output"
-  | Ir.Builtin Ir.FORWARD  -> "forward"
+  | Ir.Builtin Ir.Chain_type.Input -> "input"
+  | Ir.Builtin Ir.Chain_type.Output -> "output"
+  | Ir.Builtin Ir.Chain_type.Forward  -> "forward"
   | Ir.Named name -> name
 
 (* TODO Use chain_name *)
@@ -79,12 +79,12 @@ let string_of_icmp4_type = function
   | Icmp.V4.AddressMaskReply -> "address-mask-reply"
 
 let string_of_tcpflag = function
-  | Ir.Syn -> "syn"
-  | Ir.Ack -> "ack"
-  | Ir.Fin -> "fin"
-  | Ir.Rst -> "rst"
-  | Ir.Urg -> "urg"
-  | Ir.Psh -> "psh"
+  | Ir.Tcp_flags.Syn -> "syn"
+  | Ir.Tcp_flags.Ack -> "ack"
+  | Ir.Tcp_flags.Fin -> "fin"
+  | Ir.Tcp_flags.Rst -> "rst"
+  | Ir.Tcp_flags.Urg -> "urg"
+  | Ir.Tcp_flags.Psh -> "psh"
 
 let string_of_layer = function
   | Ir.Protocol.Ip4 -> "ip protocol"
@@ -105,15 +105,15 @@ let gen_cond neg cond =
   | Ir.Interface (dir, zones) ->
       let zones = sprintf "{ %s }" (Set.to_list zones |> String.concat ", ") in
       let classifier = match dir with
-        | Ir.SOURCE -> "iif"
-        | Ir.DESTINATION -> "oif"
+        | Ir.Direction.Source -> "iif"
+        | Ir.Direction.Destination -> "oif"
       in
       sprintf "meta %s %s%s" classifier neg_str zones
 
   | Ir.Zone (dir, zones) ->
       let shift = match dir with
-        | Ir.SOURCE -> 0
-        | Ir.DESTINATION -> zone_bits
+        | Ir.Direction.Source -> 0
+        | Ir.Direction.Destination -> zone_bits
       in
       let mask = Set.fold (fun zone acc ->
           let zone_id = get_zone_id zone in
@@ -125,10 +125,10 @@ let gen_cond neg cond =
 
   | Ir.State states ->
       let string_of_state state = match state with
-        | State.NEW -> "new"
-        | State.ESTABLISHED -> "established"
-        | State.RELATED -> "related"
-        | State.INVALID -> "invalid"
+        | State.New -> "new"
+        | State.Established -> "established"
+        | State.Related -> "related"
+        | State.Invalid -> "invalid"
       in
       let states =
         State.to_list states
@@ -139,12 +139,12 @@ let gen_cond neg cond =
 
   | Ir.Ports (dir, port_type, ports) ->
       let cond = match dir with
-        | Ir.SOURCE -> "sport"
-        | Ir.DESTINATION -> "dport"
+        | Ir.Direction.Source -> "sport"
+        | Ir.Direction.Destination -> "dport"
       in
       let classifier = match port_type with
-        | Ir.Tcp -> "tcp"
-        | Ir.Udp -> "udp"
+        | Ir.Port_type.Tcp -> "tcp"
+        | Ir.Port_type.Udp -> "udp"
       in
       sprintf "%s %s%s %s" classifier neg_str cond (str_of_set ports)
 
@@ -152,8 +152,8 @@ let gen_cond neg cond =
       (* Should define a true ip set. these sets can become very large. *)
 
       let classifier = match dir with
-        | Ir.SOURCE -> "saddr"
-        | Ir.DESTINATION  -> "daddr"
+        | Ir.Direction.Source -> "saddr"
+        | Ir.Direction.Destination  -> "daddr"
       in
       let ips = Ip6.to_list ips
                 |> Ip6.reduce
@@ -163,8 +163,8 @@ let gen_cond neg cond =
       sprintf "ip6 %s %s{ %s }" classifier neg_str ips
   | Ir.Ip4Set (dir, ips) ->
       let classifier = match dir with
-        | Ir.SOURCE -> "saddr"
-        | Ir.DESTINATION  -> "daddr"
+        | Ir.Direction.Source -> "saddr"
+        | Ir.Direction.Destination  -> "daddr"
       in
       let ips = Ip4.to_list ips
                 |> Ip4.reduce
@@ -207,17 +207,17 @@ let gen_cond neg cond =
   | Ir.True ->
       ""
 let reject_to_string = function
-  | Ir.HostUnreachable -> "reject with icmpx type host-unreachable"
-  | Ir.NoRoute -> "reject with icmpx type no-route"
-  | Ir.AdminProhibited -> "reject with icmpx type admin-prohibited"
-  | Ir.PortUnreachable -> "reject with icmpx type port-unreachable"
-  | Ir.TcpReset -> "reject with tcp reset"
+  | Ir.Reject.HostUnreachable -> "reject with icmpx type host-unreachable"
+  | Ir.Reject.NoRoute -> "reject with icmpx type no-route"
+  | Ir.Reject.AdminProhibited -> "reject with icmpx type admin-prohibited"
+  | Ir.Reject.PortUnreachable -> "reject with icmpx type port-unreachable"
+  | Ir.Reject.TcpReset -> "reject with tcp reset"
 
 let gen_target = function
   | Ir.MarkZone (dir, id) ->
       let shift = match dir with
-        | Ir.SOURCE -> 0
-        | Ir.DESTINATION -> zone_bits
+        | Ir.Direction.Source -> 0
+        | Ir.Direction.Destination -> zone_bits
       in
       let mask = zone_mask lsl (zone_bits - shift) in
       sprintf "meta mark set mark & 0x%08x or 0x%08x" mask ((get_zone_id id) lsl shift)
