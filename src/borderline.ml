@@ -16,7 +16,8 @@ let _ =
       let (zones, procs) = Parse.process_files files in
       let zones = List.map (fun ((id, _pos), stms) -> id, stms) zones in
 
-      let input_opers, output_opers, forward_opers = Zone.emit ("filter", Lexing.dummy_pos) zones in
+      let input_opers, output_opers, forward_opers = Zone.emit_filter zones in
+      let post_routing = Zone.emit_nat zones in
 
       let filter_chains = List.map Rule.process procs in
       let filter_ops = List.map ( fun chn -> ([], Ir.Jump(chn.Ir.id)) ) filter_chains in
@@ -26,7 +27,9 @@ let _ =
       Chain.add { Ir.id = Ir.Builtin Ir.Chain_type.Forward ; rules = forward_opers @ filter_ops; comment = "Builtin" };
       Chain.optimize Optimize.optimize;
 
-      let lines = Chain.emit Nftables.emit_chains in
+      let lines = Chain.emit Nftables.emit_filter_chains @
+                  (Nftables.emit_nat_chain post_routing)
+      in
       List.iter (fun l -> print_endline l) lines;
       Printf.printf "\n#Lines: %d\n" (List.length lines)
 

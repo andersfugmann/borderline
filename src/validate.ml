@@ -156,10 +156,10 @@ let expand nodes =
 
   (* When expanding zone definitions, there is no need to carry a
      seen list, as zone stems are not recursive types. *)
-
   let rec expand_zone_stms = function
     | F.Interface _ as i :: xs -> i :: expand_zone_stms xs
     | F.Network _ as i :: xs -> i :: expand_zone_stms xs
+    | F.ZoneSnat _ as i :: xs -> i :: expand_zone_stms xs
     | F.ZoneRules (t, rules, policies) :: xs ->
         F.ZoneRules (t, expand_rule_list [] rules, expand_policy_list [] policies) :: expand_zone_stms xs
     | [] -> []

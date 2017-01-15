@@ -14,7 +14,7 @@ let parse_error pos s =
 %}
 %token ZONE PROCESS RULE IMPORT
 %token DEFINE
-%token NETWORK INTERFACE
+%token NETWORK INTERFACE SNAT
 %token ALLOW DENY REJECT LOG
 %token POLICY
 %token ADDRESS STATE USE
@@ -60,6 +60,7 @@ zone_stm:
   | NETWORK EQ ip=ip                                   { F.Network (fst ip) }
   | INTERFACE EQ id=id                                 { F.Interface(id)}
   | PROCESS t=id r=rule_seq p=policy_opt               { F.ZoneRules (t,r,p) }
+  | SNAT zones=data_list ip=ipv4                       { F.ZoneSnat(zones, fst ip) }
 
 policy_opt:
   | { [] }
@@ -143,15 +144,21 @@ id_quote:
   | q = QUOTE { q }
 
 ip:
-  | ip=IPv6     { let (i, mask, pos) = ip in
-                  let addr = Ipaddr.V6.Prefix.make mask
-                    (Ipaddr.V6.of_string_exn i)
-                  in
-                  F.Ipv6 addr, pos
-                }
-  | ip=IPv4     { let (i, mask, pos) = ip in
+  | ip=ipv4 { F.Ipv4 (fst ip), snd ip }
+  | ip=ipv6 { F.Ipv6 (fst ip), snd ip }
+
+ipv4:
+  | ip=IPv4 { let (i, mask, pos) = ip in
                   let addr = Ipaddr.V4.Prefix.make mask
                     (Ipaddr.V4.of_string_exn i)
                   in
-                  F.Ipv4 addr, pos
-                }
+                  addr, pos
+            }
+
+ipv6:
+  | ip=IPv6 { let (i, mask, pos) = ip in
+              let addr = Ipaddr.V6.Prefix.make mask
+                (Ipaddr.V6.of_string_exn i)
+              in
+              addr, pos
+            }

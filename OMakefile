@@ -44,11 +44,12 @@ unittest: _build/unit_test.run
 tests: _build/borderline.run
     cd tests; BORDERLINE=../_build/borderline.run ./test.sh
 
-test: build
+test: build nat.nft
     make -C configuration
     #$(RM) configuration/zones/wlan* configuration/zones/eth* configuration/zones/ext*
     #_build/bl_configure.opt --output configuration/zones --force
-    echo "flush ruleset" > test.nft
+    echo "#!/usr/sbin/nft -f" > test.nft
+    echo "flush ruleset" >> test.nft
     _build/borderline.opt configuration/borderline.bl | tee -a test.nft
 
 build: _build/borderline.run _build/unit_test.run _build/bl_configure.run _build/borderline.opt _build/unit_test.opt _build/bl_configure.opt

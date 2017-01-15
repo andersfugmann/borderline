@@ -30,13 +30,22 @@ let chain_name = function
   | Ir.Builtin Ir.Chain_type.Input -> "input"
   | Ir.Builtin Ir.Chain_type.Output -> "output"
   | Ir.Builtin Ir.Chain_type.Forward  -> "forward"
+  | Ir.Builtin Ir.Chain_type.Pre_routing  -> "prerouting"
+  | Ir.Builtin Ir.Chain_type.Post_routing  -> "postrouting"
   | Ir.Named name -> name
 
 (* TODO Use chain_name *)
 let chain_premable chain =
   let name = chain_name chain in
   match chain with
-  | Ir.Builtin _ ->
+  | Ir.Builtin Ir.Chain_type.Pre_routing
+  | Ir.Builtin Ir.Chain_type.Post_routing ->
+      [ sprintf "chain %s {" name;
+        sprintf "  type nat hook %s priority 0;" name;
+        sprintf "  policy accept;" ]
+  | Ir.Builtin Ir.Chain_type.Input
+  | Ir.Builtin Ir.Chain_type.Output
+  | Ir.Builtin Ir.Chain_type.Forward ->
       [ sprintf "chain %s {" name;
         sprintf "  type filter hook %s priority 0;" name;
         sprintf "  policy drop;" ]
@@ -110,12 +119,12 @@ let gen_cond neg cond =
   in
   match cond with
   | Ir.Interface (dir, zones) ->
-      let zones = sprintf "{ %s }" (Set.to_list zones |> String.concat ", ") in
+      let zones = sprintf "{ %s }" (Set.to_list zones |> List.map (sprintf "\"%s\"") |> String.concat ", ") in
       let classifier = match dir with
         | Ir.Direction.Source -> "iif"
         | Ir.Direction.Destination -> "oif"
       in
-      sprintf "meta %s %s%s" classifier neg_str zones, None
+      sprintf "%s %s%s" classifier neg_str zones, None
   | Ir.Zone (dir, zones) ->
       let shift = match dir with
         | Ir.Direction.Source -> 0
@@ -233,7 +242,7 @@ let gen_target = function
   | Ir.Jump chain -> sprintf "jump %s" (chain_name chain)
   | Ir.Reject rsp -> reject_to_string rsp
   | Ir.Log prefix -> sprintf "log prefix \"%s: \" level info" prefix
-
+  | Ir.Snat ip -> sprintf "snat %s" (Ipaddr.V4.to_string ip)
 let gen_rule (conds, target) =
   let conds, comments =
     let conds, comments = List.map (fun (op, neg) -> gen_cond neg op) conds
@@ -257,7 +266,7 @@ let emit_chain { Ir.id; rules; comment } =
 
   [ "#" ^ comment ] @ premable @ rules @ [ "}" ]
 
-let emit_chains (chains : (Ir.chain_id, Ir.chain) Map.t) : string list =
+let emit_filter_chains (chains : (Ir.chain_id, Ir.chain) Map.t) : string list =
   (* How does this work. Dont we need a strict ordering of chains here? *)
   let rules =
     Map.values chains
@@ -267,5 +276,16 @@ let emit_chains (chains : (Ir.chain_id, Ir.chain) Map.t) : string list =
     |> List.of_enum
   in
   (* Dump zone mapping *)
+
   Hashtbl.iter (fun zone id -> printf "#zone %s -> 0x%04x\n" zone id) zones;
   [ "table inet filter {" ] @ rules @ [ "}" ]
+
+let emit_nat_chain rules =
+  (* Artificial chain *)
+  let chains =
+    { Ir.id = Ir.Builtin Ir.Chain_type.Pre_routing; rules=[]; comment = "Nat" } ::
+    { Ir.id = Ir.Builtin Ir.Chain_type.Post_routing;rules; comment = "Nat" } ::
+    []
+  in
+  let rules = List.map emit_chain chains |> List.flatten in
+  [ "table ip nat {" ] @ rules @ [ "}" ]

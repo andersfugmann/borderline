@@ -8,17 +8,6 @@ open Ir
 
 let next_id = ref 0
 
-(** Retrieve the string name of a chain *)
-let get_chain_name = function
-  | Temporary(id) -> Printf.sprintf "temp_%04d" id
-  | Named(name) -> name
-  | Builtin(tpe) ->
-    begin match tpe with
-      | Chain_type.Input   -> "INPUT"
-      | Chain_type.Output  -> "OUTPUT"
-      | Chain_type.Forward -> "FORWARD"
-    end
-
 (** Test if a chain is builtin*)
 let is_builtin = function
   | Builtin(_) -> true

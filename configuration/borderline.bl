@@ -20,12 +20,11 @@ import "./configuration.bl"
 import "./validate.bl"
 import "./generic"
 import "./zones"
-
 process filter {
     rule {
-        use common;
-        use zones;
-
-        # Insert custom rules here
+        rule {
+            use common;
+            use zones;
+        };
     } policy log_deny;
 } policy log_missed

@@ -18,7 +18,6 @@ interfaces.
 = Not handled yet =
 
 * MAC filtering
-* Network Address Translation
 * Init.d / System.d integraiton
 * System settings checking (like ip_forward, log_martian)
 

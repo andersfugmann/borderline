@@ -22,7 +22,7 @@ define global_udp_ports =
 
 # List of ports accessable on the firewall itself, accessable from the
 # outside.
-define public_tcp_ports = ssh, smtp, ssmtp, domain, imaps, http, https, ntp
+define public_tcp_ports = ssh, smtp, ssmtp, domain, imap, imaps, http, https, ntp, sieve,
 define public_udp_ports = domain, ntp
 
 # Allow outbond traffic on all interfaces defined in the alias external

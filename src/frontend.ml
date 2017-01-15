@@ -17,13 +17,14 @@ module Process = struct
     | _ -> parse_error ~id ~pos "Unknown process type"
 end
 
+type ip = Ipv6 of Ip6.elt | Ipv4 of Ip4.elt
+
 type policytype = Allow
                 | Deny
                 | Reject of (string * Lexing.position) option
                 | Log of prefix
                 | Ref of id
-
-type ip = Ipv6 of Ip6.elt | Ipv4 of Ip4.elt
+                | Snat of Ip4.elt
 
 and node = Import of id
          | Zone of id * zone_stm list
@@ -36,6 +37,7 @@ and node = Import of id
 and zone_stm = Interface of id
              | Network of ip
              | ZoneRules of id * rule_stm list * policytype list
+             | ZoneSnat of data list * Ip4.elt
 
 and filter_stm = Address of data list
                | Ports of id * data list

@@ -31,6 +31,7 @@ rule token = parse
 (* zone definitions *)
   | "network"      { NETWORK }
   | "interface"    { INTERFACE }
+  | "snat"         { SNAT }
 
 (* Policy *)
   | "policy"       { Parser.POLICY }

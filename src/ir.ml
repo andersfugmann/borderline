@@ -11,7 +11,7 @@ type mask = int
 type prefix = string
 
 module Chain_type = struct
-  type t = Input | Output | Forward
+  type t = Input | Output | Forward | Pre_routing | Post_routing
 end
 
 type chain_id = Temporary of int
@@ -99,6 +99,7 @@ type action = Jump of chain_id
             | Reject of Reject.t
             | Notrack
             | Log of prefix
+            | Snat of Ipaddr.V4.t
 
 type oper = (condition * bool) list * action
 

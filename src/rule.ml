@@ -21,6 +21,9 @@ let gen_policy = function
   | F.Reject s -> Ir.Reject (reject_of_string_opt s)
   | F.Log prefix -> Ir.Log prefix
   | F.Ref (id, pos) -> parse_error ~id ~pos "Not all ids have been expanded"
+  | F.Snat ip ->
+      if (Ipaddr.V4.Prefix.bits ip < 32) then (parse_error "Snat not not work with network ranges");
+      Ir.Snat (Ipaddr.V4.Prefix.network ip)
 
 let list2ints l =
   List.fold_left (fun acc ->
