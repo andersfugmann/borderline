@@ -61,7 +61,7 @@ build: _build/borderline.run _build/unit_test.run _build/bl_configure.run _build
 	ir
 	parse
 	rule
-	nf6tables
+	nftables
 	chain
 	ipset
 	lexer

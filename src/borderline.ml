@@ -26,7 +26,7 @@ let _ =
       Chain.add { Ir.id = Ir.Builtin Ir.Chain_type.Forward ; rules = forward_opers @ filter_ops; comment = "Builtin" };
       Chain.optimize Optimize.optimize;
 
-      let lines = Chain.emit Nf6tables.emit_chains in
+      let lines = Chain.emit Nftables.emit_chains in
       List.iter (fun l -> print_endline l) lines;
       Printf.printf "\n#Lines: %d\n" (List.length lines)
 
