@@ -46,37 +46,37 @@ let chain_premable chain =
 
 let string_of_icmp6_type = function
   | Icmp.V6.DestinationUnreachable -> "destination-unreachable"
-  | Icmp.V6.PacketTooBig -> "packet-too-big"
-  | Icmp.V6.TimeExceeded -> "time-exceeded"
-  | Icmp.V6.EchoRequest -> "echo-request"
-  | Icmp.V6.EchoReply -> "echo-reply"
-  | Icmp.V6.ListenerQuery -> "mld-listener-query"
-  | Icmp.V6.ListenerReport -> "mld-listener-report"
-  | Icmp.V6.ListenerReduction -> "mld-listener-reduction"
-  | Icmp.V6.RouterSolicitation -> "nd-router-solicit"
-  | Icmp.V6.RouterAdvertisement -> "nd-router-advert"
-  | Icmp.V6.NeighborSolicitation -> "nd-neighbor-solicit"
-  | Icmp.V6.NeighborAdvertisement -> "nd-neighbor-advert"
-  | Icmp.V6.Redirect -> "nd-redirect"
-  | Icmp.V6.ParameterProblem -> "parameter-problem"
-  | Icmp.V6.RouterRenumbering -> "router-renumbering"
+  | Icmp.V6.PacketTooBig           -> "packet-too-big"
+  | Icmp.V6.TimeExceeded           -> "time-exceeded"
+  | Icmp.V6.EchoRequest            -> "echo-request"
+  | Icmp.V6.EchoReply              -> "echo-reply"
+  | Icmp.V6.ListenerQuery          -> "mld-listener-query"
+  | Icmp.V6.ListenerReport         -> "mld-listener-report"
+  | Icmp.V6.ListenerReduction      -> "mld-listener-reduction"
+  | Icmp.V6.RouterSolicitation     -> "nd-router-solicit"
+  | Icmp.V6.RouterAdvertisement    -> "nd-router-advert"
+  | Icmp.V6.NeighborSolicitation   -> "nd-neighbor-solicit"
+  | Icmp.V6.NeighborAdvertisement  -> "nd-neighbor-advert"
+  | Icmp.V6.Redirect               -> "nd-redirect"
+  | Icmp.V6.ParameterProblem       -> "parameter-problem"
+  | Icmp.V6.RouterRenumbering      -> "router-renumbering"
 
 let string_of_icmp4_type = function
-  | Icmp.V4.EchoRequest -> "echo-request"
-  | Icmp.V4.EchoReply -> "echo-reply"
+  | Icmp.V4.EchoRequest            -> "echo-request"
+  | Icmp.V4.EchoReply              -> "echo-reply"
   | Icmp.V4.DestinationUnreachable -> "destination-unreachable"
-  | Icmp.V4.SourceQuench -> "source-quench"
-  | Icmp.V4.Redirect -> "redirect"
-  | Icmp.V4.TimeExceeded -> "time-exceeded"
-  | Icmp.V4.ParameterProblem -> "parameter-problem"
-  | Icmp.V4.TimestampRequest -> "timestamp-request"
-  | Icmp.V4.TimestampReply -> "timestamp-reply"
-  | Icmp.V4.InfoRequest -> "info-request"
-  | Icmp.V4.InfoReply -> "info-reply"
-  | Icmp.V4.RouterAdvertisement -> "router-advertisement"
-  | Icmp.V4.RouterSolicitation -> "router-solicication"
-  | Icmp.V4.AddressMaskRequest -> "address-mask-request"
-  | Icmp.V4.AddressMaskReply -> "address-mask-reply"
+  | Icmp.V4.SourceQuench           -> "source-quench"
+  | Icmp.V4.Redirect               -> "redirect"
+  | Icmp.V4.TimeExceeded           -> "time-exceeded"
+  | Icmp.V4.ParameterProblem       -> "parameter-problem"
+  | Icmp.V4.TimestampRequest       -> "timestamp-request"
+  | Icmp.V4.TimestampReply         -> "timestamp-reply"
+  | Icmp.V4.InfoRequest            -> "info-request"
+  | Icmp.V4.InfoReply              -> "info-reply"
+  | Icmp.V4.RouterAdvertisement    -> "router-advertisement"
+  | Icmp.V4.RouterSolicitation     -> "router-solicication"
+  | Icmp.V4.AddressMaskRequest     -> "address-mask-request"
+  | Icmp.V4.AddressMaskReply       -> "address-mask-reply"
 
 let string_of_tcpflag = function
   | Ir.Tcp_flags.Syn -> "syn"
@@ -96,6 +96,13 @@ let string_of_protocol l = function
   | Ir.Protocol.Tcp -> "tcp"
   | Ir.Protocol.Udp -> "udp"
 
+let string_of_state state = match state with
+  | State.New -> "new"
+  | State.Established -> "established"
+  | State.Related -> "related"
+  | State.Invalid -> "invalid"
+
+
 let gen_cond neg cond =
   let neg_str = match neg with
     | true -> "!= "
@@ -108,8 +115,7 @@ let gen_cond neg cond =
         | Ir.Direction.Source -> "iif"
         | Ir.Direction.Destination -> "oif"
       in
-      sprintf "meta %s %s%s" classifier neg_str zones
-
+      sprintf "meta %s %s%s" classifier neg_str zones, None
   | Ir.Zone (dir, zones) ->
       let shift = match dir with
         | Ir.Direction.Source -> 0
@@ -121,22 +127,23 @@ let gen_cond neg cond =
           acc + zone_val) zones 0
       in
       let neg_str = match neg with true -> "==" | false -> "!=" in
-      sprintf "meta mark & 0x%08x %s 0x0" mask neg_str
-
-  | Ir.State states ->
-      let string_of_state state = match state with
-        | State.New -> "new"
-        | State.Established -> "established"
-        | State.Related -> "related"
-        | State.Invalid -> "invalid"
+      let comment =
+        let neg = match neg with true -> "not " | false -> "" in
+        let dir = match dir with
+          | Ir.Direction.Source  -> "src"
+          | Ir.Direction.Destination  -> "dest"
+        in
+        let zones = Set.to_list zones |> String.concat ", " in
+        sprintf "%s%s zone in (%s)" neg dir zones
       in
+      sprintf "meta mark & 0x%08x %s 0x0" mask neg_str, Some comment
+  | Ir.State states ->
       let states =
         State.to_list states
         |> List.map string_of_state
         |> String.concat ", "
       in
-      sprintf "ct state %s{ %s }" neg_str states
-
+      sprintf "ct state %s{ %s }" neg_str states, None
   | Ir.Ports (dir, port_type, ports) ->
       let cond = match dir with
         | Ir.Direction.Source -> "sport"
@@ -146,21 +153,20 @@ let gen_cond neg cond =
         | Ir.Port_type.Tcp -> "tcp"
         | Ir.Port_type.Udp -> "udp"
       in
-      sprintf "%s %s%s %s" classifier neg_str cond (str_of_set ports)
-
+      sprintf "%s %s%s %s" classifier neg_str cond (str_of_set ports), None
   | Ir.Ip6Set (dir, ips) ->
       (* Should define a true ip set. these sets can become very large. *)
 
       let classifier = match dir with
         | Ir.Direction.Source -> "saddr"
-        | Ir.Direction.Destination  -> "daddr"
+                                     | Ir.Direction.Destination  -> "daddr"
       in
       let ips = Ip6.to_list ips
                 |> Ip6.reduce
                 |> List.map Ipaddr.V6.Prefix.to_string
                 |> String.concat ", "
       in
-      sprintf "ip6 %s %s{ %s }" classifier neg_str ips
+      sprintf "ip6 %s %s{ %s }" classifier neg_str ips, None
   | Ir.Ip4Set (dir, ips) ->
       let classifier = match dir with
         | Ir.Direction.Source -> "saddr"
@@ -171,41 +177,40 @@ let gen_cond neg cond =
                 |> List.map Ipaddr.V4.Prefix.to_string
                 |> String.concat ", "
       in
-      sprintf "ip %s %s{ %s }" classifier neg_str ips
+      sprintf "ip %s %s{ %s }" classifier neg_str ips, None
   | Ir.Protocol (l, p) ->
       let prefix = string_of_layer l in
       let set = Set.to_list p |> List.map (string_of_protocol l) |> String.concat "," in
-      sprintf "%s %s { %s }" prefix neg_str set
-
-
+      sprintf "%s %s { %s }" prefix neg_str set, None
   | Ir.Icmp6 types ->
       let set = Set.to_list types
                 |> List.map string_of_icmp6_type
                 |> String.concat ", "
                 |> sprintf "{ %s }"
       in
-      sprintf "ip6 nexthdr icmpv6 icmpv6 type %s%s" neg_str set
+      sprintf "ip6 nexthdr icmpv6 icmpv6 type %s%s" neg_str set, None
   | Ir.Icmp4 types ->
       let set = Set.to_list types
                 |> List.map string_of_icmp4_type
                 |> String.concat ", "
                 |> sprintf "{ %s }"
       in
-      sprintf "ip protocol icmp icmp type %s%s" neg_str set
+      sprintf "ip protocol icmp icmp type %s%s" neg_str set, None
   | Ir.Mark (value, mask) ->
-      sprintf "meta mark and 0x%08x %s0x%08x" mask neg_str value
+      sprintf "meta mark and 0x%08x %s0x%08x" mask neg_str value, None
   | Ir.TcpFlags (flags, mask) ->
       let to_list f = Set.to_list f
                       |> List.map string_of_tcpflag
                       |> String.concat "|"
       in
       let neg_str = match neg with true -> "!=" | false -> "==" in
-      sprintf "tcp flags & (%s) %s %s" (to_list mask) neg_str (to_list flags)
+      sprintf "tcp flags & (%s) %s %s" (to_list mask) neg_str (to_list flags), None
   | Ir.True when neg ->
       (* Any false statement *)
-      "meta mark | 0x1 == 0x0"
+      "meta mark | 0x1 == 0x0", None
   | Ir.True ->
-      ""
+      "", None
+
 let reject_to_string = function
   | Ir.Reject.HostUnreachable -> "reject with icmpx type host-unreachable"
   | Ir.Reject.NoRoute -> "reject with icmpx type no-route"
@@ -230,11 +235,19 @@ let gen_target = function
   | Ir.Log prefix -> sprintf "log prefix \"%s: \" level info" prefix
 
 let gen_rule (conds, target) =
-  let conds = List.map (fun (op, neg) -> gen_cond neg op) conds
-              |> String.concat " "
+  let conds, comments =
+    let conds, comments = List.map (fun (op, neg) -> gen_cond neg op) conds
+                 |> List.split
+    in
+    let comments =
+      List.filter_map identity comments
+      |> function [] -> []
+                | cs -> "#" :: cs
+    in
+    String.concat " " conds, String.concat " " comments
   in
   let target = gen_target target in
-  sprintf "%s %s;" conds target
+  sprintf "%s %s; %s" conds target comments
 
 let emit_chain { Ir.id; rules; comment } =
   let rules =
