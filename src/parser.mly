@@ -129,6 +129,7 @@ bool:
   | NOT TRUE
   | FALSE                                              { F.False }
 
+(* Separated list, allowing seperator at the end *)
 separated_list_opt(SEP, T):
   | { [] }
   | t = T { [t] }

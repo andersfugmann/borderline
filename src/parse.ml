@@ -17,8 +17,11 @@ let parse file =
       imported := (File_set.add full_path !imported);
       Printf.eprintf "#Parse: %s\n%!" full_path;
       let lexbuf = Lexing.from_channel (open_in file) in
-        lexbuf.Lexing.lex_curr_p <- { lexbuf.Lexing.lex_curr_p with Lexing.pos_fname = full_path; };
+      lexbuf.Lexing.lex_curr_p <- { lexbuf.Lexing.lex_curr_p with Lexing.pos_fname = full_path; };
+      try
         Parser.main Lexer.token lexbuf
+      with
+      | Parser.Error -> Common.parse_error ~pos:lexbuf.Lexing.lex_curr_p "Syntax error"
     end
 
 let rec parse_file file =

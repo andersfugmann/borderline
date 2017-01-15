@@ -30,4 +30,9 @@ let _ =
       List.iter (fun l -> print_endline l) lines;
       Printf.printf "\n#Lines: %d\n" (List.length lines)
 
-  with ParseError err as excpt -> flush stdout; prerr_endline (error2string err); raise excpt
+  with
+  | ParseError err as excpt ->
+      flush stdout;
+      prerr_endline (error2string err);
+      raise excpt
+(*   | Parser.Basics.Error as e -> raise e *)
