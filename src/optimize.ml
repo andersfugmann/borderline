@@ -45,24 +45,33 @@ let merge_oper ?(tpe=`Inter) a b =
      !A => B => X    => (B / A) => X
 
   *)
-  let merge_inter inter union diff (s, neg) (s', neg') =
-    match neg, neg' with
-    | false, false -> (inter s s', false)
-    | true, true ->   (union s s', true)
-    | false, true ->  (diff s  s', false)
-    | true, false ->  (diff s' s, false)
+  let merge_inter inter union diff a b =
+    match a, b with
+    | (a, false), (b, false) -> (inter a b, false)
+    | (a, true),  (b, true)  -> (union a b, true)
+    | (a, false), (b, true)  -> (diff  a b, false)
+    | (a, true),  (b, false) -> (diff  b a, false)
   in
 
-  let merge_union inter union diff (s, neg) (s', neg') =
-    match neg, neg' with
-    | false, false -> (union s s', false)
-    | true, true ->   (inter s s', true)
-    | false, true ->  (diff s'  s, true)
-    | true, false ->  (diff s s',  true)
+  let merge_union inter union diff a b =
+    match a, b with
+    | (a, false), (b, false) -> (union a b, false)
+    | (a, true),  (b, true)  -> (inter a b, true)
+    | (a, false), (b, true)  -> (diff  b a, true)
+    | (a, true),  (b, false) -> (diff  a b, true)
   in
+  let merge_diff inter union diff a b =
+    match a, b with
+    | (a, false), (b, false) -> (diff  a b, false)
+    | (a, true),  (b, true)  -> (diff  b a, false)
+    | (a, false), (b, true)  -> (inter a b, false)
+    | (a, true),  (b, false) -> (union a b, true)
+  in
+
   let merge = match tpe with
     | `Inter -> merge_inter
     | `Union -> merge_union
+    | `Diff -> merge_diff
   in
 
   let merge_states = merge State.intersect State.union State.diff in
@@ -218,17 +227,7 @@ let reduce chains =
 (** Remove all return statements, by creating new chains for each
     return statement *)
 let fold_return_statements chains =
-  (* This is wrong. *)
-  (* So we have:
-       a ^ b -> return
-       X
-  must be
-    !a jump 1
-    !b jump 1
-  1: X
-
-  *)
-  let neg tg = List.map (fun (x, a) -> [(x, not a)], tg) in
+  let neg tg conds = List.map (fun (x, a) -> [(x, not a)], tg) conds in
   let rec fold_return acc = function
     | (cl, Return) :: xs ->
       printf "F";
