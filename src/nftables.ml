@@ -238,6 +238,7 @@ let gen_target = function
   | Ir.Accept -> "accept"
   | Ir.Drop -> "drop"
   | Ir.Return -> "return"
+  | Ir.Counter -> "counter"
   | Ir.Notrack -> ""
   | Ir.Jump chain -> sprintf "jump %s" (chain_name chain)
   | Ir.Reject rsp -> reject_to_string rsp
@@ -258,13 +259,34 @@ let gen_rule (conds, target) =
   let target = gen_target target in
   sprintf "%s %s; %s" conds target comments
 
+let expand_rule (rls, tg) =
+  let rec split (rules, (ip4, neg4), (ip6, neg6)) = function
+    | (Ir.Ip4Set _, n) as r :: xs -> split (rules, (r :: ip4, neg4 && n), (ip6, neg6)) xs
+    | (Ir.Ip6Set _, n) as r :: xs -> split (rules, (ip4, neg4), (r :: ip6, neg6 && n)) xs
+    | r :: xs -> split (r :: rules, (ip4, neg4), (ip6, neg6)) xs
+    | [] -> (List.rev rules, (List.rev ip4, neg4), (List.rev ip6, neg6))
+  in
+  let (rules, (ip4, neg4), (ip6, neg6)) = split ([], ([], true), ([], true)) rls in
+
+  match (ip4, neg4), (ip6, neg6) with
+  | ([], _), _
+  | _, ([], _) -> [(rls, tg)]
+  | (_, true), (ip6, false) -> [(ip6 @ rules, tg)] (* Slight optimization *)
+  | (ip4, false), (_, true) -> [(ip4 @ rules, tg)]
+  | (_, false), (_, false) -> [] (* Cannot both be an ipv4 and a ipv6 address *)
+  | (ip4, true), (ip6, true) -> [(ip4 @ rules, tg); (ip6 @ rules, tg) ] (* Cannot both be an ipv4 and a ipv6 address *)
+
 let emit_chain { Ir.id; rules; comment } =
+
   let rules =
-    List.map gen_rule rules
+    List.map expand_rule rules
+    |> List.flatten
+    |> List.map gen_rule
   in
   let premable = chain_premable id in
 
   [ "#" ^ comment ] @ premable @ rules @ [ "}" ]
+
 
 let emit_filter_chains (chains : (Ir.chain_id, Ir.chain) Map.t) : string list =
   (* How does this work. Dont we need a strict ordering of chains here? *)

@@ -9,9 +9,5 @@ dep:
 	opam install omake
 	omake dep
 
-%: force
+%:
 	omake -w $@ -j 4
-
-
-.PHONY:
-force:

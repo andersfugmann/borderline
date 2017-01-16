@@ -164,7 +164,7 @@ let is_subset a b =
 let reduce chains =
   let false_rule = ([State State.empty, false], Notrack) in
   let is_terminal = function
-    | Jump _ | MarkZone _ | Notrack | Log _ | Snat _ -> false
+    | Counter | Jump _ | MarkZone _ | Notrack | Log _ | Snat _ -> false
     | Accept | Drop | Reject _ | Return -> true
   in
   let chains = ref chains in
@@ -272,15 +272,16 @@ let reorder rules =
   in
 
   let order = function
-    | Log _ -> 0
-    | Notrack -> 1
-    | Accept -> 2
-    | MarkZone _ -> 3
-    | Jump _ -> 4
-    | Return -> 5
-    | Reject _ -> 6
-    | Drop -> 7
-    | Snat _ -> 8
+    | Counter    -> 0
+    | Log _      -> 1
+    | Notrack    -> 2
+    | Accept     -> 3
+    | MarkZone _ -> 4
+    | Jump _     -> 5
+    | Return     -> 6
+    | Reject _   -> 7
+    | Drop       -> 8
+    | Snat _     -> 9
   in
   let should_reorder_rules (cl1, act1) (cl2, act2) =
     if can_reorder (cl1, act1) (cl2, act2) then

@@ -15,7 +15,7 @@ let parse_error pos s =
 %token ZONE PROCESS RULE IMPORT
 %token DEFINE
 %token NETWORK INTERFACE SNAT
-%token ALLOW DENY REJECT LOG
+%token ALLOW DENY REJECT LOG COUNTER
 %token POLICY
 %token ADDRESS STATE USE
 %token SEMI PROTOCOL4 PROTOCOL6
@@ -93,6 +93,7 @@ string:
   | s=QUOTE                                            { s }
 
 policy:
+  | COUNTER                                            { F.Counter }
   | ALLOW                                              { F.Allow }
   | DENY                                               { F.Deny }
   | REJECT s=string                                    { F.Reject (Some s) }

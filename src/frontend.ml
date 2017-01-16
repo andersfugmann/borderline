@@ -19,7 +19,8 @@ end
 
 type ip = Ipv6 of Ip6.elt | Ipv4 of Ip4.elt
 
-type policytype = Allow
+type policytype = Counter
+                | Allow
                 | Deny
                 | Reject of (string * Lexing.position) option
                 | Log of prefix

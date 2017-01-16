@@ -41,6 +41,7 @@ rule token = parse
   | "drop"         { Parser.DENY }
   | "reject"       { Parser.REJECT }
   | "log"          { Parser.LOG }
+  | "counter"      { Parser.COUNTER }
 
 (* filters *)
   | "port"         { Parser.PORT }

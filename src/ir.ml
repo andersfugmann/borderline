@@ -93,6 +93,7 @@ type condition = Interface of Direction.t * id Set.t
 
 type action = Jump of chain_id
             | MarkZone of Direction.t * zone
+            | Counter
             | Accept
             | Drop
             | Return

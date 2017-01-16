@@ -16,6 +16,7 @@ let reject_of_string_opt = function
   | None -> Ir.Reject.PortUnreachable
 
 let gen_policy = function
+  | F.Counter -> Ir.Counter
   | F.Allow -> Ir.Accept
   | F.Deny -> Ir.Drop
   | F.Reject s -> Ir.Reject (reject_of_string_opt s)

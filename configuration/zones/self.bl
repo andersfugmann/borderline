@@ -1,3 +1,5 @@
+# This zone defines all traffic to and from the machine itself,
+# Along with the loopback device.
 zone self {
      interface = lo;
      process filter {

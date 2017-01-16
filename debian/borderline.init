@@ -11,6 +11,8 @@
 
 # Author: Anders Peter Fugmann <afu@fugmann.net>
 
+set -e
+
 MAIN=/etc/borderline/borderline.bl
 if [ -f /etc/default/borderline ]; then
     source /etc/default/borderline
@@ -59,11 +61,12 @@ function apply () {
     chmod 600 ${FILE}
     echo "flush ruleset" >> ${FILE}
     ${BORDERLINE} ${MAIN} >> ${FILE}
+    ${NFT} -f ${FILE}
     rm ${FILE}
 }
 
 case $1 in
-    "start" | "restart")
+    "start" | "restart" | "reload")
         echo "Starting borderline"
         apply
         ;;
@@ -79,6 +82,9 @@ case $1 in
     "status")
         ${NFT} list ruleset
         ;;
+    "stop")
+        echo "Not stopping. Use flush or panic."
+        ;;
     *)
-        echo "Use $0 <start|stop|restart|panic>"
+        echo "Use $0 <start|restart|reload|panic|flush|status>"
 esac
