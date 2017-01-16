@@ -1,0 +1,84 @@
+#!/bin/bash
+### BEGIN INIT INFO
+# Provides:          borderline
+# Required-Start:    $local_fs $remote_fs $syslog
+# Required-Stop:     $local_fs $remote_fs $syslog
+# Default-Start:     S
+# Default-Stop:
+# Short-Description: A firewall compiler
+# Description:       Generates a packet filtering firewall.
+### END INIT INFO
+
+# Author: Anders Peter Fugmann <afu@fugmann.net>
+
+MAIN=/etc/borderline/borderline.bl
+if [ -f /etc/default/borderline ]; then
+    source /etc/default/borderline
+fi
+
+if [ "${DONT_START}" = "1" ]; then
+    echo "Borderline is not yet configured."
+    echo "After configuration, set DONT_START=0 in"
+    echo "/etc/default/borderline".
+    echo
+    echo "For first time configuratio, run bl_configure and "
+    echo "then adjust /etc/borderline/configuration.bl"
+    exit 0
+fi
+
+if [ \! -f "${MAIN}" ]; then
+    echo "Invalid or not input file given: ${MAIN}"
+    exit 1
+fi
+
+NFT="/usr/sbin/nft"
+BORDERLINE="/usr/sbin/borderline"
+
+function flush () {
+    $(NFT) flush ruleset
+}
+
+function panic () {
+    FILE=$(mktemp borderline.XXXXXX)
+    echo <<EOF > ${FILE}
+flush ruleset
+table inet filter {
+  chain input { type filter hook input priority 0; policy drop; }
+  chain output { type filter hook output priority 0; policy drop; }
+  chain forward { type filter hook forward priority 0; policy drop; }
+}
+
+EOF
+    ${NFT} -f ${FILE}
+    rm -f ${FILE}
+}
+
+function apply () {
+    echo "Generating firewall rules."
+    FILE=$(mktemp borderline.XXXXXX)
+    chmod 600 ${FILE}
+    echo "flush ruleset" >> ${FILE}
+    ${BORDERLINE} ${MAIN} >> ${FILE}
+    rm ${FILE}
+}
+
+case $1 in
+    "start" | "restart")
+        echo "Starting borderline"
+        apply
+        ;;
+    "panic")
+        echo "Closing network access"
+        panic
+        ;;
+    "flush")
+        echo "Claring all rules."
+        echo "**** SYSTEM IS INSECURE ****"
+        flush
+        ;;
+    "status")
+        ${NFT} list ruleset
+        ;;
+    *)
+        echo "Use $0 <start|stop|restart|panic>"
+esac

@@ -1,0 +1,8 @@
+# Defaults for borderline initscript
+# sourced by /etc/init.d/borderline
+MAIN=/etc/borderline/borderline.bl
+
+# Remove this line after configuring borderline to your liking.
+# See /etc/borderline/configuration.bl
+# To setup zones, use /usr/sbin/bl_configure
+DONT_START=1

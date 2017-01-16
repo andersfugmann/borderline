@@ -2,13 +2,18 @@ Source: borderline
 Section: security
 Priority: extra
 Maintainer: Anders Peter Fugmann <anders@fugmann.net>
-Build-Depends: debhelper (>= 8.0.0)
-Standards-Version: 3.9.2
-Homepage: borderline.fugmann.net
+Build-Depends: debhelper (>= 9), ocaml (>= 4.0.3), ocaml-batteries-included, omake, menhir, libipaddr-ocaml-dev
+Standards-Version: 3.9.8
+Homepage: https://github.com/andersfugmann/borderline
+Vcs-Git: https://github.com/andersfugmann/borderline.git
 
 Package: borderline
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
-Description: Borderline is am ipv6  firewall generator
- Borderline produces firewalls from a set of configuration files. The
- firewall rules proces are heavily optimzied for speed. Currently borderline can only produce ipv6 firewalls for linux netfilter, using iptables.
+Depends: ${shlibs:Depends}, ${misc:Depends} nftables
+Description: Firewall for ipv4 and ipv6 networks
+ Borderline sets up a firewall based on user rules.
+ The scales from private servers to large cloud based system.
+ The aim is to provide a simple way to configure rules by defining
+ network zones and accept traffic to and from zones.
+ .
+ The firewall handles both ipv4 and ipv6 seamlessly.

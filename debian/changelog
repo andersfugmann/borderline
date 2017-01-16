@@ -1,5 +1,5 @@
-borderline (0.97-1) unstable; urgency=low
+borderline (0.9.9) unstable; urgency=medium
 
-  * Initial release (Closes: #nnnn)  <nnnn is the bug number of your ITP>
+  * Initial Release.
 
- -- Anders Peter Fugmann <afu@marvin.fugmann.net>  Fri, 22 Jul 2011 14:30:50 +0200
+ -- Anders Peter Fugmann <anders@fugmann.net>  Mon, 16 Jan 2017 20:22:02 +0100

@@ -9,3 +9,10 @@ etc
 .#*
 *.omc
 .omakedb*
+debian/borderline
+debian/*.debhelper
+debian/*ex
+debian/*EX
+debian/borderline.debhelper.log
+debian/debhelper-build-stamp
+debian/borderline.substvars
