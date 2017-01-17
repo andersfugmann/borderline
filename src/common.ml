@@ -7,15 +7,12 @@ type id = string
 exception ParseError of (string * id option * Lexing.position option)
 let parse_error ?pos ?id str = raise (ParseError (str, id, pos))
 
-(* Place these in a const.ml *)
-let tcp = 6
-let udp = 17
-let icmp = 58
-
 let error2string (error, id, pos) =
-  let prefix = Option.map_default
-      (fun pos -> sprintf "File \"%s\", line %d:%d" pos.Lexing.pos_fname pos.Lexing.pos_lnum
-          (pos.Lexing.pos_cnum - pos.Lexing.pos_bol))
+  let prefix =
+    let open Lexing in
+    Option.map_default
+      (fun pos -> sprintf "File \"%s\", line %d:%d" pos.pos_fname pos.pos_lnum
+          (pos.pos_cnum - pos.pos_bol))
       "Unknown location" pos
   in
   let postfix = Option.map_default (sprintf "'%s'") "" id in

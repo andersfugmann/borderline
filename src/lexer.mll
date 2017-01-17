@@ -66,21 +66,21 @@ rule token = parse
      ['0'-'9''a'-'f''A'-'F']+ ':'
      ['0'-'9''a'-'f''A'-'F']+ as addr)
      ('/' (['0'-'9']+ as mask))?
-    { IPv6 (addr, Option.map_default int_of_string 128 mask, lexbuf.Lexing.lex_curr_p) }
+    { IPv6 (addr, Option.map_default int_of_string 128 mask, lexbuf.Lexing.lex_start_p) }
   | ((((['0'-'9''a'-'f''A'-'F']+ ':')* ['0'-'9''a'-'f''A'-'F']+)?)?
     "::"
     (((['0'-'9''a'-'f''A'-'F']+ ':')* ['0'-'9''a'-'f''A'-'F']+)?)? as addr)
     ('/' ((['0'-'9']+) as mask))?
-    { IPv6 (addr, Option.map_default int_of_string 128 mask, lexbuf.Lexing.lex_curr_p) }
+    { IPv6 (addr, Option.map_default int_of_string 128 mask, lexbuf.Lexing.lex_start_p) }
   | (['0'-'9']+ '.'
      ['0'-'9']+ '.'
      ['0'-'9']+ '.'
      ['0'-'9']+) as addr
     ('/' ((['0'-'9']+) as mask))?
-    { IPv4 (addr, Option.map_default int_of_string 32 mask, lexbuf.Lexing.lex_curr_p) }
+    { IPv4 (addr, Option.map_default int_of_string 32 mask, lexbuf.Lexing.lex_start_p) }
   | ['0'-'9']+ as lxm { INT(int_of_string lxm, lexbuf.Lexing.lex_curr_p) }
-  | ['a'-'z''A'-'Z''_']['a'-'z''A'-'Z''0'-'9''_''.''-']* as lxm { IDENT (lxm, lexbuf.Lexing.lex_curr_p) }
-  | '"'(['0'-'9' 'a'-'z' 'A'-'Z' '.' '/' '_' '-' ' ']+ as str)'"' { QUOTE (str, lexbuf.Lexing.lex_curr_p) }
+  | ['a'-'z''A'-'Z''_']['a'-'z''A'-'Z''0'-'9''_''.''-']* as lxm { IDENT (lxm, lexbuf.Lexing.lex_start_p) }
+  | '"'(['0'-'9' 'a'-'z' 'A'-'Z' '.' '/' '_' '-' ' ']+ as str)'"' { QUOTE (str, lexbuf.Lexing.lex_start_p) }
 
 
 (* Simple tokens *)

@@ -21,7 +21,7 @@ let parse file =
       try
         Parser.main Lexer.token lexbuf
       with
-      | Parser.Error -> Common.parse_error ~pos:lexbuf.Lexing.lex_curr_p "Syntax error"
+      | Parser.Error -> Common.parse_error ~pos:lexbuf.Lexing.lex_start_p "Syntax error"
     end
 
 let rec parse_file file =

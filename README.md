@@ -24,6 +24,6 @@ interfaces.
 # Installation
 To be written
 
-## Status =
+## Status
 Version 1.0 is very close.
 The firewall handles ipv4 and ipv6 addresses and output working nft script.

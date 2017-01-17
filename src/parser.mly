@@ -3,14 +3,6 @@
 
 module F = Frontend
 open Lexing
-
-(* Define a function to be called whenever a syntax error is
-   encountered. The function prints line number along with a
-   description.
-let parse_error pos s =
-  Printf.eprintf "File \"%s\", line %d\nError: %s\n" pos.Lexing.pos_fname pos.Lexing.pos_lnum s;
-  exit 1
-  *)
 %}
 %token ZONE PROCESS RULE IMPORT
 %token DEFINE
