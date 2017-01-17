@@ -1,3 +1,14 @@
+Version 0.99 (2016-01-16)
+* Add IPv4 support!
+* Added Nat support for ipv4
+* Replaced iptables backend with nft backend
+* Reduced nuber of keywords
+* Added counter target
+* Updated Debian package
+* Fixes to packet validation rules
+* Added true and false conditional rules to ease scripting
+* Fixed bug in lowering pass
+
 Version 0.96 (2010-03-12)
 * Fix bug in validation rules
 * Remove temporary files after applying the firewall
@@ -25,5 +36,3 @@ Version 0.2 (2009-10-07)
 
 Version 0.1
 * Initial release
-
-
