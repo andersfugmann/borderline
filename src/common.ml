@@ -14,7 +14,8 @@ let icmp = 58
 
 let error2string (error, id, pos) =
   let prefix = Option.map_default
-      (fun pos -> sprintf "File \"%s\", line %d" pos.Lexing.pos_fname pos.Lexing.pos_lnum)
+      (fun pos -> sprintf "File \"%s\", line %d:%d" pos.Lexing.pos_fname pos.Lexing.pos_lnum
+          (pos.Lexing.pos_cnum - pos.Lexing.pos_bol))
       "Unknown location" pos
   in
   let postfix = Option.map_default (sprintf "'%s'") "" id in

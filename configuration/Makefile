@@ -15,7 +15,7 @@ generic/services.bl: /etc/services
 	@egrep -v "^#" $< | while read name number rest; do \
           if [ "$${number##*/}" = "tcp" -o "$${number##*/}" = "udp" ]; then \
 	    for n in $${name} $${rest%#*}; do \
-              echo "define \"$${n}\" += $${number%%/*}"; \
+              echo "define \"$${n}\" += [ $${number%%/*} ]"; \
             done; \
           fi; \
         done | sort -u > $@
@@ -24,22 +24,26 @@ generic/allocated6.bl: URL = http://www.iana.org/assignments/ipv6-unicast-addres
 generic/allocated6.bl: allocations.xslt
 	@echo "Gen     :" $@
 	@echo "#Extracted from $(URL)" > $@
-	@echo -n "define \"allocated6\" = " >> $@
+	@echo -n "define \"allocated6\" = [ " >> $@
 	@xsltproc $< $(URL) >> $@
+	@echo -n " ]" >> $@
+
 
 generic/bogon6.bl: URL = http://www.team-cymru.org/Services/Bogons/fullbogons-ipv6.txt
 generic/bogon6.bl:
 	@echo "Gen     :" $@
 	@echo "#Extracted from $(URL)" > $@
-	@echo -n "define \"bogon6\" = " >> $@
+	@echo -n "define \"bogon6\" = [ " >> $@
 	@curl -s $(URL) | grep -v "^#" | sed 's/$$/,/g' >> $@
+	@echo -n " ]" >> $@
 
 generic/bogon4.bl: URL = http://www.team-cymru.org/Services/Bogons/fullbogons-ipv4.txt
 generic/bogon4.bl:
 	@echo "Gen     :" $@
 	@echo "#Extracted from $(URL)" > $@
-	@echo -n "define \"bogon4\" = " >> $@
+	@echo -n "define \"bogon4\" = [ " >> $@
 	@curl -s $(URL) | grep -v "^#" | sed 's/$$/,/g' >> $@
+	@echo -n " ]" >> $@
 
 clean:
 	@find . -name \*~ | xargs $(RM)

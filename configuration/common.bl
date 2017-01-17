@@ -5,7 +5,7 @@ define common = {
     rule { dst zone = mars; } policy log_martian;
     rule { source zone = self; } policy log_allow;
 
-    rule { state = related, established; } policy log_allow;
+    rule { state = [ related, established ]; } policy log_allow;
     use validate;
 
     rule {
@@ -14,15 +14,15 @@ define common = {
         rule { use link_address; #if
                source zone != external;
                destination zone != external;
-               icmp6 = "router-solicitation",
-                       "router-advertisement",
-                       "neighbor-solicitation",
-                       "neighbor-advertisement",
-                       "redirect";
+               icmp6 = [ "router-solicitation",
+                         "router-advertisement",
+                         "neighbor-solicitation",
+                         "neighbor-advertisement",
+                         "redirect" ];
         } policy allow;
 
-        rule { icmp6 = "echo-request", "echo-reply" } policy log_allow;
-        rule { icmp4 = "echo-request", "echo-reply" } policy log_allow;
+        rule { icmp6 = [ "echo-request", "echo-reply" ] } policy log_allow;
+        rule { icmp4 = [ "echo-request", "echo-reply" ] } policy log_allow;
 
         rule { destination tcp port = global_tcp_ports; } policy log_allow;
         rule { destination udp port = global_udp_ports; } policy log_allow;

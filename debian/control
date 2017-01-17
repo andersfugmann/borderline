@@ -2,14 +2,14 @@ Source: borderline
 Section: security
 Priority: extra
 Maintainer: Anders Peter Fugmann <anders@fugmann.net>
-Build-Depends: debhelper (>= 9), ocaml (>= 4.0.3), ocaml-batteries-included, omake, menhir, libipaddr-ocaml-dev
+Build-Depends: debhelper (>= 9), ocaml (>= 4.0.3), ocaml-batteries-included, omake, menhir, libipaddr-ocaml-dev, xsltproc, make
 Standards-Version: 3.9.8
 Homepage: https://github.com/andersfugmann/borderline
 Vcs-Git: https://github.com/andersfugmann/borderline.git
 
 Package: borderline
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends} nftables
+Depends: ${shlibs:Depends}, ${misc:Depends}, nftables, xsltproc, sed, make
 Description: Firewall for ipv4 and ipv6 networks
  Borderline sets up a firewall based on user rules.
  The scales from private servers to large cloud based system.

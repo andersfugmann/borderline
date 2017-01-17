@@ -13,10 +13,10 @@ let hex_of_string h : int =
 
 let new_line lexbuf =
   let pos = lexbuf.Lexing.lex_curr_p in
-    lexbuf.Lexing.lex_curr_p <- { pos with
-      Lexing.pos_lnum = pos.Lexing.pos_lnum + 1;
-      Lexing.pos_bol = pos.Lexing.pos_cnum;
-    }
+  lexbuf.Lexing.lex_curr_p <- { pos with
+    Lexing.pos_lnum = pos.Lexing.pos_lnum + 1;
+    Lexing.pos_bol = pos.Lexing.pos_cnum;
+  }
 }
 
 rule token = parse
@@ -50,8 +50,8 @@ rule token = parse
   | "state"        { Parser.STATE }
   | "address"      { Parser.ADDRESS }
   | "use"          { Parser.USE }
-  | "protocol4"    { Parser.PROTOCOL4 }
-  | "protocol6"    { Parser.PROTOCOL6 }
+  | "ipv4"         { Parser.IPV4 }
+  | "ipv6"         { Parser.IPV6 }
   | "tcpflags"     { Parser.TCPFLAGS }
   | "true"         { Parser.TRUE }
   | "false"        { Parser.FALSE }
@@ -86,6 +86,8 @@ rule token = parse
 (* Simple tokens *)
   | '{'            { LBRACE }
   | '}'            { RBRACE }
+  | '['            { LBRACKET }
+  | ']'            { RBRACKET }
   | ','            { COMMA }
   | "!="           { NE }
   | "+="           { APPEND }

@@ -1,12 +1,10 @@
-define rfc1918_addr = 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
-define multicast_addr = 224.0.0.0/4
 define validate = rule {
     rule {
         state = invalid;
     } policy { log_invalid };
     rule {
         state = new;
-        rule { tcpflags != "SYN" / "SYN", "ACK", "FIN", "RST" } policy { log_invalid };
+        rule { tcpflags != "SYN" / [ "SYN", "ACK", "FIN", "RST" ] } policy { log_invalid };
         rule {
             source zone = external;
             rule {

@@ -18,12 +18,14 @@ define link_address = true
 # List of ports all machines guarded by the firewall can be contacted.
 # See commmon.bl
 define global_tcp_ports = ssh
-define global_udp_ports =
+define global_udp_ports = []
 
 # List of ports accessable on the firewall itself, accessable from the
 # outside.
-define public_tcp_ports = ssh, smtp, ssmtp, domain, imap, imaps, http, https, ntp, sieve,
-define public_udp_ports = domain, ntp
+
+define public_tcp_ports = [ ssh, smtp, ssmtp, domain, imap, imaps, http, https, ntp, sieve ]
+
+define public_udp_ports = [ domain, ntp ]
 
 # Allow outbond traffic on all interfaces defined in the alias external
 # bl_configure will automatically set this on interfaces with a default router:

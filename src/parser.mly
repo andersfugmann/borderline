@@ -18,7 +18,7 @@ let parse_error pos s =
 %token ALLOW DENY REJECT LOG COUNTER
 %token POLICY
 %token ADDRESS STATE USE
-%token SEMI PROTOCOL4 PROTOCOL6
+%token SEMI IPV4 IPV6
 %token PORT ICMP6 ICMP4 TCPFLAGS TRUE FALSE
 %token EQ NE NOT APPEND
 
@@ -28,7 +28,7 @@ let parse_error pos s =
 %token <string * Lexing.position> QUOTE
 %token <string * Lexing.position> IDENT
 
-%token LBRACE RBRACE COMMA END SLASH
+%token LBRACE RBRACE LBRACKET RBRACKET COMMA END SLASH
 
 %start main
 %type <Frontend.node list> main
@@ -70,17 +70,17 @@ policy_opt:
    of rules enclosed in curly braces, seperated by semicolon. *)
 
 rule_stm:
-  | RULE r=rule_seq p=policy_opt                       { F.Rule (r, p) }
-  | NOT USE id=id                                      { F.Reference (id, true) }
-  | USE id=id                                          { F.Reference (id, false) }
-  | d=id f=filter_stm                                  { F.Filter (d, fst f, snd f) }
-  | STATE o=oper states=data_list                      { F.State (states, o) }
-  | PROTOCOL4 o=oper d=data_list                       { F.Protocol (Ir.Protocol.Ip4, d, o) }
-  | PROTOCOL6 o=oper d=data_list                       { F.Protocol (Ir.Protocol.Ip6, d, o) }
-  | ICMP6 o=oper d=data_list                           { F.Icmp6 (d, o) }
-  | ICMP4 o=oper d=data_list                           { F.Icmp4 (d, o) }
-  | TCPFLAGS o=oper f=data_list SLASH m=data_list      { F.TcpFlags (f, m, o) }
-  | b = bool                                           { b }
+  | RULE r=rule_seq p=policy_opt                  { F.Rule (r, p) }
+  | NOT USE id=id                                 { F.Reference (id, true) }
+  | USE id=id                                     { F.Reference (id, false) }
+  | d=id f=filter_stm                             { F.Filter (d, fst f, snd f) }
+  | STATE o=oper states=data_list                 { F.State (states, o) }
+  | IPV4 o=oper d=data_list                       { F.Protocol (Ir.Protocol.Ip4, d, o) }
+  | IPV6 o=oper d=data_list                       { F.Protocol (Ir.Protocol.Ip6, d, o) }
+  | ICMP6 o=oper d=data_list                      { F.Icmp6 (d, o) }
+  | ICMP4 o=oper d=data_list                      { F.Icmp4 (d, o) }
+  | TCPFLAGS o=oper f=data_list SLASH m=data_list { F.TcpFlags (f, m, o) }
+  | b = bool                                      { b }
 
 (* A policy can be a single policy, or a list of policies
    enclosed in curly braces seperated by semicolon. *)
@@ -116,7 +116,8 @@ oper:
 (* Data lists are polymorphic data sets. The types are
    validated when mapping the frontend language to the Ir tree *)
 data_list:
-  | data=separated_list_opt(COMMA, data)                   { data }
+  | LBRACKET data=separated_list_opt(COMMA, data) RBRACKET { data }
+  | data=data                                              { [data] }
 ;
 
 data:
