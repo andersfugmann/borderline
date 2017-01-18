@@ -1,5 +1,5 @@
 (** Type and utility function for the frontend *)
-open !Batteries
+open Core.Std
 open Common
 module Ip6 = Ipset.Ip6
 module Ip4 = Ipset.Ip4
@@ -75,7 +75,7 @@ let rec fold_rules func acc = function
   | [] -> acc
 
 let fold_nodes func nodes acc =
-  List.fold_left func acc nodes
+  List.fold_left ~f:func ~init:acc nodes
 
 let fold func nodes acc =
   let node_func acc = function

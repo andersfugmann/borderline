@@ -3,6 +3,7 @@
 .DEFAULT_GOAL := build
 
 debian:
+	gbp dch --ignore-branch --release --full -a --spawn-editor=snapshot -a --git-author
 	dpkg-buildpackage -b -uc
 
 dep:

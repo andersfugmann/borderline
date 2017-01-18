@@ -2,7 +2,7 @@
    Output a nft sctipt.
 *)
 
-open Batteries
+open Core.Std
 open Printf
 module Ip6 = Ipset.Ip6
 module Ip4 = Ipset.Ip4
@@ -12,17 +12,17 @@ let zone_mask = 1 lsl zone_bits - 1
 
 let str_of_set s =
   Set.to_list s
-  |> List.map string_of_int
-  |> String.concat ", "
+  |> List.map ~f:string_of_int
+  |> String.concat ~sep:", "
   |> sprintf "{ %s }"
 
-let zones = Hashtbl.create 100
+let zones = Hashtbl.Poly.create ~size:100 ()
 let get_zone_id zone =
-  match Hashtbl.find_option zones zone with
+  match Hashtbl.Poly.find zones zone with
   | Some id -> id
   | None ->
       let id = 1 lsl (Hashtbl.length zones + 1)  in
-      Hashtbl.add zones zone id;
+      Hashtbl.add_exn ~key:zone ~data:id zones;
       id
 
 let chain_name = function
@@ -119,7 +119,7 @@ let gen_cond neg cond =
   in
   match cond with
   | Ir.Interface (dir, zones) ->
-      let zones = sprintf "{ %s }" (Set.to_list zones |> List.map (sprintf "\"%s\"") |> String.concat ", ") in
+      let zones = sprintf "{ %s }" (Set.to_list zones |> List.map ~f:(sprintf "\"%s\"") |> String.concat ~sep:", ") in
       let classifier = match dir with
         | Ir.Direction.Source -> "iifname"
         | Ir.Direction.Destination -> "oifname"
@@ -130,10 +130,10 @@ let gen_cond neg cond =
         | Ir.Direction.Source -> 0
         | Ir.Direction.Destination -> zone_bits
       in
-      let mask = Set.fold (fun zone acc ->
+      let mask = Set.Poly.fold ~f:(fun acc zone ->
           let zone_id = get_zone_id zone in
           let zone_val = zone_id lsl shift in
-          acc + zone_val) zones 0
+          acc + zone_val) zones ~init:0
       in
       let neg_str = match neg with true -> "==" | false -> "!=" in
       let comment =
@@ -142,15 +142,15 @@ let gen_cond neg cond =
           | Ir.Direction.Source  -> "src"
           | Ir.Direction.Destination  -> "dest"
         in
-        let zones = Set.to_list zones |> String.concat ", " in
+        let zones = Set.to_list zones |> String.concat ~sep:", " in
         sprintf "%s%s zone in (%s)" neg dir zones
       in
       sprintf "meta mark & 0x%08x %s 0x0" mask neg_str, Some comment
   | Ir.State states ->
       let states =
         State.to_list states
-        |> List.map string_of_state
-        |> String.concat ", "
+        |> List.map ~f:string_of_state
+        |> String.concat ~sep:", "
       in
       sprintf "ct state %s{ %s }" neg_str states, None
   | Ir.Ports (dir, port_type, ports) ->
@@ -172,8 +172,8 @@ let gen_cond neg cond =
       in
       let ips = Ip6.to_list ips
                 |> Ip6.reduce
-                |> List.map Ipaddr.V6.Prefix.to_string
-                |> String.concat ", "
+                |> List.map ~f:Ipaddr.V6.Prefix.to_string
+                |> String.concat ~sep:", "
       in
       sprintf "ip6 %s %s{ %s }" classifier neg_str ips, None
   | Ir.Ip4Set (dir, ips) ->
@@ -183,25 +183,25 @@ let gen_cond neg cond =
       in
       let ips = Ip4.to_list ips
                 |> Ip4.reduce
-                |> List.map Ipaddr.V4.Prefix.to_string
-                |> String.concat ", "
+                |> List.map ~f:Ipaddr.V4.Prefix.to_string
+                |> String.concat ~sep:", "
       in
       sprintf "ip %s %s{ %s }" classifier neg_str ips, None
   | Ir.Protocol (l, p) ->
       let prefix = string_of_layer l in
-      let set = Set.to_list p |> List.map (string_of_protocol l) |> String.concat "," in
+      let set = Set.to_list p |> List.map ~f:(string_of_protocol l) |> String.concat ~sep:"," in
       sprintf "%s %s { %s }" prefix neg_str set, None
   | Ir.Icmp6 types ->
       let set = Set.to_list types
-                |> List.map string_of_icmp6_type
-                |> String.concat ", "
+                |> List.map ~f:string_of_icmp6_type
+                |> String.concat ~sep:", "
                 |> sprintf "{ %s }"
       in
       sprintf "ip6 nexthdr icmpv6 icmpv6 type %s%s" neg_str set, None
   | Ir.Icmp4 types ->
       let set = Set.to_list types
-                |> List.map string_of_icmp4_type
-                |> String.concat ", "
+                |> List.map ~f:string_of_icmp4_type
+                |> String.concat ~sep:", "
                 |> sprintf "{ %s }"
       in
       sprintf "ip protocol icmp icmp type %s%s" neg_str set, None
@@ -209,8 +209,8 @@ let gen_cond neg cond =
       sprintf "meta mark and 0x%08x %s0x%08x" mask neg_str value, None
   | Ir.TcpFlags (flags, mask) ->
       let to_list f = Set.to_list f
-                      |> List.map string_of_tcpflag
-                      |> String.concat "|"
+                      |> List.map ~f:string_of_tcpflag
+                      |> String.concat ~sep:"|"
       in
       let neg_str = match neg with true -> "!=" | false -> "==" in
       sprintf "tcp flags & (%s) %s %s" (to_list mask) neg_str (to_list flags), None
@@ -246,15 +246,16 @@ let gen_target = function
   | Ir.Snat ip -> sprintf "snat %s" (Ipaddr.V4.to_string ip)
 let gen_rule (conds, target) =
   let conds, comments =
-    let conds, comments = List.map (fun (op, neg) -> gen_cond neg op) conds
-                 |> List.split
+    let conds, comments =
+      List.map ~f:(fun (op, neg) -> gen_cond neg op) conds
+      |> List.unzip
     in
     let comments =
-      List.filter_map identity comments
+      List.filter_map ~f:Fn.id comments
       |> function [] -> []
                 | cs -> "#" :: cs
     in
-    String.concat " " conds, String.concat " " comments
+    String.concat ~sep:" " conds, String.concat ~sep:" " comments
   in
   let target = gen_target target in
   sprintf "%s %s; %s" conds target comments
@@ -279,27 +280,23 @@ let expand_rule (rls, tg) =
 let emit_chain { Ir.id; rules; comment } =
 
   let rules =
-    List.map expand_rule rules
-    |> List.flatten
-    |> List.map gen_rule
+    List.concat_map ~f:expand_rule rules
+    |> List.map ~f:gen_rule
   in
   let premable = chain_premable id in
 
   [ "#" ^ comment ] @ premable @ rules @ [ "}" ]
 
 
-let emit_filter_chains (chains : (Ir.chain_id, Ir.chain) Map.t) : string list =
+let emit_filter_chains (chains : (Ir.chain_id, Ir.chain) Map.Poly.t) : string list =
   (* How does this work. Dont we need a strict ordering of chains here? *)
   let rules =
-    Map.values chains
-    |> Enum.map emit_chain
-    |> Enum.map List.enum
-    |> Enum.flatten
-    |> List.of_enum
+    Map.Poly.data chains
+    |> List.concat_map ~f:emit_chain
   in
   (* Dump zone mapping *)
 
-  Hashtbl.iter (fun zone id -> printf "#zone %s -> 0x%04x\n" zone id) zones;
+  Hashtbl.iteri ~f:(fun ~key:zone ~data:id -> printf "#zone %s -> 0x%04x\n" zone id) zones;
   [ "table inet filter {" ] @ rules @ [ "}" ]
 
 let emit_nat_chain rules =
@@ -309,5 +306,5 @@ let emit_nat_chain rules =
     { Ir.id = Ir.Builtin Ir.Chain_type.Post_routing;rules; comment = "Nat" } ::
     []
   in
-  let rules = List.map emit_chain chains |> List.flatten in
+  let rules = List.concat_map ~f:emit_chain chains in
   [ "table ip nat {" ] @ rules @ [ "}" ]

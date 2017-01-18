@@ -1,5 +1,5 @@
 (** Intermidiate representation. *)
-open Batteries
+open Core.Std
 
 open Common
 module Ip6 = Ipset.Ip6
@@ -46,7 +46,7 @@ module Protocol = struct
   type layer = Ip4 | Ip6
   type t = Icmp | Tcp | Udp
 
-  let all = [ Icmp; Tcp; Udp ] |> Set.of_list
+  let all = [ Icmp; Tcp; Udp ] |> Set.Poly.of_list
 
   let of_string (s, pos) =
     match String.lowercase s with
@@ -78,17 +78,17 @@ module Reject = struct
 end
 
 
-type condition = Interface of Direction.t * id Set.t
-               | Zone of Direction.t * zone Set.t
+type condition = Interface of Direction.t * id Set.Poly.t
+               | Zone of Direction.t * zone Set.Poly.t
                | State of State.t
-               | Ports of Direction.t * Port_type.t * int Set.t
+               | Ports of Direction.t * Port_type.t * int Set.Poly.t
                | Ip6Set of Direction.t * Ip6.t
                | Ip4Set of Direction.t * Ip4.t
-               | Protocol of Protocol.layer * Protocol.t Set.t
-               | Icmp6 of Icmp.V6.t Set.t
-               | Icmp4 of Icmp.V4.t Set.t
+               | Protocol of Protocol.layer * Protocol.t Set.Poly.t
+               | Icmp6 of Icmp.V6.t Set.Poly.t
+               | Icmp4 of Icmp.V4.t Set.Poly.t
                | Mark of int * int
-               | TcpFlags of Tcp_flags.t Set.t * Tcp_flags.t Set.t
+               | TcpFlags of Tcp_flags.t Set.Poly.t * Tcp_flags.t Set.Poly.t
                | True
 
 type action = Jump of chain_id
@@ -106,27 +106,32 @@ type oper = (condition * bool) list * action
 
 type chain = { id: chain_id; rules : oper list; comment: string; }
 
-
 (** Test if two conditions are idential *)
 let eq_cond (x, n) (y, m) =
-  n = m && (
-    match x, y with
-      | Ip6Set (_d, r), Ip6Set (_d', r') -> Ip6.equal r r'
-      | Zone(dir, ids), Zone (dir', ids') -> dir = dir' && Set.equal ids ids'
-      | Interface(dir, ids), Interface(dir', ids') -> dir = dir' && Set.equal ids ids'
-      | x, y -> x = y
-      (* TODO: Add all rule types, and add as a function *)
-  )
+  let eq = function
+    | Interface (d, s) -> (function Interface (d', s') -> d = d' && Set.Poly.equal s s' | _ -> false)
+    | Zone (d, s) -> (function Zone (d', s') -> d = d' && Set.Poly.equal s s' | _ -> false)
+    | State s -> (function State s' -> State.equal s s' | _ -> false)
+    | Ports (d, t, s) -> (function Ports (d', t', s') -> d = d' && t = t' && Set.Poly.equal s s' | _ -> false)
+    | Ip6Set (d, s) -> (function Ip6Set (d', s') -> d = d' && Ip6.equal s s' | _ -> false)
+    | Ip4Set (d, s) -> (function Ip4Set (d', s') -> d = d' && Ip4.equal s s' | _ -> false)
+    | Protocol (l, s) -> (function Protocol (l', s') -> l = l' && Set.Poly.equal s s' | _ -> false)
+    | Icmp6 s -> (function Icmp6 s' -> Set.Poly.equal s s' | _ -> false)
+    | Icmp4 s -> (function Icmp4 s' -> Set.Poly.equal s s' | _ -> false)
+    | Mark (m1, m2) -> (function Mark (m1', m2') -> m1 = m1' && m2 = m2' | _ -> false)
+    | TcpFlags (s1, s2) -> (function TcpFlags (s1', s2') -> Set.Poly.equal s1 s1' && Set.Poly.equal s2 s2' | _ -> false)
+    | True -> (function True -> true | _ -> false)
+  in
+  n = m && eq x y
 
-let eq_conds a b = List.length a == List.length b && List.for_all2 (fun c1 c2 -> eq_cond c1 c2) a b
+let eq_conds a b =
+  List.equal ~equal:eq_cond a b
 
 let eq_oper (conds, action) (conds', action') =
-  try action = action' && (List.for_all2 (fun c1 c2 -> eq_cond c1 c2) conds conds')
-  with Invalid_argument _ -> false
+  action = action' && eq_conds conds conds'
 
 let eq_rules a b =
-  try List.for_all2 eq_oper a b
-  with Invalid_argument _ -> false
+  List.equal ~equal:eq_oper a b
 
 let get_dir = function
   | Interface _ -> None

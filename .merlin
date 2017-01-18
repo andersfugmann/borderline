@@ -1,4 +1,4 @@
-FLG -w @A-4-29-33-41-44-45 -short-paths
+FLG -thread -g -w @A-4-29-33-39-41-44-45-48 -bin-annot
 S src
 B _build
-PKG unix str num oUnit batteries ipaddr
+PKG unix str num oUnit core ipaddr

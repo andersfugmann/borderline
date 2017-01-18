@@ -2,12 +2,14 @@
    setup.
 *)
 
-open Batteries
+open Core.Std
 open Arg
 
-module Interface_map = Map.Make (struct
+module Interface_map = Map.Make(struct
   type t = string
   let compare = String.compare
+  let sexp_of_t _ = failwith "Not implemented"
+  let t_of_sexp _ = failwith "Not implemented"
  end)
 
 exception Usage_error of string
@@ -26,7 +28,7 @@ let parse_route map line =
 
   let net, iface = parse line in
   Printf.printf "Parse line: %s %s\n" net iface;
-  Interface_map.modify_def [ net ] iface (fun nets -> net :: nets) map
+  Interface_map.add_multi ~key:iface ~data:net map
 
 let write_external_zone ch_out interface _networks =
     Printf.fprintf ch_out "zone %s {\n" interface;
@@ -40,32 +42,31 @@ let write_internal_zone ch_out interface networks =
     Printf.fprintf ch_out "zone %s {\n" interface;
     Printf.fprintf ch_out "    network = %s;\n" network in
     Printf.fprintf ch_out "    interface = %s;\n" interface;
-    List.iter write_network networks;
+    List.iter ~f:write_network networks;
     Printf.fprintf ch_out "    process filter { } policy log_allow;\n";
     Printf.fprintf ch_out "}\n"
 
-let is_external_zone networks = List.mem "default" networks
+let is_external_zone networks = List.mem networks "default"
 let write_zone filename interface networks =
   print_endline ("Writing file: " ^ filename);
   let ch_out = open_out filename in
     (match is_external_zone networks with
       | true  -> write_external_zone ch_out interface networks
       | false -> write_internal_zone ch_out interface networks
-    ); close_out ch_out
+    ); Out_channel.close ch_out
 
 
 let has_external_zone interfaces =
-  Interface_map.fold (fun _ nets acc -> acc || is_external_zone nets) interfaces false
+  Interface_map.fold ~f:(fun ~key:_ ~data:nets acc -> acc || is_external_zone nets) interfaces ~init:false
 
 let validate_dir output_dir =
-  try
-    match Sys.is_directory output_dir with
-    | true -> ()
-    | false -> raise (Usage_error ("Not a directory: " ^ output_dir))
-  with _ -> raise (Usage_error ("Not a directory: " ^ output_dir))
+  match Sys.is_directory output_dir with
+  | `Yes -> ()
+  | `No | `Unknown -> raise (Usage_error ("Not a directory: " ^ output_dir))
 
 let validate_file force file =
-  match force || (not (Sys.file_exists file)) with
+  let exists = (Sys.file_exists file = `Yes) in
+  match (force || exists) with
   | true -> ()
   | false -> raise (Usage_error ("File already exists: " ^ file))
 
@@ -82,12 +83,10 @@ let () =
 
   let interfaces =
     let routes =
-      List.map Unix.open_process_in commands
-      |> List.map IO.lines_of
-      |> List.map List.of_enum
-      |> List.flatten
+      List.map ~f:Unix.open_process_in commands
+      |> List.concat_map ~f:In_channel.input_lines
     in
-    List.fold_left parse_route Interface_map.empty routes
+    List.fold_left ~f:parse_route ~init:Interface_map.empty routes
   in
   let create_file_name iface = !output_dir ^ "/" ^ iface ^ ".bl" in
   let found_external = has_external_zone interfaces in
@@ -95,14 +94,18 @@ let () =
   try
     validate_dir !output_dir;
     let file_list =
-      Interface_map.fold (fun iface _ acc -> (create_file_name iface) :: acc) interfaces
-        (if (found_external) then [] else [ !output_dir ^ "/" ^ "ext.bl" ])
+      let files = match found_external with
+        | true -> []
+        | false -> [ !output_dir ^ "/" ^ "ext.bl" ]
+      in
+      Interface_map.fold ~f:(fun ~key:iface ~data:_ acc -> (create_file_name iface) :: acc) ~init:files interfaces
     in
-    let () = List.iter (validate_file !force) file_list in
+    let () = List.iter ~f:(validate_file !force) file_list in
 
-    Interface_map.iter (fun iface nets -> write_zone (create_file_name iface) iface nets) interfaces;
-    if not (found_external) then
-      Printf.fprintf (open_out (!output_dir ^ "/" ^ "ext.bl")) "# No external interface found\ndefine external = \n"
-    else
-      ()
+    Interface_map.iteri ~f:(fun ~key:iface ~data:nets -> write_zone (create_file_name iface) iface nets) interfaces;
+    begin
+      match found_external with
+      | false -> Printf.fprintf (open_out (!output_dir ^ "/" ^ "ext.bl")) "# No external interface found\ndefine external = "
+      | true -> ()
+    end
   with Usage_error msg -> print_endline ("Error: " ^  msg)

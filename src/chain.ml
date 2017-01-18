@@ -1,4 +1,4 @@
-open Batteries
+open Core.Std
 (** Operations on chains *)
 
 (** This module keeps global state of all chains. *)
@@ -13,19 +13,19 @@ let is_builtin = function
   | Builtin(_) -> true
   | _ -> false
 
-let chains = ref Map.empty
+let chains = ref Map.Poly.empty
 
 (** Select all chains that satisfies pred *)
 let filter pred chains : Ir.chain list =
-  Map.fold (fun chn acc -> if pred chn then chn :: acc else acc) chains []
+  Map.Poly.fold ~f:(fun ~key:_ ~data:chn acc -> if pred chn then chn :: acc else acc) chains ~init:[]
 
 (** Place a chain in the map *)
 let add chain =
-  chains := Map.add chain.id chain !chains
+  chains := Map.Poly.add ~key:chain.id ~data:chain !chains
 
 (** Delete a chain *)
 let delete id =
-  chains := Map.remove id !chains
+  chains := Map.Poly.remove !chains id
 
 (** Create a new unnamed chain *)
 let create rules comment =

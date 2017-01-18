@@ -1,4 +1,4 @@
-open Batteries
+open Core.Std
 
 module V4 = struct
   type t = EchoReply

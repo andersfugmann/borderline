@@ -2,13 +2,13 @@
 NATIVE_ENABLED = true
 BYTE_ENABLED = true
 
-OCAMLFLAGS = -g -w @A-4-29-33-39-41-44-45-48 -bin-annot
+OCAMLFLAGS = -thread -g -w @A-4-29-33-39-41-44-45-48 -bin-annot
 USE_OCAMLFIND = true
 CP = cp -f
 MENHIR_ENABLED = true
 MENHIR_FLAGS = --explain --infer
 #--compile-errors ../src/parser.errors
-OCAMLPACKS[] = unix str num oUnit batteries ipaddr
+OCAMLPACKS[] = unix str num oUnit core ipaddr
 
 mkdir -p _build
 vmount(-l, src, _build)

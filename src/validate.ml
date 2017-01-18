@@ -1,5 +1,5 @@
 (* Function for validating the AST *)
-open Batteries
+open Core.Std
 
 open Common
 module F = Frontend
@@ -11,8 +11,8 @@ module F = Frontend
     of visited nodes.
 *)
 let mark_seen id seen =
-  match List.mem id seen with
-  |  true -> parse_error ~id  ( "Cyclic reference.\nReferenced From: " ^ (String.concat "," seen))
+  match List.mem seen id with
+  | true  -> parse_error ~id  ( "Cyclic reference.\nReferenced From: " ^ (String.concat ~sep:"," seen))
   | false -> id :: seen
 
 (** Create a map of defines. While creating the map, make sure that no
@@ -22,9 +22,9 @@ let mark_seen id seen =
     order to stop processing).
 *)
 let add_id_to_map (id, pos) def map =
-  match Map.mem id map with
+  match Map.Poly.mem map id with
   | true -> parse_error ~id ~pos "Defintion shadows previous definition"
-  | false -> Map.add id def map
+  | false -> Map.Poly.add ~key:id ~data:def map
 
 let extend_id_to_map (id, pos) lst map =
   let create = function
@@ -37,7 +37,7 @@ let extend_id_to_map (id, pos) lst map =
     | Some F.DefinePolicy (_,_)
     | Some F.Process (_,_,_) -> parse_error ~id ~pos "Can only append to prevous list definition"
   in
-  Map.modify_opt id create map
+  Map.Poly.change map id ~f:create
 
 let rec create_define_map_rec acc = function
   | F.DefineStms (id, _) as def :: xs -> create_define_map_rec (add_id_to_map id def acc) xs
@@ -51,7 +51,7 @@ let rec create_define_map_rec acc = function
 
 (** As the recursive version of the fuction needs an accumulator, add
     a function to hide this to users. *)
-let create_define_map = create_define_map_rec Map.empty
+let create_define_map = create_define_map_rec Map.Poly.empty
 
 (** Expand and validation is the same problem, and should be solved as
     such.  We need to have a system that eases the task of describing
@@ -70,7 +70,7 @@ let expand nodes =
        id to be inserted into the list of visited nodes, and
        cyclic reference dectection will prevent infinite loops,
        and allow error reporting to the users. *)
-    match Map.find id defines with
+    match Map.Poly.find_exn defines id with
     | F.DefineList (_, [ F.Id id ]) -> [ F.Reference (id, false) ]
     | F.DefineStms (_, x) -> x
     | F.DefinePolicy (_, _)
@@ -82,25 +82,23 @@ let expand nodes =
     | exception _ -> parse_error ~id ~pos "Reference to unknown id"
   in
   let expand (id, pos) =
-    try begin match Map.find id defines with
-      | F.DefineList (_id', x) -> x
-      | _ -> parse_error ~id ~pos "Reference to Id of wrong type"
-    end with
-    | Not_found -> parse_error ~id ~pos "Reference to unknown id"
+    match Map.find_exn defines id with
+    | F.DefineList (_id', x) -> x
+    | _ -> parse_error ~id ~pos "Reference to Id of wrong type"
+    | exception Not_found -> parse_error ~id ~pos "Reference to unknown id"
   in
   let expand_policy (id, pos) =
-    try begin match Map.find id defines with
-        (* As before; allow simple defines work as aliases. *)
-      | F.DefineList (_, [ F.Id id ]) -> [ F.Ref id ]
-      | F.DefinePolicy (_id', x) -> x
-      | F.DefineStms (_, _)
-      | F.Import _
-      | F.Zone (_, _)
-      | F.DefineList (_, _)
-      | F.AppendList (_, _)
-      | F.Process (_, _, _) -> parse_error ~id ~pos "Reference to Id of wrong type"
-    end with
-    | Not_found -> parse_error ~id ~pos "Reference to unknown id"
+    match Map.find_exn defines id with
+    (* As before; allow simple defines work as aliases. *)
+    | F.DefineList (_, [ F.Id id ]) -> [ F.Ref id ]
+    | F.DefinePolicy (_id', x) -> x
+    | F.DefineStms (_, _)
+    | F.Import _
+    | F.Zone (_, _)
+    | F.DefineList (_, _)
+    | F.AppendList (_, _)
+    | F.Process (_, _, _) -> parse_error ~id ~pos "Reference to Id of wrong type"
+    | exception Not_found -> parse_error ~id ~pos "Reference to unknown id"
   in
 
   (* As part of expanding the rules, a set of function to expand a
@@ -113,7 +111,7 @@ let expand nodes =
   in
 
   let rec expand_zone_list seen = function
-    | (F.Id (id, _)) as x :: xs when BatSet.mem id zones -> x :: expand_zone_list seen xs
+    | (F.Id (id, _)) as x :: xs when Set.Poly.mem zones id -> x :: expand_zone_list seen xs
     | F.Id id :: xs -> (expand_zone_list (mark_seen (fst id) seen) (expand id)) @ (expand_zone_list seen xs)
     | F.Number (_, pos) :: _ -> parse_error ~pos "Find integer, expected zone name"
     | F.Ip (_, pos) :: _ -> parse_error ~pos "Found ip address, expected zone name"

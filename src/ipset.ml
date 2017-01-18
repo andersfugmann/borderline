@@ -1,4 +1,4 @@
-open Batteries
+open Core.Std
 
 (** Range set is a set of ranges.
     The rangeset requires that elements are either subsets or distinct. I.e. No elements overlap partly
@@ -17,6 +17,8 @@ module type Ip = sig
     val network : t -> addr
     val mem: addr -> t -> bool
     val make: int -> addr -> t
+    val t_of_sexp : Sexplib.Sexp.t -> t
+    val sexp_of_t : t -> Sexplib.Sexp.t
   end
 
 end
@@ -28,11 +30,9 @@ module Make(Ip : Ip) = struct
 
   let to_list t = IpSet.to_list t
   let empty = IpSet.empty
-  let add t elt = IpSet.add elt t
-
-  let of_list l =
-    List.fold_left add empty l
-
+  let singleton elt = IpSet.singleton elt
+  let add t elt = IpSet.add t elt
+  let of_list l = IpSet.of_list l
   let is_empty t = IpSet.is_empty t
 
   (* Call reduce as long as there are changes *)
@@ -68,7 +68,7 @@ module Make(Ip : Ip) = struct
     let addr2 =
       let s = Ip.to_bytes addr in
       if offset >= String.length s then raise (Invalid_argument "Cannot split ip address");
-      let v = String.get s offset |> Char.code |> (lor) (1 lsl (7-rem)) |> Char.chr in
+      let v = String.get s offset |> Char.to_int |> (lor) (1 lsl (7-rem)) |> Char.of_int_exn in
       String.set s offset v;
       Ip.of_bytes_exn s;
     in
@@ -152,8 +152,8 @@ module Test = struct
   open OUnit2
 
   module Ip4List = OUnitDiff.ListSimpleMake(struct
-      let pp_printer f t = BatFormat.pp_print_string f (Ipaddr.V4.Prefix.to_string t)
-      let pp_print_sep f () = BatFormat.pp_print_string f "; "
+      let pp_printer f t = Format.pp_print_string f (Ipaddr.V4.Prefix.to_string t)
+      let pp_print_sep f () = Format.pp_print_string f "; "
       type t = Ipaddr.V4.Prefix.t
       let compare = Ipaddr.V4.Prefix.compare
     end)
@@ -163,78 +163,78 @@ module Test = struct
       "Split" >:: begin fun _ ->
         let ip = Ipaddr.V4.Prefix.of_string_exn "127.0.0.0/23" in
         let expect = [ "127.0.0.0/24"; "127.0.1.0/24" ]
-                     |> List.map Ipaddr.V4.Prefix.of_string_exn
+                     |> List.map ~f:Ipaddr.V4.Prefix.of_string_exn
         in
         let observ = Ip4.split ip |> fun x -> [ fst x; snd x] in
         Ip4List.assert_equal expect observ
       end;
       "Reduce" >:: begin fun _ ->
         let ips = [ "127.0.0.0/32"; "127.0.0.1/32"; "127.0.0.2/32" ]
-                  |> List.map Ipaddr.V4.Prefix.of_string_exn
+                  |> List.map ~f:Ipaddr.V4.Prefix.of_string_exn
         in
         let expect = [ "127.0.0.0/31"; "127.0.0.2/32" ]
-                     |> List.map Ipaddr.V4.Prefix.of_string_exn
+                     |> List.map ~f:Ipaddr.V4.Prefix.of_string_exn
         in
         Ip4List.assert_equal expect (ips |> Ip4.reduce)
       end;
       "Set" >:: begin fun _ ->
         let ips = [ "127.0.0.1/32"; "127.0.0.0/24"; "127.0.0.2/32";  ]
-                  |> List.map Ipaddr.V4.Prefix.of_string_exn
+                  |> List.map ~f:Ipaddr.V4.Prefix.of_string_exn
         in
         let expect = [ "127.0.0.0/24"; ]
-                     |> List.map Ipaddr.V4.Prefix.of_string_exn
+                     |> List.map ~f:Ipaddr.V4.Prefix.of_string_exn
         in
         Ip4List.assert_equal expect (ips |> Ip4.of_list |> Ip4.to_list |> Ip4.reduce)
       end;
       "Union" >:: begin fun _ ->
         let observ = [ "127.0.0.1/32"; "127.0.0.0/24"; "127.0.0.2/32";  ]
-                     |> List.map Ipaddr.V4.Prefix.of_string_exn
-                     |> List.map (Ip4.add Ip4.empty)
-                     |> List.fold_left Ip4.union Ip4.empty
+                     |> List.map ~f:Ipaddr.V4.Prefix.of_string_exn
+                     |> List.map ~f:(Ip4.singleton)
+                     |> List.fold_left ~f:Ip4.union ~init:Ip4.empty
                      |> Ip4.to_list
         in
         let expect = [ "127.0.0.0/24"; ]
-                     |> List.map Ipaddr.V4.Prefix.of_string_exn
+                     |> List.map ~f:Ipaddr.V4.Prefix.of_string_exn
         in
         Ip4List.assert_equal expect observ
       end;
       "Diff" >:: begin fun _ ->
         let ip_a = [ "127.0.0.1/32"; "128.0.0.0/24"; "127.0.0.3/32";  ]
-                   |> List.map Ipaddr.V4.Prefix.of_string_exn
+                   |> List.map ~f:Ipaddr.V4.Prefix.of_string_exn
                    |> Ip4.of_list
         in
         let ip_b = [ "128.0.0.0/27"; "127.0.0.3/32"; ]
-                   |> List.map Ipaddr.V4.Prefix.of_string_exn
+                   |> List.map ~f:Ipaddr.V4.Prefix.of_string_exn
                    |> Ip4.of_list
         in
         let observ = Ip4.diff ip_a ip_b |> Ip4.to_list in
         let expect = ["127.0.0.1/32"; "128.0.0.32/27"; "128.0.0.64/26"; "128.0.0.128/25"; ]
-                     |> List.map Ipaddr.V4.Prefix.of_string_exn
+                     |> List.map ~f:Ipaddr.V4.Prefix.of_string_exn
         in
         Ip4List.assert_equal expect observ
       end;
       "Intersect" >:: begin fun _ ->
         let ip_a = [ "127.0.0.1/32"; "128.0.0.0/24"; "127.0.0.3/32";  ]
-                   |> List.map Ipaddr.V4.Prefix.of_string_exn
+                   |> List.map ~f:Ipaddr.V4.Prefix.of_string_exn
                    |> Ip4.of_list
         in
         let ip_b = [ "128.0.0.0/27"; "127.0.0.3/32"; "128.1.0.0/24"]
-                   |> List.map Ipaddr.V4.Prefix.of_string_exn
+                   |> List.map ~f:Ipaddr.V4.Prefix.of_string_exn
                    |> Ip4.of_list
         in
         let observ = Ip4.intersect ip_a ip_b |> Ip4.to_list in
         let expect = ["127.0.0.3/32"; "128.0.0.0/27"; ]
-                     |> List.map Ipaddr.V4.Prefix.of_string_exn
+                     |> List.map ~f:Ipaddr.V4.Prefix.of_string_exn
         in
         Ip4List.assert_equal expect observ
       end;
       "Equal" >:: begin fun _ ->
         let ip_a = [ "127.0.0.0/24"; "128.0.0.0/23" ]
-                   |> List.map Ipaddr.V4.Prefix.of_string_exn
+                   |> List.map ~f:Ipaddr.V4.Prefix.of_string_exn
                    |> Ip4.of_list
         in
         let ip_b = [ "127.0.0.128/25"; "127.0.0.0/25"; "128.0.0.0/24"]
-                   |> List.map Ipaddr.V4.Prefix.of_string_exn
+                   |> List.map ~f:Ipaddr.V4.Prefix.of_string_exn
                    |> Ip4.of_list
         in
         assert_bool "Should not be equal" (not (Ip4.equal ip_a ip_b));
