@@ -1,3 +1,14 @@
+borderline (0.9.10) unstable; urgency=medium
+
+  * Add counter target, and fix ipv4 and ipv6 rule generation when both are present in the same rule
+  * Updates
+  * Improve slighly on error reporting and use brackets for lists
+  * Report errors from the start of the symbol - not the end
+  * Switch to Janestreet Core
+  * * Fixed optimization rules * Enable merge of sideefects into a single rule
+
+ -- Anders Fugmann <anders@fugmann.net>  Tue, 24 Jan 2017 21:32:01 +0100
+
 borderline (0.9.9) unstable; urgency=medium
 
   * Initial Release.

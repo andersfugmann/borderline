@@ -16,3 +16,4 @@ debian/*EX
 debian/borderline.debhelper.log
 debian/debhelper-build-stamp
 debian/borderline.substvars
+debian/files
