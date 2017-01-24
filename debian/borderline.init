@@ -41,8 +41,8 @@ function flush () {
 }
 
 function panic () {
-    FILE=$(mktemp borderline.XXXXXX)
-    echo <<EOF > ${FILE}
+    FILE=$(mktemp -t borderline.XXXXXX)
+    cat <<EOF > ${FILE}
 flush ruleset
 table inet filter {
   chain input { type filter hook input priority 0; policy drop; }
@@ -52,17 +52,28 @@ table inet filter {
 
 EOF
     ${NFT} -f ${FILE}
+    RES=$?
     rm -f ${FILE}
+    return $?
 }
 
 function apply () {
     echo "Generating firewall rules."
-    FILE=$(mktemp borderline.XXXXXX)
+    FILE=$(mktemp -t borderline.XXXXXX)
     chmod 600 ${FILE}
-    echo "flush ruleset" >> ${FILE}
+    cat <<EOF > ${FILE}
+flush ruleset
+table inet common {
+  chain borderline {
+    continue comment "Appled: $(date)"
+  }
+}
+EOF
     ${BORDERLINE} ${MAIN} >> ${FILE}
     ${NFT} -f ${FILE}
-    rm ${FILE}
+    RES=$?
+    rm -f ${FILE}
+    return $?
 }
 
 case $1 in
