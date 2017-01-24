@@ -15,16 +15,20 @@ let reject_of_string_opt = function
   | Some id -> Ir.Reject.of_string id
   | None -> Ir.Reject.PortUnreachable
 
-let gen_policy = function
-  | F.Counter -> Ir.Counter
-  | F.Allow -> Ir.Accept
-  | F.Deny -> Ir.Drop
-  | F.Reject s -> Ir.Reject (reject_of_string_opt s)
-  | F.Log prefix -> Ir.Log prefix
+let gen_target (effects, target) = function
+  | F.Counter -> (Ir.Counter :: effects, target)
+  | F.Log prefix -> (Ir.Log prefix :: effects, target)
   | F.Ref (id, pos) -> parse_error ~id ~pos "Not all ids have been expanded"
   | F.Snat ip ->
       if (Ipaddr.V4.Prefix.bits ip < 32) then (parse_error "Snat not not work with network ranges");
-      Ir.Snat (Ipaddr.V4.Prefix.network ip)
+      (Ir.Snat (Ipaddr.V4.Prefix.network ip) :: effects, target)
+  | F.Allow -> (effects, Ir.Accept)
+  | F.Deny -> (effects, Ir.Drop)
+  | F.Reject s -> (effects, Ir.Reject (reject_of_string_opt s))
+
+let gen_targets targets =
+  let (effect, target) = List.fold_left ~init:([], Ir.Pass) ~f:gen_target targets in
+  (List.rev effect, target)
 
 let list2ints l =
   List.fold_left ~f:(fun acc ->
@@ -69,60 +73,29 @@ let process_rule _table (rules, targets') =
   let rec gen_op targets acc = function
     | F.State(states, neg) :: xs ->
         gen_op targets ((Ir.State( list2ids states |> List.map ~f:State.of_string |> State.of_list), neg) :: acc) xs
-    | F.Filter(dir, F.Ports(port_type, ports), false) :: xs ->
-        gen_op targets ( (Ir.Ports(Ir.Direction.of_string dir, Ir.Port_type.of_string port_type, list2ints ports |> Set.Poly.of_list), false) :: acc ) xs
-    | F.Filter(dir, F.Ports(port_type, ports), true) :: xs ->
-        let chain = gen_op targets [] xs in
-        let chain = Chain.replace chain.Ir.id (([(Ir.Ports( Ir.Direction.of_string dir, Ir.Port_type.of_string port_type, list2ints ports |> Set.Poly.of_list), false)], Ir.Return) :: chain.Ir.rules) chain.Ir.comment in
-        Chain.create [ (acc, Ir.Jump chain.Ir.id) ] "Rule"
-    | F.Filter(dir, F.Address(ips), false) :: xs ->
+    | F.Filter(dir, F.Ports(port_type, ports), neg) :: xs ->
+        gen_op targets ( (Ir.Ports(Ir.Direction.of_string dir, Ir.Port_type.of_string port_type, list2ints ports |> Set.Poly.of_list), neg) :: acc ) xs
+    | F.Filter(dir, F.Address(ips), neg) :: xs ->
         (* Split into ipv4 and ipv6 *)
         let (ip4, ip6) = list2ip ips in
         let chain = gen_op targets acc xs in
         (* Neg in this case needs to be chained *)
         Chain.create [
-          [Ir.Ip6Set (Ir.Direction.of_string dir, Ipset.Ip6.of_list ip6), false], Ir.Jump chain.Ir.id;
-          [Ir.Ip4Set (Ir.Direction.of_string dir, Ipset.Ip4.of_list ip4), false], Ir.Jump chain.Ir.id;
+          [Ir.Ip6Set (Ir.Direction.of_string dir, Ipset.Ip6.of_list ip6), neg], [], Ir.Jump chain.Ir.id;
+          [Ir.Ip4Set (Ir.Direction.of_string dir, Ipset.Ip4.of_list ip4), neg], [], Ir.Jump chain.Ir.id;
         ] "Rule"
-    | F.Filter(dir, F.Address(ips), true) :: xs ->
-        (* Split into ipv4 and ipv6 *)
-        let chain = gen_op targets acc xs in
-        let (ip4, ip6) = list2ip ips in
-        (* Add first return rule in target chain *)
-        Chain.replace chain.Ir.id (
-            ([ Ir.Ip4Set (Ir.Direction.of_string dir, Ipset.Ip4.of_list ip4), false], Ir.Return) ::
-            ([ Ir.Ip6Set (Ir.Direction.of_string dir, Ipset.Ip6.of_list ip6), false], Ir.Return) ::
-            chain.Ir.rules) chain.Ir.comment
     | F.Filter(dir, F.FZone(ids), neg) :: xs ->
         gen_op targets ((Ir.Zone(Ir.Direction.of_string dir,
                                  list2ids ids |> List.map ~f:fst |> Set.Poly.of_list), neg) :: acc) xs
     | F.Protocol (l, p, neg) :: xs ->
         let protocols = list2string p |> List.map ~f:Ir.Protocol.of_string |> Set.Poly.of_list in
         gen_op targets ((Ir.Protocol(l, protocols), neg) :: acc) xs
-    | F.Icmp6 (types, false) :: xs ->
+    | F.Icmp6 (types, neg) :: xs ->
         let types = list2string types |> List.map ~f:Icmp.V6.of_string |> Set.Poly.of_list in
-        gen_op targets ((Ir.Icmp6 types, false) :: acc) xs
-    | F.Icmp6 (types, true) :: xs ->
-        let types = list2string types |> List.map ~f:Icmp.V6.of_string |> Set.Poly.of_list in
-        let chain = gen_op targets [] xs in
-        let chain = Chain.replace
-            chain.Ir.id
-            (([(Ir.Icmp6 types, false)], Ir.Return) :: chain.Ir.rules)
-            chain.Ir.comment
-        in
-        Chain.create [ (acc, Ir.Jump chain.Ir.id) ] "Rule"
-    | F.Icmp4 (types, false) :: xs ->
+        gen_op targets ((Ir.Icmp6 types, neg) :: acc) xs
+    | F.Icmp4 (types, neg) :: xs ->
         let types = list2string types |> List.map ~f:Icmp.V4.of_string |> Set.Poly.of_list in
-        gen_op targets ((Ir.Icmp4 types, false) :: acc) xs
-    | F.Icmp4 (types, true) :: xs ->
-        let types = list2string types |> List.map ~f:Icmp.V4.of_string |> Set.Poly.of_list in
-        let chain = gen_op targets [] xs in
-        let chain = Chain.replace
-            chain.Ir.id
-            (([(Ir.Icmp4 types, false)], Ir.Return) :: chain.Ir.rules)
-            chain.Ir.comment
-        in
-        Chain.create [ (acc, Ir.Jump chain.Ir.id) ] "Rule"
+        gen_op targets ((Ir.Icmp4 types, neg) :: acc) xs
     | F.TcpFlags(flags, mask, neg) :: xs -> begin
         let flags' = list2string flags |> List.map ~f:Ir.Tcp_flags.of_string |> Set.Poly.of_list in
         let mask' = list2string mask |> List.map ~f:Ir.Tcp_flags.of_string |> Set.Poly.of_list in
@@ -141,11 +114,12 @@ let process_rule _table (rules, targets') =
     | F.Rule(rls, tgs) :: xs ->
       let rule_chain = gen_op tgs [] rls in
       let cont = gen_op targets [] xs in
-      let cont = Chain.replace cont.Ir.id (([], Ir.Jump rule_chain.Ir.id) :: cont.Ir.rules) cont.Ir.comment in
-      Chain.create [ (acc, Ir.Jump cont.Ir.id) ] "Rule"
+      let cont = Chain.replace cont.Ir.id (([], [], Ir.Jump rule_chain.Ir.id) :: cont.Ir.rules) cont.Ir.comment in
+      Chain.create [ (acc, [], Ir.Jump cont.Ir.id) ] "Rule"
     | F.Reference _ :: _ -> parse_error "Reference to definition not expected"
-    | [] -> let tg_chain = Chain.create (List.map ~f:(fun tg -> ([], gen_policy tg)) targets) "Target" in
-      Chain.create [ (acc, Ir.Jump tg_chain.Ir.id) ] "Rule"
+    | [] ->
+        let (effects, target) = gen_targets targets in
+        Chain.create [ (acc, effects, target) ] "Rule"
   in
     gen_op targets' [] rules
 

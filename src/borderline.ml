@@ -22,7 +22,7 @@ let _ =
     let post_routing = Zone.emit_nat zones in
 
     let filter_chains = List.map ~f:Rule.process procs in
-    let filter_ops = List.map ~f:(fun chn -> ([], Ir.Jump(chn.Ir.id)) ) filter_chains in
+    let filter_ops = List.map ~f:(fun chn -> ([], [], Ir.Jump(chn.Ir.id)) ) filter_chains in
 
     Chain.add { Ir.id = Ir.Builtin Ir.Chain_type.Input ; rules = input_opers @ filter_ops; comment = "Builtin" };
     Chain.add { Ir.id = Ir.Builtin Ir.Chain_type.Output ; rules = output_opers @ filter_ops; comment = "Builtin" };

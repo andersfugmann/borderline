@@ -45,14 +45,14 @@ let create_zone_chain direction (id, nodes) =
            | F.Ipv4 i -> ( i :: ip4, ip6)
            | F.Ipv6 i -> (ip4, i :: ip6)) ~init:([], []) ips
     in
-    [ ([(Ir.Ip6Set(direction, Ip6.of_list ip6), false)], Ir.Jump chain.Ir.id);
-      ([(Ir.Ip4Set(direction, Ip4.of_list ip4), false)], Ir.Jump chain.Ir.id) ]
+    [ ([(Ir.Ip6Set(direction, Ip6.of_list ip6), false)], [], Ir.Jump chain.Ir.id);
+      ([(Ir.Ip4Set(direction, Ip4.of_list ip4), false)], [], Ir.Jump chain.Ir.id) ]
 
   in
   let create_interface_rule chain interface =
-    ([(Ir.Interface(direction, Set.Poly.singleton interface), false)], Ir.Jump chain.Ir.id)
+    ([(Ir.Interface(direction, Set.Poly.singleton interface), false)], [], Ir.Jump chain.Ir.id)
   in
-  let chain = Chain.create [([], Ir.MarkZone(direction, id))] ("Mark zone " ^ id) in
+  let chain = Chain.create [([], [Ir.MarkZone(direction, id)], Ir.Pass)] ("Mark zone " ^ id) in
   let network_nodes = filter_network nodes in
   let interface_nodes = filter_interface nodes in
 
@@ -96,12 +96,12 @@ let emit_nodes table zones =
 let emit_filter zones =
   let src_chains = List.map ~f:(create_zone_chain Ir.Direction.Source) zones in
   let dst_chains = List.map ~f:(create_zone_chain Ir.Direction.Destination) zones in
-  let src_chain = Chain.create (([], Ir.MarkZone(Ir.Direction.Source, mars)) :: (List.map ~f:(fun chn -> ([], Ir.Jump chn.Ir.id)) src_chains)) "Mark source zones" in
-  let dst_chain = Chain.create (([], Ir.MarkZone(Ir.Direction.Destination, mars)) :: (List.map ~f:(fun chn -> ([], Ir.Jump chn.Ir.id)) dst_chains)) "Mark destination zones" in
-  let input_opers = [ [], Ir.MarkZone (Ir.Direction.Destination, self); [], Ir.Jump src_chain.Ir.id  ] in
-  let output_opers = [ [], Ir.MarkZone (Ir.Direction.Source, self); [], Ir.Jump dst_chain.Ir.id ] in
-  let forward_opers = [ [], Ir.Jump src_chain.Ir.id ; [], Ir.Jump dst_chain.Ir.id ] in
-  (* Why dont I do this? *)
+  let src_chain = Chain.create (([], [Ir.MarkZone(Ir.Direction.Source, mars)], Ir.Pass) :: (List.map ~f:(fun chn -> ([], [], Ir.Jump chn.Ir.id)) src_chains)) "Mark source zones" in
+  let dst_chain = Chain.create (([], [Ir.MarkZone(Ir.Direction.Destination, mars)], Ir.Pass) :: (List.map ~f:(fun chn -> ([], [], Ir.Jump chn.Ir.id)) dst_chains)) "Mark destination zones" in
+  let input_opers =   [ ([], [Ir.MarkZone (Ir.Direction.Destination, self)], Ir.Jump src_chain.Ir.id) ] in
+  let output_opers =  [ ([], [Ir.MarkZone (Ir.Direction.Source, self)],      Ir.Jump dst_chain.Ir.id) ] in
+  let forward_opers = [ ([], [], Ir.Jump src_chain.Ir.id);
+                        ([], [], Ir.Jump dst_chain.Ir.id) ] in
   (input_opers, output_opers, forward_opers)
 
 let emit_nat (zones : (string * F.zone_stm list) list) : Ir.oper list =
@@ -110,7 +110,8 @@ let emit_nat (zones : (string * F.zone_stm list) list) : Ir.oper list =
         if (Ipaddr.V4.Prefix.bits ip < 32) then (parse_error "Snat not not work with network ranges");
         ((Ir.Zone (Ir.Direction.Source, Rule.list2ids src_zones |> List.map ~f:fst |> Set.Poly.of_list), false) ::
          (Ir.Zone (Ir.Direction.Destination, zone |> Set.Poly.singleton), false) :: [],
-                 Ir.Snat (Ipaddr.V4.Prefix.network ip)) |> Option.some
+         [Ir.Snat (Ipaddr.V4.Prefix.network ip)],
+         Ir.Pass) |> Option.some
     | F.Interface _
     | F.Network _
     | F.ZoneRules _ -> None

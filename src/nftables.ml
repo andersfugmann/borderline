@@ -227,7 +227,7 @@ let reject_to_string = function
   | Ir.Reject.PortUnreachable -> "reject with icmpx type port-unreachable"
   | Ir.Reject.TcpReset -> "reject with tcp reset"
 
-let gen_target = function
+let gen_effect = function
   | Ir.MarkZone (dir, id) ->
       let shift = match dir with
         | Ir.Direction.Source -> 0
@@ -235,32 +235,39 @@ let gen_target = function
       in
       let mask = zone_mask lsl (zone_bits - shift) in
       sprintf "meta mark set mark & 0x%08x or 0x%08x" mask ((get_zone_id id) lsl shift)
+  | Ir.Counter -> "counter"
+  | Ir.Notrack -> ""
+  | Ir.Log prefix -> sprintf "log prefix \"%s: \" level info" prefix
+  | Ir.Snat ip -> sprintf "snat %s" (Ipaddr.V4.to_string ip)
+
+let gen_target = function
   | Ir.Accept -> "accept"
   | Ir.Drop -> "drop"
   | Ir.Return -> "return"
-  | Ir.Counter -> "counter"
-  | Ir.Notrack -> ""
   | Ir.Jump chain -> sprintf "jump %s" (chain_name chain)
   | Ir.Reject rsp -> reject_to_string rsp
-  | Ir.Log prefix -> sprintf "log prefix \"%s: \" level info" prefix
-  | Ir.Snat ip -> sprintf "snat %s" (Ipaddr.V4.to_string ip)
-let gen_rule (conds, target) =
-  let conds, comments =
-    let conds, comments =
-      List.map ~f:(fun (op, neg) -> gen_cond neg op) conds
-      |> List.unzip
-    in
-    let comments =
-      List.filter_map ~f:Fn.id comments
-      |> function [] -> []
-                | cs -> "#" :: cs
-    in
-    String.concat ~sep:" " conds, String.concat ~sep:" " comments
-  in
-  let target = gen_target target in
-  sprintf "%s %s; %s" conds target comments
+  | Ir.Pass -> ""
 
-let expand_rule (rls, tg) =
+let gen_rule = function
+  | ([], [], Ir.Pass) -> "# Empty rule"
+  | (conds, effects, target) ->
+      let conds, comments =
+        let conds, comments =
+          List.map ~f:(fun (op, neg) -> gen_cond neg op) conds
+          |> List.unzip
+        in
+        let comments =
+          List.filter_map ~f:Fn.id comments
+          |> function [] -> []
+                    | cs -> "#" :: cs
+        in
+        String.concat ~sep:" " conds, String.concat ~sep:" " comments
+      in
+      let effects = List.map ~f:gen_effect effects |> String.concat ~sep:" " in
+      let target = gen_target target in
+      sprintf "%s %s %s; %s" conds effects target comments
+
+let expand_rule (rls, effects, target) =
   let rec split (rules, (ip4, neg4), (ip6, neg6)) = function
     | (Ir.Ip4Set _, n) as r :: xs -> split (rules, (r :: ip4, neg4 && n), (ip6, neg6)) xs
     | (Ir.Ip6Set _, n) as r :: xs -> split (rules, (ip4, neg4), (r :: ip6, neg6 && n)) xs
@@ -271,11 +278,12 @@ let expand_rule (rls, tg) =
 
   match (ip4, neg4), (ip6, neg6) with
   | ([], _), _
-  | _, ([], _) -> [(rls, tg)]
-  | (_, true), (ip6, false) -> [(ip6 @ rules, tg)] (* Slight optimization *)
-  | (ip4, false), (_, true) -> [(ip4 @ rules, tg)]
+  | _, ([], _) -> [(rls, effects, target)]
+  | (_, true), (ip6, false) -> [(ip6 @ rules, effects, target)] (* Slight optimization *)
+  | (ip4, false), (_, true) -> [(ip4 @ rules, effects, target)]
   | (_, false), (_, false) -> [] (* Cannot both be an ipv4 and a ipv6 address *)
-  | (ip4, true), (ip6, true) -> [(ip4 @ rules, tg); (ip6 @ rules, tg) ] (* Cannot both be an ipv4 and a ipv6 address *)
+  | (ip4, true), (ip6, true) -> [(ip4 @ rules, effects, target);
+                                 (ip6 @ rules, effects, target) ] (* Cannot both be an ipv4 and a ipv6 address *)
 
 let emit_chain { Ir.id; rules; comment } =
 

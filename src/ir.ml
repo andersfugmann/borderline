@@ -91,18 +91,20 @@ type condition = Interface of Direction.t * id Set.Poly.t
                | TcpFlags of Tcp_flags.t Set.Poly.t * Tcp_flags.t Set.Poly.t
                | True
 
-type action = Jump of chain_id
-            | MarkZone of Direction.t * zone
+type effect = MarkZone of Direction.t * zone
             | Counter
-            | Accept
-            | Drop
-            | Return
-            | Reject of Reject.t
             | Notrack
             | Log of prefix
             | Snat of Ipaddr.V4.t
 
-type oper = (condition * bool) list * action
+type target = Jump of chain_id
+            | Accept
+            | Drop
+            | Return
+            | Reject of Reject.t
+            | Pass (* Not terminal *)
+
+type oper = (condition * bool) list * effect list * target
 
 type chain = { id: chain_id; rules : oper list; comment: string; }
 
@@ -122,16 +124,34 @@ let eq_cond (x, n) (y, m) =
     | TcpFlags (s1, s2) -> (function TcpFlags (s1', s2') -> Set.Poly.equal s1 s1' && Set.Poly.equal s2 s2' | _ -> false)
     | True -> (function True -> true | _ -> false)
   in
-  n = m && eq x y
+  Bool.equal n m && eq x y
 
 let eq_conds a b =
   List.equal ~equal:eq_cond a b
 
-let eq_oper (conds, action) (conds', action') =
-  action = action' && eq_conds conds conds'
+let eq_oper (conds, effects, action) (conds', effects', action') =
+  action = action' && effects = effects' && eq_conds conds conds'
 
 let eq_rules a b =
   List.equal ~equal:eq_oper a b
+
+let eq_effect = function
+  | MarkZone (dir, zone) -> begin function MarkZone (dir', zone') -> dir = dir' && zone = zone' | _ -> false end
+  | Counter -> begin function Counter -> true | _ -> false end
+  | Notrack -> begin function Notrack -> true | _ -> false end
+  | Log prefix -> begin function Log prefix' -> prefix = prefix' | _ -> false end
+  | Snat ip -> begin function Snat ip' -> Ipaddr.V4.compare ip ip' = 0 | _ -> false end
+
+let eq_effects a b =
+  let order = function
+    | MarkZone _ -> 1
+    | Counter -> 2
+    | Notrack -> 3
+    | Log _ -> 4
+    | Snat _ -> 5
+  in
+  let sort = List.sort ~cmp:(fun x y -> compare (order x) (order y)) in
+  List.equal ~equal:eq_effect (sort a) (sort b)
 
 let get_dir = function
   | Interface _ -> None

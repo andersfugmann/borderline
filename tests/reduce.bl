@@ -1,6 +1,7 @@
 # Test empty state lists
 process filter {
         rule {
+                rule { destination tcp port = 5; } policy { log "OK" };
                 rule { destination tcp port = 5; } policy { deny };
                 rule { destination tcp port = 5; } policy { log "ERROR 1" };
         }

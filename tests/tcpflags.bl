@@ -1,7 +1,7 @@
 # Test empty state lists
 process filter {
         rule {
-            tcpflags = "SYN" / "SYN","ACK","RST","FIN";
-            tcpflags = "RST" / "SYN","ACK","RST","FIN";
+            tcpflags = "SYN" / [ "SYN","ACK","RST","FIN" ];
+            tcpflags = "RST" / [ "SYN","ACK","RST","FIN" ];
         } policy allow;
 } policy deny

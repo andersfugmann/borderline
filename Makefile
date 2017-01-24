@@ -1,4 +1,4 @@
-.PHONY: deb debian %
+.PHONY: deb debian % force
 
 .DEFAULT_GOAL := build
 
@@ -10,5 +10,7 @@ dep:
 	opam install omake
 	omake dep
 
-%:
+%: force
 	omake -w $@ -j 4
+
+force:

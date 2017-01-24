@@ -4,6 +4,7 @@ open OUnit2
 let suite = "Borderline" >:::
             [
               Ipset.Test.unittest;
+              Optimize.Test.unittest;
             ]
 
 let _ =
