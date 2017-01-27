@@ -140,9 +140,13 @@ let merge_opers rle =
   in
   merge_siblings [] rle
 
-(** Test if a set b is a subset of a. Meaning that B => A *)
+
 let is_subset a b =
-  not (List.exists ~f:(fun (cond, neg) -> is_satisfiable (merge_opers ((cond, not neg) :: a))) b)
+  match merge_oper ~tpe:`Diff a b with
+  | Some r ->
+      (* if b - a is still satisfiable, then b covers more that a. *)
+      is_always false r
+  | None -> false
 
 (* Subtract predicates bs from as.
    The idea is that all packets matched by as are removed from the chain,
@@ -314,6 +318,7 @@ let filter_protocol chain =
     | Ir.Interface (_,_), _ -> all
     | Ir.Zone (_,_), _ -> all
     | Ir.State _, _ -> all
+    | Ir.Vlan _, _ -> all
     | Ir.Ports (_, Ir.Port_type.Tcp, _), false -> [
         Ir.Protocol.Ip4, Ir.Protocol.Tcp;
         Ir.Protocol.Ip6, Ir.Protocol.Tcp;
@@ -404,14 +409,17 @@ let merge_adjecent_rules chains =
     | ([rule], effects, target) :: ([rule'], effects', target') :: xs when Ir.eq_cond rule rule' -> begin
         let chain = Chain.create [ ([], effects, target); ([], effects', target') ] "rule merged" in
         new_chains := chain :: !new_chains;
-        ([rule], [], Jump chain.id) :: merge xs
+        merge (([rule], [], Jump chain.id) :: xs)
       end
-    | (([rule], effects, target) as r) :: (([rule'], effects', target') as r') :: xs
-      when Ir.eq_effects effects effects' && target = target' -> begin
-        match merge_oper ~tpe:`Union rule rule' with
-        | Some r -> ([r], effects, target) :: merge xs
-        | None -> r :: merge (r' :: xs)
-      end
+    | ([rule], effects, target) :: ([rule'], effects', target') :: xs
+      when Ir.eq_effects effects effects'
+        && target = target'
+        && merge_oper ~tpe:`Union rule rule' <> None ->
+        let r = merge_oper ~tpe:`Union rule rule' in
+        merge (([Option.value_exn r], effects, target) :: xs)
+    | ([rule], effects, target) :: ([rule'], _, _) :: xs
+      when is_terminal target && is_subset rule' rule ->
+        merge (([rule], effects, target) :: xs)
     | x :: xs -> x :: merge xs
     | [] -> []
   in
@@ -497,5 +505,17 @@ module Test = struct
         assert_equal ~cmp:eq_cond_opt ~msg:"Wrong result" res (Some expect);
       end;
 
+      "subset" >:: begin fun _ ->
+        let a = (Ir.State ([State.New] |> State.of_list), false) in
+        let b = (Ir.State ([State.New; State.Established] |> State.of_list), false) in
+        let c = (Ir.State ([State.Established] |> State.of_list), false) in
+
+        assert_bool "a b must be a subset" (is_subset a b);
+        assert_bool "b a must not be a subset" (not (is_subset b a));
+        assert_bool "a c must not be a subset" (not (is_subset a c));
+        assert_bool "c a must not be a subset" (not (is_subset c a));
+        assert_bool "c b must be a subset" (is_subset c b);
+        ()
+      end;
     ]
 end

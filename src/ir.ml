@@ -89,6 +89,7 @@ type condition = Interface of Direction.t * id Set.Poly.t
                | Icmp4 of Icmp.V4.t Set.Poly.t
                | Mark of int * int
                | TcpFlags of Tcp_flags.t Set.Poly.t * Tcp_flags.t Set.Poly.t
+               | Vlan of int Set.Poly.t
                | True
 
 type effect = MarkZone of Direction.t * zone
@@ -122,6 +123,7 @@ let eq_cond (x, n) (y, m) =
     | Icmp4 s -> (function Icmp4 s' -> Set.Poly.equal s s' | _ -> false)
     | Mark (m1, m2) -> (function Mark (m1', m2') -> m1 = m1' && m2 = m2' | _ -> false)
     | TcpFlags (s1, s2) -> (function TcpFlags (s1', s2') -> Set.Poly.equal s1 s1' && Set.Poly.equal s2 s2' | _ -> false)
+    | Vlan ids -> (function Vlan ids' -> Set.Poly.equal ids ids' | _ -> false)
     | True -> (function True -> true | _ -> false)
   in
   Bool.equal n m && eq x y
@@ -165,6 +167,7 @@ let get_dir = function
   | Icmp4 _ -> None
   | Mark _ -> None
   | TcpFlags _ -> None
+  | Vlan _ -> None
   | True -> None
 
 let enumerate_cond = function
@@ -179,7 +182,8 @@ let enumerate_cond = function
   | Icmp4 _ -> 9
   | TcpFlags _ -> 10
   | Mark _ -> 11
-  | True -> 12
+  | Vlan _ -> 12
+  | True -> 13
 
 let cond_type_identical cond1 cond2 =
   (enumerate_cond cond1) = (enumerate_cond cond2)
@@ -201,16 +205,17 @@ let is_always value = function
       | true -> Set.is_empty mask && not neg = value
       | false -> neg = value
     end
-  | Ip6Set (_, s), neg when Ip6.is_empty s -> Printf.printf "X"; value = neg
-  | Ip4Set (_, s), neg when Ip4.is_empty s -> Printf.printf "x"; value = neg
-  | Interface _, _
-  | Zone _, _
-  | State _, _
-  | Ports _, _
-  | Protocol _, _
-  | Icmp6 _, _
-  | Icmp4 _, _
-  | Ip6Set _, _
-  | Ip4Set _, _
-  | Mark _, _ -> false
+  | Ip6Set (_, s), neg -> Ip6.is_empty s && (value = neg)
+  | Ip4Set (_, s), neg -> Ip4.is_empty s && (value = neg)
+  | Vlan ids, neg -> Set.Poly.is_empty ids && (neg = value)
+  | State states, neg -> State.is_empty states && (neg = value)
+  | Interface (_, ifs), neg -> Set.Poly.is_empty ifs && (neg = value)
+  | Zone (_, zs), neg -> Set.Poly.is_empty zs && (neg = value)
+  | Ports (_, _, ps), neg -> Set.Poly.is_empty ps && (neg = value)
+  | Icmp6 is, neg -> Set.Poly.is_empty is && (neg = value)
+  | Icmp4 is, neg -> Set.Poly.is_empty is && (neg = value)
   | True, neg -> not neg = value
+  | Mark (0, 0), neg -> neg <> value
+  | Mark (_, 0), neg -> neg = value
+  | Protocol _, _ -> false
+  | Mark _, _ -> false

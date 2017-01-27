@@ -6,7 +6,7 @@ open Lexing
 %}
 %token ZONE PROCESS RULE IMPORT
 %token DEFINE
-%token NETWORK INTERFACE SNAT
+%token NETWORK INTERFACE SNAT VLAN
 %token ALLOW DENY REJECT LOG COUNTER
 %token POLICY
 %token ADDRESS STATE USE
@@ -49,8 +49,9 @@ rule_seq:
 (* Scan elements within a zone. *)
 
 zone_stm:
-  | NETWORK EQ ip=ip                                   { F.Network (fst ip) }
-  | INTERFACE EQ id=id                                 { F.Interface(id)}
+  | NETWORK EQ data=data_list                          { F.Network (data) }
+  | VLAN EQ data=data_list                             { F.Vlan (data) }
+  | INTERFACE EQ data=data_list                        { F.Interface(data)}
   | PROCESS t=id r=rule_seq p=policy_opt               { F.ZoneRules (t,r,p) }
   | SNAT zones=data_list ip=ipv4                       { F.ZoneSnat(zones, fst ip) }
 

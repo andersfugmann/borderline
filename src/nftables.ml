@@ -214,6 +214,13 @@ let gen_cond neg cond =
       in
       let neg_str = match neg with true -> "!=" | false -> "==" in
       sprintf "tcp flags & (%s) %s %s" (to_list mask) neg_str (to_list flags), None
+  | Ir.Vlan ids ->
+      let rule = Set.to_list ids
+                 |> List.map ~f:string_of_int
+                 |> String.concat ~sep:", "
+                 |> sprintf "ether type vlan vlan id { %s }"
+      in rule, None
+
   | Ir.True when neg ->
       (* Any false statement *)
       "meta mark | 0x1 == 0x0", None

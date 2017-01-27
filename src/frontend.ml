@@ -35,8 +35,9 @@ and node = Import of id
          | DefinePolicy of id * policytype list
          | Process of id * rule_stm list * policytype list
 
-and zone_stm = Interface of id
-             | Network of ip
+and zone_stm = Interface of data list
+             | Network of data list
+             | Vlan of data list
              | ZoneRules of id * rule_stm list * policytype list
              | ZoneSnat of data list * Ip4.elt
 

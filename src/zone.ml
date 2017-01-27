@@ -21,15 +21,21 @@ let all_zones = "zones"
 (** List of build in zones. *)
 let buildin_zones = [ mars ]
 
-let rec filter_interface = function
-  | F.Interface (name, _pos) :: xs -> name :: filter_interface xs
-  | _ :: xs -> filter_interface xs
-  | [] -> []
+type t = {
+  interfaces: F.data list;
+  networks: F.data list;
+  vlans: F.data list;
+}
 
-let rec filter_network = function
-  | F.Network ip :: xs -> ip :: filter_network xs
-  | _ :: xs -> filter_network xs
-  | [] -> []
+let init stms =
+  let inner acc = function
+    | F.Interface ifs -> { acc with interfaces = ifs @ acc.interfaces }
+    | F.Network ips -> { acc with networks = ips @ acc.networks }
+    | F.Vlan ids -> { acc with vlans = ids @ acc.vlans }
+    | F.ZoneRules _ -> acc
+    | F.ZoneSnat _ -> acc
+  in
+  List.fold_left ~init:{ interfaces = []; networks = []; vlans = [] } ~f:inner stms
 
 let rec filter_zonerules table = function
   | F.ZoneRules (t, r, p) :: xs when (fst t) = (fst table) -> (r, p) :: filter_zonerules table xs
@@ -38,34 +44,60 @@ let rec filter_zonerules table = function
 
 (** Return a chain that will mark the zone based on direction *)
 let create_zone_chain direction (id, nodes) =
-  let create_network_rules chain ips =
-    let (ip4, ip6) =
-      List.fold_left
-        ~f:(fun (ip4, ip6) -> function
-           | F.Ipv4 i -> ( i :: ip4, ip6)
-           | F.Ipv6 i -> (ip4, i :: ip6)) ~init:([], []) ips
+  let create_network_rules chain = function
+    | [] -> [ ([], [], Ir.Jump chain.Ir.id) ]
+    | ips ->
+        let (ip4, ip6) =
+          List.fold_left
+            ~f:(fun (ip4, ip6) -> function
+                | F.Ip (F.Ipv4 i, _) -> ( i :: ip4, ip6)
+                | F.Ip (F.Ipv6 i, _) -> (ip4, i :: ip6)
+                | F.Number (_, pos) -> parse_error ~pos "Expected ip address, got number"
+                | F.Id (_, pos) -> parse_error ~pos "Expected ip address, got id"
+                | F.String (_, pos) -> parse_error ~pos "Expected ip address, got string"
+              ) ~init:([], []) ips
+        in
+        [ ([(Ir.Ip6Set(direction, Ip6.of_list ip6), false)], [], Ir.Jump chain.Ir.id);
+          ([(Ir.Ip4Set(direction, Ip4.of_list ip4), false)], [], Ir.Jump chain.Ir.id) ]
+
+  in
+  let create_interface_rule chain interfaces =
+    let cond = match interfaces with
+      | [] -> []
+      | is ->
+          let ifaces =
+            List.map ~f:(function
+                | F.Ip (_, pos) -> parse_error ~pos "Expected string, got ip"
+                | F.Number (_, pos) -> parse_error ~pos "Expected string, got number"
+                | F.Id (s, _pos)
+                | F.String (s, _pos) -> s
+              ) is
+          in
+          [(Ir.Interface(direction, Set.Poly.of_list ifaces), false)]
     in
-    [ ([(Ir.Ip6Set(direction, Ip6.of_list ip6), false)], [], Ir.Jump chain.Ir.id);
-      ([(Ir.Ip4Set(direction, Ip4.of_list ip4), false)], [], Ir.Jump chain.Ir.id) ]
+    [ (cond, [], Ir.Jump chain.Ir.id) ]
+  in
+  let create_vlan_rule chain vlans =
+    let cond = match vlans with
+      | [] -> []
+      | vs ->
+          let ids = List.map ~f:(function
+              | F.Ip (_, pos) -> parse_error ~pos "Expected number, got ip"
+              | F.Number (n, _pos) -> n
+              | F.Id (_, pos) -> parse_error ~pos "Expected number, got id"
+              | F.String (_, pos) -> parse_error ~pos "Expected number, got string"
+            ) vs
+          in
+          [(Ir.Vlan(Set.Poly.of_list ids), false)]
+    in
+    [ (cond, [], Ir.Jump chain.Ir.id) ]
+  in
+  let zone = init nodes in
+  Chain.create [([], [Ir.MarkZone(direction, id)], Ir.Pass)] ("Mark zone " ^ id)
+  |> (fun c -> Chain.create (create_network_rules c zone.networks) ("Match networks for zone " ^ id))
+  |> (fun c -> Chain.create (create_interface_rule c zone.interfaces) ("Match interfaces for zone " ^ id))
+  |> (fun c -> Chain.create (create_vlan_rule c zone.vlans) ("Match vlans for zone " ^ id))
 
-  in
-  let create_interface_rule chain interface =
-    ([(Ir.Interface(direction, Set.Poly.singleton interface), false)], [], Ir.Jump chain.Ir.id)
-  in
-  let chain = Chain.create [([], [Ir.MarkZone(direction, id)], Ir.Pass)] ("Mark zone " ^ id) in
-  let network_nodes = filter_network nodes in
-  let interface_nodes = filter_interface nodes in
-
-  let chain =
-    if List.length network_nodes > 0 then
-      Chain.create (create_network_rules chain (filter_network nodes)) ("Match networks for zone " ^ id)
-    else
-      chain
-  in
-    if List.length interface_nodes > 0 then
-      Chain.create (List.map ~f:(create_interface_rule chain) (filter_interface nodes)) ("Match interfaces for zone " ^ id)
-    else
-      chain
 
 let rec filter = function
   | F.Zone(id, nodes) :: xs -> (id, nodes) :: filter xs
@@ -114,6 +146,7 @@ let emit_nat (zones : (string * F.zone_stm list) list) : Ir.oper list =
          Ir.Pass) |> Option.some
     | F.Interface _
     | F.Network _
+    | F.Vlan _
     | F.ZoneRules _ -> None
   in
 
