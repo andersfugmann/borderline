@@ -37,7 +37,7 @@ NFT="/usr/sbin/nft"
 BORDERLINE="/usr/sbin/borderline"
 
 function flush () {
-    $(NFT) flush ruleset
+    ${NFT} flush ruleset
 }
 
 function panic () {
