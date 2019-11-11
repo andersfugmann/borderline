@@ -1,5 +1,5 @@
+.merlin
 *.nft
-src/parser.mli
 *~
 _build
 doc
@@ -7,8 +7,7 @@ etc
 *#
 #*
 .#*
-*.omc
-.omakedb*
+
 debian/borderline
 debian/*.debhelper
 debian/*ex
@@ -17,3 +16,4 @@ debian/borderline.debhelper.log
 debian/debhelper-build-stamp
 debian/borderline.substvars
 debian/files
+borderline.install

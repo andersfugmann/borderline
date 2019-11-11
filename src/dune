@@ -1,0 +1,10 @@
+(library
+ (name        borderline_lib)
+ (libraries   str oUnit core ipaddr)
+ (synopsis ""))
+
+(menhir
+ (modules parser))
+; MENHIR_FLAGS = --explain --infer
+
+(ocamllex lexer)
