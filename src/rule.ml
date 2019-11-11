@@ -25,6 +25,7 @@ let gen_target (effects, target) = function
   | F.Allow -> (effects, Ir.Accept)
   | F.Deny -> (effects, Ir.Drop)
   | F.Reject s -> (effects, Ir.Reject (reject_of_string_opt s))
+  | F.User_chain (s, _) -> (effects, Ir.Jump (Ir.Named s))
 
 let gen_targets targets =
   let (effect, target) = List.fold_left ~init:([], Ir.Pass) ~f:gen_target targets in

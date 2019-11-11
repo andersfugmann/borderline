@@ -2,12 +2,11 @@
   (* Include commonly used modules *)
 
 module F = Frontend
-open Lexing
 %}
 %token ZONE PROCESS RULE IMPORT
 %token DEFINE
 %token NETWORK INTERFACE SNAT VLAN
-%token ALLOW DENY REJECT LOG COUNTER
+%token ALLOW DENY REJECT LOG COUNTER USER_CHAIN
 %token POLICY
 %token ADDRESS STATE USE
 %token SEMI IPV4 IPV6
@@ -86,6 +85,7 @@ string:
   | s=QUOTE                                            { s }
 
 policy:
+  | USER_CHAIN s=string                                { F.User_chain s }
   | COUNTER                                            { F.Counter }
   | ALLOW                                              { F.Allow }
   | DENY                                               { F.Deny }

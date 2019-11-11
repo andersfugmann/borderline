@@ -42,6 +42,7 @@ rule token = parse
   | "reject"       { Parser.REJECT }
   | "log"          { Parser.LOG }
   | "counter"      { Parser.COUNTER }
+  | "user-chain"   { Parser.USER_CHAIN }
 
 (* filters *)
   | "port"         { Parser.PORT }

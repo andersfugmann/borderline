@@ -26,6 +26,7 @@ type policytype = Counter
                 | Log of prefix
                 | Ref of id
                 | Snat of Ip4.elt
+                | User_chain of id
 
 and node = Import of id
          | Zone of id * zone_stm list
