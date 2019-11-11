@@ -1,11 +1,9 @@
 {
 
 open Parser
-open Parsing
-open Frontend
 open Scanf
 
-let value_map = Core.Std.Option.value_map
+let value_map = Core.Option.value_map
 
 exception Lexer_error of int
 

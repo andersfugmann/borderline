@@ -1,4 +1,4 @@
-open Core.Std
+open Core
 
 type states = New | Established | Related | Invalid
 let of_string (id, pos) =

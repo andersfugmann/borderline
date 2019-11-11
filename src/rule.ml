@@ -1,4 +1,4 @@
-open Core.Std
+open Core
 open Common
 module F = Frontend
 module Ip4 = Ipset.Ip4
@@ -101,7 +101,7 @@ let process_rule _table (rules, targets') =
         let mask' = list2string mask |> List.map ~f:Ir.Tcp_flags.of_string |> Set.Poly.of_list in
 
         (* Test that flags are all in mask *)
-        match Set.subset flags' mask' with
+        match Set.is_subset flags' ~of_:mask' with
         | false ->
             parse_error ~pos:(flags @ mask |> List.hd_exn |> pos_of) "Tcp flag not in mask"
         | true ->

@@ -1,4 +1,4 @@
-open Core.Std
+open Core
 
 (** Range set is a set of ranges.
     The rangeset requires that elements are either subsets or distinct. I.e. No elements overlap partly
@@ -6,8 +6,8 @@ open Core.Std
 *)
 module type Ip = sig
   type t
-  val to_bytes: t -> string
-  val of_bytes_exn: string -> t
+  val to_string: t -> string
+  val of_string_exn: string -> t
   module Prefix : sig
     type addr = t
     type t
@@ -17,14 +17,16 @@ module type Ip = sig
     val network : t -> addr
     val mem: addr -> t -> bool
     val make: int -> addr -> t
-    val t_of_sexp : Sexplib.Sexp.t -> t
-    val sexp_of_t : t -> Sexplib.Sexp.t
   end
 
 end
 
 module Make(Ip : Ip) = struct
-  module IpSet = Set.Make(Ip.Prefix)
+  module IpSet = Set.Make_plain(
+    struct
+      include Ip.Prefix
+      let sexp_of_t _ = failwith "Not implemented"
+    end)
   type elt = Ip.Prefix.t
   type t = IpSet.t
 
@@ -66,11 +68,11 @@ module Make(Ip : Ip) = struct
     let offset = bits / 8 in
     let rem = bits mod 8 in
     let addr2 =
-      let s = Ip.to_bytes addr in
-      if offset >= String.length s then raise (Invalid_argument "Cannot split ip address");
-      let v = String.get s offset |> Char.to_int |> (lor) (1 lsl (7-rem)) |> Char.of_int_exn in
-      String.set s offset v;
-      Ip.of_bytes_exn s;
+      let s = Ip.to_string addr |> Bytes.of_string in
+      if offset >= Bytes.length s then raise (Invalid_argument "Cannot split ip address");
+      let v = Bytes.get s offset |> Char.to_int |> (lor) (1 lsl (7-rem)) |> Char.of_int_exn in
+      Bytes.set s offset v;
+      Ip.of_string_exn (Bytes.to_string s)
     in
     (Ip.Prefix.make (bits+1) addr, Ip.Prefix.make (bits+1) addr2)
 

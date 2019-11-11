@@ -1,5 +1,5 @@
 (* Function for validating the AST *)
-open Core.Std
+open Core
 
 open Common
 module F = Frontend
@@ -11,7 +11,7 @@ module F = Frontend
     of visited nodes.
 *)
 let mark_seen id seen =
-  match List.mem seen id with
+  match List.mem ~equal:String.equal seen id with
   | true  -> parse_error ~id  ( "Cyclic reference.\nReferenced From: " ^ (String.concat ~sep:"," seen))
   | false -> id :: seen
 
@@ -24,7 +24,7 @@ let mark_seen id seen =
 let add_id_to_map (id, pos) def map =
   match Map.Poly.mem map id with
   | true -> parse_error ~id ~pos "Defintion shadows previous definition"
-  | false -> Map.Poly.add ~key:id ~data:def map
+  | false -> Map.Poly.add_exn ~key:id ~data:def map
 
 let extend_id_to_map (id, pos) lst map =
   let create = function
@@ -82,23 +82,23 @@ let expand nodes =
     | exception _ -> parse_error ~id ~pos "Reference to unknown id"
   in
   let expand (id, pos) =
-    match Map.find_exn defines id with
-    | F.DefineList (_id', x) -> x
-    | _ -> parse_error ~id ~pos "Reference to Id of wrong type"
-    | exception Not_found -> parse_error ~id ~pos "Reference to unknown id"
+    match Map.find defines id with
+    | Some (F.DefineList (_id', x)) -> x
+    | Some _ -> parse_error ~id ~pos "Reference to Id of wrong type"
+    | None -> parse_error ~id ~pos "Reference to unknown id"
   in
   let expand_policy (id, pos) =
-    match Map.find_exn defines id with
+    match Map.find defines id with
     (* As before; allow simple defines work as aliases. *)
-    | F.DefineList (_, [ F.Id id ]) -> [ F.Ref id ]
-    | F.DefinePolicy (_id', x) -> x
-    | F.DefineStms (_, _)
-    | F.Import _
-    | F.Zone (_, _)
-    | F.DefineList (_, _)
-    | F.AppendList (_, _)
-    | F.Process (_, _, _) -> parse_error ~id ~pos "Reference to Id of wrong type"
-    | exception Not_found -> parse_error ~id ~pos "Reference to unknown id"
+    | Some (F.DefineList (_, [ F.Id id ])) -> [ F.Ref id ]
+    | Some (F.DefinePolicy (_id', x)) -> x
+    | Some (F.DefineStms (_, _)
+           | F.Import _
+           | F.Zone (_, _)
+           | F.DefineList (_, _)
+           | F.AppendList (_, _)
+           | F.Process (_, _, _)) -> parse_error ~id ~pos "Reference to Id of wrong type"
+    | None -> parse_error ~id ~pos "Reference to unknown id"
   in
 
   (* As part of expanding the rules, a set of function to expand a

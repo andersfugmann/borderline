@@ -2,7 +2,7 @@
    Output a nft sctipt.
 *)
 
-open Core.Std
+open Core
 open Printf
 module Ip6 = Ipset.Ip6
 module Ip4 = Ipset.Ip4

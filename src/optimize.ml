@@ -1,8 +1,6 @@
-open Core.Std
-open Common
+open Core
 open Ir
 open Printf
-open Chain
 module Ip6 = Ipset.Ip6
 module Ip4 = Ipset.Ip4
 
@@ -205,7 +203,7 @@ let join chains =
     | [] -> List.rev acc
   in
   let chains = Map.Poly.map ~f:(fun chn -> { chn with rules = inner [] chn.rules }) chains in
-  List.fold_left ~init:chains ~f:(fun chains chain -> Map.Poly.add ~key:chain.id ~data:chain chains) !new_chains
+  List.fold_left ~init:chains ~f:(fun chains chain -> Map.Poly.add_exn ~key:chain.id ~data:chain chains) !new_chains
 
 let rec bind_list acc = function
   | Some x :: xs -> bind_list (x :: acc) xs
@@ -219,7 +217,7 @@ let group ~cmp l =
     | (x :: _ as xs, y :: ys) when cmp x y = 0 -> inner (y :: xs, ys)
     | (xs, ys) -> xs :: inner ([], ys)
   in
-  let sorted = List.sort ~cmp l in
+  let sorted = List.sort ~compare l in
   inner ([], sorted)
 
 (** Remove all return statements, by creating new chains for each
@@ -239,7 +237,7 @@ let fold_return_statements chains =
 
   let fold_func ~key:_ ~data:chn acc =
     let rls, chns = fold_return [] chn.rules in
-    List.fold_left ~f:(fun acc chn -> Map.Poly.add ~key:chn.id ~data:chn acc) ~init:acc ( { id = chn.id; rules = rls; comment = chn.comment } :: chns )
+    List.fold_left ~f:(fun acc chn -> Map.Poly.add_exn ~key:chn.id ~data:chn acc) ~init:acc ( { id = chn.id; rules = rls; comment = chn.comment } :: chns )
   in
   Map.Poly.fold chains ~f:fold_func ~init:Map.Poly.empty
 
@@ -248,14 +246,14 @@ let remove_unreferenced_chains chains =
     List.fold_left ~f:(fun acc -> function (_, _, Jump id) -> (Map.Poly.find_exn chains id) :: acc | _ -> acc) ~init:[] chain.rules
   in
   let rec descend acc chain =
-    List.fold_left ~f:(fun acc chn -> descend acc chn) ~init:(Map.Poly.add ~key:chain.id ~data:chain acc) (get_referenced_chains chain)
+    List.fold_left ~f:(fun acc chn -> descend acc chn) ~init:(Map.Poly.add_exn ~key:chain.id ~data:chain acc) (get_referenced_chains chain)
   in
   Map.Poly.fold ~f:(fun ~key:id ~data:chn acc -> match id with Builtin _ -> descend acc chn | _ -> acc) chains ~init:Map.Poly.empty
 
 (** Remove dublicate chains *)
 let remove_dublicate_chains chains =
   let replace_chain_ids (id, ids) chns =
-    map_chain_rules (List.map ~f:(function (c, e, Jump id') when List.mem ids id' -> (c, e, Jump id) | x -> x)) chns
+    map_chain_rules (List.map ~f:(function (c, e, Jump id') when List.mem ~equal:(=) ids id' -> (c, e, Jump id) | x -> x)) chns
   in
   let is_sibling a b = (Ir.eq_rules a.rules b.rules) && not (a.id = b.id) in
   let identical_chains chain chains =
@@ -424,7 +422,7 @@ let merge_adjecent_rules chains =
     | [] -> []
   in
   let chains = Map.Poly.map ~f:(fun c -> { c with rules = merge c.rules }) chains in
-  List.fold_left ~init:chains ~f:(fun acc chain -> Map.Poly.add acc ~key:chain.id ~data:chain) !new_chains
+  List.fold_left ~init:chains ~f:(fun acc chain -> Map.Poly.add_exn acc ~key:chain.id ~data:chain) !new_chains
 
 (** All conditions which is always true are removed *)
 let remove_true_rules rules =
@@ -454,7 +452,7 @@ let conds chains =
           List.length cl + List.length ef + acc) ) chains
 
 let optimize_pass chains =
-  printf "#Optim: (%d, %d) " (count_rules chains) (conds chains); flush stdout;
+  printf "#Optim: (%d, %d) " (count_rules chains) (conds chains); Out_channel.flush stdout;
   let chains = fold_return_statements chains in
 
   let optimize_functions = [

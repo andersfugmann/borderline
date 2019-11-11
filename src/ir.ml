@@ -1,5 +1,5 @@
 (** Intermidiate representation. *)
-open Core.Std
+open Core
 
 open Common
 module Ip6 = Ipset.Ip6
@@ -129,13 +129,13 @@ let eq_cond (x, n) (y, m) =
   Bool.equal n m && eq x y
 
 let eq_conds a b =
-  List.equal ~equal:eq_cond a b
+  List.equal eq_cond a b
 
 let eq_oper (conds, effects, action) (conds', effects', action') =
   action = action' && effects = effects' && eq_conds conds conds'
 
 let eq_rules a b =
-  List.equal ~equal:eq_oper a b
+  List.equal eq_oper a b
 
 let eq_effect = function
   | MarkZone (dir, zone) -> begin function MarkZone (dir', zone') -> dir = dir' && zone = zone' | _ -> false end
@@ -152,8 +152,8 @@ let eq_effects a b =
     | Log _ -> 4
     | Snat _ -> 5
   in
-  let sort = List.sort ~cmp:(fun x y -> compare (order x) (order y)) in
-  List.equal ~equal:eq_effect (sort a) (sort b)
+  let sort = List.sort ~compare:(fun x y -> compare (order x) (order y)) in
+  List.equal eq_effect (sort a) (sort b)
 
 let get_dir = function
   | Interface _ -> None

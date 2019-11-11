@@ -1,5 +1,5 @@
 module V = Validate
-open Core.Std
+open Core
 module F = Frontend
 
 (** Precompiled regular expressions *)
@@ -17,7 +17,7 @@ let parse file =
   | false -> begin
       imported := (File_set.add !imported full_path);
       Printf.eprintf "Parse: %s\n%!" full_path;
-      let lexbuf = Lexing.from_channel (open_in file) in
+      let lexbuf = Lexing.from_channel (In_channel.create file) in
       lexbuf.Lexing.lex_curr_p <- { lexbuf.Lexing.lex_curr_p with Lexing.pos_fname = full_path; };
       try
         Parser.main Lexer.token lexbuf
@@ -36,11 +36,10 @@ let rec parse_file file =
     []
 
 and include_path dir_handle =
-  try
-    (* Do not include files ending on ~ or . files *)
-    let file = Unix.readdir dir_handle in
+  match Unix.readdir_opt dir_handle with
+  | Some file ->
     parse_file file @ (include_path dir_handle)
-  with End_of_file -> []
+  | None -> []
 
 and expand = function
   | F.Import(path, _) :: xs when Sys.is_directory path = `Yes ->

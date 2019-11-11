@@ -1,9 +1,8 @@
-open Core.Std
+open Core
 (** Operations on chains *)
 
 (** This module keeps global state of all chains. *)
 
-open Common
 open Ir
 
 let next_id = ref 0
@@ -21,11 +20,11 @@ let filter pred chains : Ir.chain list =
 
 (** Place a chain in the map *)
 let add chain =
-  chains := Map.Poly.add ~key:chain.id ~data:chain !chains
+  chains := Map.Poly.add_exn ~key:chain.id ~data:chain !chains
 
 (** Delete a chain *)
 let delete id =
-  chains := Map.Poly.remove !chains id
+  chains := Map.remove !chains id
 
 (** Create a new unnamed chain *)
 let create rules comment =
