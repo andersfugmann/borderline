@@ -26,31 +26,31 @@ let get_zone_id zone =
       id
 
 let chain_name = function
-  | Ir.Temporary n -> sprintf "temp_%d" n
-  | Ir.Builtin Ir.Chain_type.Input -> "input"
-  | Ir.Builtin Ir.Chain_type.Output -> "output"
-  | Ir.Builtin Ir.Chain_type.Forward  -> "forward"
-  | Ir.Builtin Ir.Chain_type.Pre_routing  -> "prerouting"
-  | Ir.Builtin Ir.Chain_type.Post_routing  -> "postrouting"
-  | Ir.Named name -> name
+  | Ir.Chain_id.Temporary n -> sprintf "temp_%d" n
+  | Builtin Ir.Chain_type.Input -> "input"
+  | Builtin Ir.Chain_type.Output -> "output"
+  | Builtin Ir.Chain_type.Forward  -> "forward"
+  | Builtin Ir.Chain_type.Pre_routing  -> "prerouting"
+  | Builtin Ir.Chain_type.Post_routing  -> "postrouting"
+  | Named name -> name
 
 (* TODO Use chain_name *)
 let chain_premable chain =
   let name = chain_name chain in
   match chain with
-  | Ir.Builtin Ir.Chain_type.Pre_routing
-  | Ir.Builtin Ir.Chain_type.Post_routing ->
+  | Ir.Chain_id.Builtin Ir.Chain_type.Pre_routing
+  | Builtin Ir.Chain_type.Post_routing ->
       [ sprintf "chain %s {" name;
         sprintf "  type nat hook %s priority 0;" name;
         sprintf "  policy accept;" ]
-  | Ir.Builtin Ir.Chain_type.Input
-  | Ir.Builtin Ir.Chain_type.Output
-  | Ir.Builtin Ir.Chain_type.Forward ->
+  | Builtin Ir.Chain_type.Input
+  | Builtin Ir.Chain_type.Output
+  | Builtin Ir.Chain_type.Forward ->
       [ sprintf "chain %s {" name;
         sprintf "  type filter hook %s priority 0;" name;
         sprintf "  policy drop;" ]
-  | Ir.Temporary _
-  | Ir.Named _ ->
+  | Temporary _
+  | Named _ ->
       [ sprintf "chain %s {" name ]
 
 let string_of_icmp6_type = function
@@ -303,10 +303,10 @@ let emit_chain { Ir.id; rules; comment } =
   [ "#" ^ comment ] @ premable @ rules @ [ "}" ]
 
 
-let emit_filter_chains (chains : (Ir.chain_id, Ir.chain) Map.Poly.t) : string list =
+let emit_filter_chains (chains : (Ir.Chain_id.t, Ir.chain, 'a) Map.t) : string list =
   (* How does this work. Dont we need a strict ordering of chains here? *)
   let rules =
-    Map.Poly.data chains
+    Map.data chains
     |> List.concat_map ~f:emit_chain
   in
   (* Dump zone mapping *)
@@ -317,8 +317,8 @@ let emit_filter_chains (chains : (Ir.chain_id, Ir.chain) Map.Poly.t) : string li
 let emit_nat_chain rules =
   (* Artificial chain *)
   let chains =
-    { Ir.id = Ir.Builtin Ir.Chain_type.Pre_routing; rules=[]; comment = "Nat" } ::
-    { Ir.id = Ir.Builtin Ir.Chain_type.Post_routing;rules; comment = "Nat" } ::
+    { Ir.id = Ir.Chain_id.Builtin Ir.Chain_type.Pre_routing; rules=[]; comment = "Nat" } ::
+    { Ir.id = Ir.Chain_id.Builtin Ir.Chain_type.Post_routing;rules; comment = "Nat" } ::
     []
   in
   let rules = List.concat_map ~f:emit_chain chains in

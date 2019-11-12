@@ -25,9 +25,9 @@ let _ =
     let filter_chains = List.map ~f:Rule.process procs in
     let filter_ops = List.map ~f:(fun chn -> ([], [], Ir.Jump(chn.Ir.id)) ) filter_chains in
 
-    Chain.add { Ir.id = Ir.Builtin Ir.Chain_type.Input ; rules = input_opers @ filter_ops; comment = "Builtin" };
-    Chain.add { Ir.id = Ir.Builtin Ir.Chain_type.Output ; rules = output_opers @ filter_ops; comment = "Builtin" };
-    Chain.add { Ir.id = Ir.Builtin Ir.Chain_type.Forward ; rules = forward_opers @ filter_ops; comment = "Builtin" };
+    Chain.add { Ir.id = Ir.Chain_id.Builtin Ir.Chain_type.Input ; rules = input_opers @ filter_ops; comment = "Builtin" };
+    Chain.add { Ir.id = Ir.Chain_id.Builtin Ir.Chain_type.Output ; rules = output_opers @ filter_ops; comment = "Builtin" };
+    Chain.add { Ir.id = Ir.Chain_id.Builtin Ir.Chain_type.Forward ; rules = forward_opers @ filter_ops; comment = "Builtin" };
     Chain.optimize Optimize.optimize;
 
     let lines = Chain.emit Nftables.emit_filter_chains @

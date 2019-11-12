@@ -8,8 +8,8 @@ open Arg
 module Interface_map = Map.Make(struct
   type t = string
   let compare = String.compare
-  let sexp_of_t _ = failwith "Not implemented"
-  let t_of_sexp _ = failwith "Not implemented"
+  let sexp_of_t _ = failwith "Not implemented - interfaces"
+  let t_of_sexp _ = failwith "Not implemented - interfaces"
  end)
 
 exception Usage_error of string

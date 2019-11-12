@@ -9,18 +9,27 @@ let next_id = ref 0
 
 (** Test if a chain is builtin*)
 let is_builtin = function
-  | Builtin(_) -> true
+  | Chain_id.Builtin _ -> true
   | _ -> false
 
-let chains = ref Map.Poly.empty
+let chains = ref (Map.empty (module Ir.Chain_id))
 
 (** Select all chains that satisfies pred *)
 let filter pred chains : Ir.chain list =
-  Map.Poly.fold ~f:(fun ~key:_ ~data:chn acc -> if pred chn then chn :: acc else acc) chains ~init:[]
+  Map.fold ~f:(fun ~key:_ ~data:chn acc -> if pred chn then chn :: acc else acc) chains ~init:[]
 
 (** Place a chain in the map *)
 let add chain =
-  chains := Map.Poly.add_exn ~key:chain.id ~data:chain !chains
+  try
+    chains := Map.add_exn ~key:chain.id ~data:chain !chains
+  with
+  | _ ->
+    let chains =
+      Map.fold ~init:[] ~f:(fun ~key ~data:_ acc -> key :: acc) !chains
+      |> List.map ~f:(fun chain -> Ir.Chain_id.show chain)
+      |> String.concat ~sep:"; "
+    in
+    failwithf "Could not add chain: %s [%s]" ([%show: Ir.Chain_id.t] chain.id) chains ()
 
 (** Delete a chain *)
 let delete id =
@@ -36,10 +45,11 @@ let create rules comment =
 (** Insert a chain with the given id, rules and comment, possibly replacing exising chain of the same name *)
 let replace id rules comment =
   let chain = { id = id; rules = rules; comment = comment } in
+  delete id;
   add chain; chain
 
 (** Create a chain with the given name *)
-let get_named_chain (id, _) = Named(id)
+let get_named_chain (id, _) = Ir.Chain_id.Named(id)
 
 let create_named_chain id rules comment =
   let chain_id = get_named_chain id in

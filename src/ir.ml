@@ -11,12 +11,17 @@ type mask = int
 type prefix = string
 
 module Chain_type = struct
-  type t = Input | Output | Forward | Pre_routing | Post_routing
+  type t = Input | Output | Forward | Pre_routing | Post_routing [@@deriving show { with_path = false }, eq, ord]
 end
 
-type chain_id = Temporary of int
-              | Builtin of Chain_type.t
-              | Named of string
+module Chain_id = struct
+  type t = Temporary of int
+         | Builtin of Chain_type.t
+         | Named of string [@@deriving show { with_path = false }, eq, ord]
+  let sexp_of_t _ = Sexplib0.Sexp.message "chain_id" []
+  let t_of_sexp _ = failwith "Not implemented - chain_id"
+  include Comparator.Make(struct type nonrec t = t let compare = compare let sexp_of_t = sexp_of_t end)
+end
 
 type pol       = bool
 
@@ -98,7 +103,7 @@ type effect = MarkZone of Direction.t * zone
             | Log of prefix
             | Snat of Ipaddr.V4.t
 
-type target = Jump of chain_id
+type target = Jump of Chain_id.t
             | Accept
             | Drop
             | Return
@@ -107,7 +112,7 @@ type target = Jump of chain_id
 
 type oper = (condition * bool) list * effect list * target
 
-type chain = { id: chain_id; rules : oper list; comment: string; }
+type chain = { id: Chain_id.t; rules : oper list; comment: string; }
 
 (** Test if two conditions are idential *)
 let eq_cond (x, n) (y, m) =

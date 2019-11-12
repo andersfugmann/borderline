@@ -18,8 +18,8 @@ unittest:
 	dune exec bin/unit_test.exe
 
 .PHONY: tests
-tests:
-	cd tests; BORDERLINE="dune exec ../bin/borderline.exe --" ./test.sh
+tests: build
+	cd tests; BORDERLINE="../_build/default/bin/borderline.exe" ./test.sh
 
 test: build
 	make -C configuration

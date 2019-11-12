@@ -22,7 +22,7 @@ let chain_reference_count id chains =
   let count_references rules =
     List.fold_left ~f:(fun acc -> function (_, _, Jump id') when id = id' -> acc + 1 | _ -> acc) ~init:0 rules
   in
-  Map.Poly.fold ~f:(fun ~key:_ ~data:chn acc -> acc + (count_references chn.rules)) chains ~init:0
+  Map.fold ~f:(fun ~key:_ ~data:chn acc -> acc + (count_references chn.rules)) chains ~init:0
 
 let get_referring_rules chain chains =
   let test (_conds, _effects, target) = target = Jump (chain.id) in
@@ -31,7 +31,7 @@ let get_referring_rules chain chains =
 
 (** Optimize rules in each chain. No chain insertion or removal is possible *)
 let map_chain_rules func chains =
-  Map.Poly.map ~f:(fun chn -> { chn with rules = func chn.rules }) chains
+  Map.map ~f:(fun chn -> { chn with rules = func chn.rules }) chains
 
 let map_chain_rules_expand func chains : Ir.chain list =
   let rec map_rules = function
@@ -202,8 +202,8 @@ let join chains =
       end
     | [] -> List.rev acc
   in
-  let chains = Map.Poly.map ~f:(fun chn -> { chn with rules = inner [] chn.rules }) chains in
-  List.fold_left ~init:chains ~f:(fun chains chain -> Map.Poly.add_exn ~key:chain.id ~data:chain chains) !new_chains
+  let chains = Map.map ~f:(fun chn -> { chn with rules = inner [] chn.rules }) chains in
+  List.fold_left ~init:chains ~f:(fun chains chain -> Map.add_exn ~key:chain.id ~data:chain chains) !new_chains
 
 let rec bind_list acc = function
   | Some x :: xs -> bind_list (x :: acc) xs
@@ -237,18 +237,26 @@ let fold_return_statements chains =
 
   let fold_func ~key:_ ~data:chn acc =
     let rls, chns = fold_return [] chn.rules in
-    List.fold_left ~f:(fun acc chn -> Map.Poly.add_exn ~key:chn.id ~data:chn acc) ~init:acc ( { id = chn.id; rules = rls; comment = chn.comment } :: chns )
+    List.fold_left ~f:(fun acc chn -> Map.add_exn ~key:chn.id ~data:chn acc) ~init:acc ( { id = chn.id; rules = rls; comment = chn.comment } :: chns )
   in
-  Map.Poly.fold chains ~f:fold_func ~init:Map.Poly.empty
+  Map.fold chains ~f:fold_func ~init:(Map.empty (module Ir.Chain_id))
 
 let remove_unreferenced_chains chains =
   let get_referenced_chains chain =
-    List.fold_left ~f:(fun acc -> function (_, _, Jump id) -> (Map.Poly.find_exn chains id) :: acc | _ -> acc) ~init:[] chain.rules
+    List.fold_left ~f:(fun acc -> function (_, _, Jump id) -> (Map.find_exn chains id) :: acc | _ -> acc) ~init:[] chain.rules
   in
   let rec descend acc chain =
-    List.fold_left ~f:(fun acc chn -> descend acc chn) ~init:(Map.Poly.add_exn ~key:chain.id ~data:chain acc) (get_referenced_chains chain)
+    match Map.mem acc chain.id with
+    | true -> acc
+    | false ->
+      List.fold_left
+        ~init:(Map.add_exn ~key:chain.id ~data:chain acc)
+        ~f:(fun acc chn -> descend acc chn)
+        (get_referenced_chains chain)
   in
-  Map.Poly.fold ~f:(fun ~key:id ~data:chn acc -> match id with Builtin _ -> descend acc chn | _ -> acc) chains ~init:Map.Poly.empty
+  Map.fold
+    ~init:(Map.empty (module Ir.Chain_id))
+    ~f:(fun ~key:id ~data:chn acc -> match id with Builtin _ -> descend acc chn | _ -> acc) chains
 
 (** Remove dublicate chains *)
 let remove_dublicate_chains chains =
@@ -257,7 +265,7 @@ let remove_dublicate_chains chains =
   in
   let is_sibling a b = (Ir.eq_rules a.rules b.rules) && not (a.id = b.id) in
   let identical_chains chain chains =
-    Map.Poly.fold ~f:(fun ~key:id ~data:chn acc ->
+    Map.fold ~f:(fun ~key:id ~data:chn acc ->
         if is_sibling chain chn then id :: acc else acc) chains ~init:[] in
   let remap_list = Map.fold ~f:(fun ~key:id ~data:chn acc -> (id, identical_chains chn chains) :: acc) chains ~init:[] in
   List.fold_left ~f:(fun acc (id, ids) -> if List.length ids > 0 then printf "D"; replace_chain_ids (id, ids) acc) ~init:chains remap_list
@@ -421,8 +429,8 @@ let merge_adjecent_rules chains =
     | x :: xs -> x :: merge xs
     | [] -> []
   in
-  let chains = Map.Poly.map ~f:(fun c -> { c with rules = merge c.rules }) chains in
-  List.fold_left ~init:chains ~f:(fun acc chain -> Map.Poly.add_exn acc ~key:chain.id ~data:chain) !new_chains
+  let chains = Map.map ~f:(fun c -> { c with rules = merge c.rules }) chains in
+  List.fold_left ~init:chains ~f:(fun acc chain -> Map.add_exn acc ~key:chain.id ~data:chain) !new_chains
 
 (** All conditions which is always true are removed *)
 let remove_true_rules rules =
@@ -430,7 +438,7 @@ let remove_true_rules rules =
       (List.filter ~f:(fun cond -> not (is_always true cond)) conds, effects,target)) rules
 
 let count_rules chains =
-  Map.Poly.fold ~f:(fun ~key:_ ~data:chn acc -> acc + List.length chn.rules) chains ~init:0
+  Map.fold ~f:(fun ~key:_ ~data:chn acc -> acc + List.length chn.rules) chains ~init:0
 
 (** Determine if a chain should be linined. The algorithm is based on
     number of conditions before and after the merge, with a slight
@@ -447,7 +455,7 @@ let should_inline cs c =
   old_conds - new_conds > min_inline_saving
 
 let conds chains =
-  Map.Poly.fold ~init:0 ~f:(fun ~key:_ ~data:chn acc ->
+  Map.fold ~init:0 ~f:(fun ~key:_ ~data:chn acc ->
       List.fold_left chn.rules ~init:(acc + 1) ~f:(fun acc (cl, ef, _) ->
           List.length cl + List.length ef + acc) ) chains
 

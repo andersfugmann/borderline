@@ -8,6 +8,7 @@ module type Ip = sig
   type t
   val to_string: t -> string
   val of_string_exn: string -> t
+  val upper: t
   module Prefix : sig
     type addr = t
     type t
@@ -15,6 +16,7 @@ module type Ip = sig
     val subset: subnet:t -> network:t -> bool
     val bits: t -> int
     val network : t -> addr
+    val network_address : t -> addr -> addr
     val mem: addr -> t -> bool
     val make: int -> addr -> t
   end
@@ -25,7 +27,7 @@ module Make(Ip : Ip) = struct
   module IpSet = Set.Make_plain(
     struct
       include Ip.Prefix
-      let sexp_of_t _ = failwith "Not implemented"
+      let sexp_of_t _ = failwith "Not implemented - ipset"
     end)
   type elt = Ip.Prefix.t
   type t = IpSet.t
@@ -62,19 +64,13 @@ module Make(Ip : Ip) = struct
     in
     loop t
 
+  (* x/23 -> y/24, y'/24) *)
   let split ip =
+    (* Return two prefixes *)
     let bits = Ip.Prefix.bits ip in
-    let addr = Ip.Prefix.network ip in
-    let offset = bits / 8 in
-    let rem = bits mod 8 in
-    let addr2 =
-      let s = Ip.to_string addr |> Bytes.of_string in
-      if offset >= Bytes.length s then raise (Invalid_argument "Cannot split ip address");
-      let v = Bytes.get s offset |> Char.to_int |> (lor) (1 lsl (7-rem)) |> Char.of_int_exn in
-      Bytes.set s offset v;
-      Ip.of_string_exn (Bytes.to_string s)
-    in
-    (Ip.Prefix.make (bits+1) addr, Ip.Prefix.make (bits+1) addr2)
+    let broadcast = Ip.Prefix.network_address ip Ip.upper in
+    let network = Ip.Prefix.network ip in
+    (Ip.Prefix.make (bits+1) network, Ip.Prefix.make (bits+1) broadcast)
 
   let equal a b =
     let rec inner = function
@@ -147,8 +143,14 @@ module Make(Ip : Ip) = struct
 
 end
 
-module Ip4 = Make(Ipaddr.V4)
-module Ip6 = Make(Ipaddr.V6)
+module Ip4 = Make(struct
+    include Ipaddr.V4
+    let upper = make 0xff 0xff 0xff 0xff
+  end)
+module Ip6 = Make(struct
+    include Ipaddr.V6
+    let upper = make 0xffff 0xffff 0xffff 0xffff 0xffff 0xffff 0xffff 0xffff
+  end)
 
 module Test = struct
   open OUnit2
