@@ -1,0 +1,18 @@
+language: c
+install: wget https://raw.githubusercontent.com/ocaml/ocaml-ci-scripts/master/.travis-docker.sh
+script: bash -ex .travis-docker.sh
+sudo: required
+services:
+  - docker
+sudo: false
+env:
+  global:
+  - DISTRO=ubuntu-18.04
+  - TESTS=true
+  matrix:
+  - PACKAGE="borderline"           OCAML_VERSION=4.08
+  - PACKAGE="borderline"           OCAML_VERSION=4.09
+
+os:
+  - linux
+#  - osx

@@ -9,7 +9,10 @@ bug-reports: "github.com/andersfugmann/borderline/issues"
 build: [
   [ "dune" "subst" ] {pinned}
   [ "dune" "build" "-p" name "-j" jobs "--profile" "release" ]
+  [ make "unittest" ] {with-test}
+  [ make "tests" ] {with-test}
 ]
+
 depends: [
   "dune"
   "core"
