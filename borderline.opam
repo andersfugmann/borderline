@@ -8,7 +8,8 @@ dev-repo: "git+https://github.com/andersfugmann/borderline"
 bug-reports: "github.com/andersfugmann/borderline/issues"
 build: [
   [ "dune" "subst" ] {pinned}
-  [ "dune" "build" "-p" name "-j" jobs "--profile" "release" ]
+  [ "dune" "build" "-p" name "-j" jobs]
+  [ "dune" "runtest" "-p" name "-j" jobs] {with-test}
   [ make "unittest" ] {with-test}
   [ make "tests" ] {with-test}
 ]
