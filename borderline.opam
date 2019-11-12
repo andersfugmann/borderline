@@ -18,5 +18,7 @@ depends: [
   "core"
   "ipaddr"
   "ounit2"
+  "ppx_deriving"
+  "menhir"
 ]
 synopsis: "IPv4 and Ipv6 firewall generator for linux nftables"
