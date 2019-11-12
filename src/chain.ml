@@ -12,6 +12,14 @@ let is_builtin = function
   | Chain_id.Builtin _ -> true
   | _ -> false
 
+let is_named = function
+  | Chain_id.Named _ -> true
+  | _ -> false
+
+let is_temp = function
+  | Chain_id.Temporary _ -> true
+  | _ -> false
+
 let chains = ref (Map.empty (module Ir.Chain_id))
 
 (** Select all chains that satisfies pred *)

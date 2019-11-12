@@ -263,7 +263,7 @@ let remove_dublicate_chains chains =
   let replace_chain_ids (id, ids) chns =
     map_chain_rules (List.map ~f:(function (c, e, Jump id') when List.mem ~equal:(=) ids id' -> (c, e, Jump id) | x -> x)) chns
   in
-  let is_sibling a b = (Ir.eq_rules a.rules b.rules) && not (a.id = b.id) in
+  let is_sibling a b = (Ir.eq_rules a.rules b.rules) && not (a.id = b.id) && Chain.is_temp a.id && Chain.is_temp b.id in
   let identical_chains chain chains =
     Map.fold ~f:(fun ~key:id ~data:chn acc ->
         if is_sibling chain chn then id :: acc else acc) chains ~init:[] in
@@ -362,7 +362,7 @@ let filter_protocol chain =
 (** Inline chains that satifies p *)
 let rec inline p chains =
   let rec inline_chain chain = function
-    | (conds, effects, target) :: xs when target = Jump(chain.id) -> begin
+    | (conds, effects, target) :: xs when target = Jump(chain.id) && (Chain.is_temp chain.id)-> begin
         let rec inline_rules (conds, effects) = function
           | (c, e, t) :: xs -> ( conds @ c, effects @ e, t ) :: inline_rules (conds, effects) xs
           | [] -> []
@@ -375,7 +375,7 @@ let rec inline p chains =
 
   (* Find one chain that satifies p *)
   let p' chains chain =
-    (not (Chain.is_builtin chain.id) ) &&
+    Chain.is_temp chain.id &&
     chain_reference_count chain.id chains > 0
     && p chains chain in
   try
