@@ -2,7 +2,7 @@
  (name        borderline_lib)
  (libraries   str ounit2 core ipaddr)
  (synopsis "")
- (preprocess (pps ppx_deriving.eq ppx_deriving.show ppx_deriving.ord))
+ (preprocess (pps ppx_jane ppx_compare ppx_sexp_conv))
 )
 
 (menhir

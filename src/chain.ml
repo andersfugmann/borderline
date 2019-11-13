@@ -20,6 +20,7 @@ let is_temp = function
   | Chain_id.Temporary _ -> true
   | _ -> false
 
+
 let chains = ref (Map.empty (module Ir.Chain_id))
 
 (** Select all chains that satisfies pred *)
@@ -32,12 +33,7 @@ let add chain =
     chains := Map.add_exn ~key:chain.id ~data:chain !chains
   with
   | _ ->
-    let chains =
-      Map.fold ~init:[] ~f:(fun ~key ~data:_ acc -> key :: acc) !chains
-      |> List.map ~f:(fun chain -> Ir.Chain_id.show chain)
-      |> String.concat ~sep:"; "
-    in
-    failwithf "Could not add chain: %s [%s]" ([%show: Ir.Chain_id.t] chain.id) chains ()
+    failwithf "Could not add chain: %s" ([%sexp_of: Ir.Chain_id.t] chain.id |> Sexp.to_string) ()
 
 (** Delete a chain *)
 let delete id =

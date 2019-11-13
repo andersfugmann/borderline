@@ -23,7 +23,7 @@ if [ "${DONT_START}" = "1" ]; then
     echo "After configuration, set DONT_START=0 in"
     echo "/etc/default/borderline".
     echo
-    echo "For first time configuratio, run bl_configure and "
+    echo "For first time configuration, run bl_configure and "
     echo "then adjust /etc/borderline/configuration.bl"
     exit 0
 fi

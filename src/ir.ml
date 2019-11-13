@@ -11,15 +11,15 @@ type mask = int
 type prefix = string
 
 module Chain_type = struct
-  type t = Input | Output | Forward | Pre_routing | Post_routing [@@deriving show { with_path = false }, eq, ord]
+  type t = Input | Output | Forward | Pre_routing | Post_routing [@@deriving compare, sexp]
+  include Comparator.Make(struct type nonrec t = t let compare = compare let sexp_of_t = sexp_of_t end)
 end
 
 module Chain_id = struct
   type t = Temporary of int
          | Builtin of Chain_type.t
-         | Named of string [@@deriving show { with_path = false }, eq, ord]
-  let sexp_of_t _ = Sexplib0.Sexp.message "chain_id" []
-  let t_of_sexp _ = failwith "Not implemented - chain_id"
+         | Named of string
+  [@@deriving compare, sexp]
   include Comparator.Make(struct type nonrec t = t let compare = compare let sexp_of_t = sexp_of_t end)
 end
 
@@ -27,6 +27,8 @@ type pol       = bool
 
 module Port_type = struct
   type t = Tcp | Udp
+  [@@deriving compare, sexp]
+  include Comparator.Make(struct type nonrec t = t let compare = compare let sexp_of_t = sexp_of_t end)
   let of_string (id, pos) =
     match String.lowercase id with
     | "tcp" -> Tcp
@@ -36,6 +38,8 @@ end
 
 module Tcp_flags = struct
   type t = Syn | Ack | Fin | Rst | Urg | Psh
+  [@@deriving compare, sexp]
+  include Comparator.Make(struct type nonrec t = t let compare = compare let sexp_of_t = sexp_of_t end)
   let of_string (flag, pos) =
     match String.lowercase flag with
     | "syn" -> Syn
@@ -49,10 +53,10 @@ end
 
 module Protocol = struct
   type layer = Ip4 | Ip6
-  type t = Icmp | Tcp | Udp
-
+  type t = Icmp | Tcp | Udp [@@deriving compare, sexp]
+  module Compare = Comparator.Make(struct type nonrec t = t let compare = compare let sexp_of_t = sexp_of_t end)
+  include Compare
   let all = [ Icmp; Tcp; Udp ] |> Set.Poly.of_list
-
   let of_string (s, pos) =
     match String.lowercase s with
     | "icmp" -> Icmp
@@ -63,6 +67,8 @@ end
 
 module Direction = struct
   type t = Source | Destination
+  [@@deriving compare, sexp]
+  include Comparator.Make(struct type nonrec t = t let compare = compare let sexp_of_t = sexp_of_t end)
   let of_string (s, pos) =
     match String.lowercase s with
     | "src" | "source" -> Source
@@ -72,6 +78,8 @@ end
 
 module Reject = struct
   type t = HostUnreachable | NoRoute | AdminProhibited | PortUnreachable | TcpReset
+  [@@deriving compare, sexp]
+  include Comparator.Make(struct type nonrec t = t let compare = compare let sexp_of_t = sexp_of_t end)
   let of_string (id, pos) =
     match String.lowercase id with
     | "host-unreachable" -> HostUnreachable
