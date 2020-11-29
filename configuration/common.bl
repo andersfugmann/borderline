@@ -10,19 +10,20 @@ define common = {
 
     rule {
         state = new;
-        # Allow router information for fe80 networks, and Neighbor Discovery (rfc 2461)
+        # Allow router information for link local networks, and Neighbor Discovery (rfc 2461)
         rule { use link_address; #if
-               source zone != external;
-               destination zone != external;
-               icmp6 = [ "router-solicitation",
-                         "router-advertisement",
-                         "neighbor-solicitation",
-                         "neighbor-advertisement",
-                         "redirect" ];
+               source address = link_local;
+               destination address = link_local;
+               icmp6 = [ router-solicitation-6,
+                         router-advertisement-6,
+                         neighbor-solicitation-6,
+                         neighbor-advertisement-6,
+                         redirect-message-6,
+                       ];
         } policy allow;
 
-        rule { icmp6 = [ "echo-request", "echo-reply" ] } policy log_allow;
-        rule { icmp4 = [ "echo-request", "echo-reply" ] } policy log_allow;
+        rule { icmp6 = [ echo-request, echo-reply ] } policy log_allow;
+        rule { icmp4 = [ echo-request-6, echo-reply-6 ] } policy log_allow;
 
         rule { destination tcp port = global_tcp_ports; } policy log_allow;
         rule { destination udp port = global_udp_ports; } policy log_allow;

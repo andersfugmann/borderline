@@ -65,7 +65,7 @@ let validate_dir output_dir =
   | `No | `Unknown -> raise (Usage_error ("Not a directory: " ^ output_dir))
 
 let validate_file force file =
-  let exists = (Sys.file_exists file = `Yes) in
+  let exists = Poly.(Sys.file_exists file = `Yes) in
   match (force || exists) with
   | true -> ()
   | false -> raise (Usage_error ("File already exists: " ^ file))

@@ -1,5 +1,6 @@
 module V = Validate
 open Core
+open Poly
 module F = Frontend
 
 (** Precompiled regular expressions *)
@@ -28,9 +29,9 @@ let parse file =
 let rec parse_file file =
   if Str.string_match include_regex file 0 && not (Str.string_match exclude_regex file 0) then
     let prev_dir = Unix.getcwd () in
-    let _ = Unix.chdir (Filename.dirname file) in
+    let () = Unix.chdir (Filename.dirname file) in
     let res = expand (parse (Filename.basename file)) in
-    let _ = Unix.chdir prev_dir in
+    let () = Unix.chdir prev_dir in
       res
   else
     []
@@ -45,9 +46,9 @@ and expand = function
   | F.Import(path, _) :: xs when Sys.is_directory path = `Yes ->
       let dir = Unix.opendir path in
       let prev_dir = Unix.getcwd () in
-      let _ = Unix.chdir path in
+      let () = Unix.chdir path in
       let res = include_path dir in
-      let _ = Unix.chdir prev_dir in
+      let () = Unix.chdir prev_dir in
       res @ expand xs
   | F.Import(file, _) :: xs when Sys.is_directory file <> `Yes ->
       parse_file file @ expand xs

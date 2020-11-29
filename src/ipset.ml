@@ -32,11 +32,16 @@ module Make(Ip : Ip) = struct
   type elt = Ip.Prefix.t
   type t = IpSet.t
 
+  let canonical t =
+    let network = Ip.Prefix.network t in
+    let bits = Ip.Prefix.bits t in
+    Ip.Prefix.make bits network
+
   let to_list t = IpSet.to_list t
   let empty = IpSet.empty
   let singleton elt = IpSet.singleton elt
   let add t elt = IpSet.add t elt
-  let of_list l = IpSet.of_list l
+  let of_list l = IpSet.of_list (List.map ~f:canonical l)
   let is_empty t = IpSet.is_empty t
 
   (* Call reduce as long as there are changes *)
@@ -70,7 +75,8 @@ module Make(Ip : Ip) = struct
     let bits = Ip.Prefix.bits ip in
     let broadcast = Ip.Prefix.network_address ip Ip.upper in
     let network = Ip.Prefix.network ip in
-    (Ip.Prefix.make (bits+1) network, Ip.Prefix.make (bits+1) broadcast)
+    (Ip.Prefix.make (bits+1) network |> canonical,
+     Ip.Prefix.make (bits+1) broadcast |> canonical)
 
   let equal a b =
     let rec inner = function
@@ -211,7 +217,9 @@ module Test = struct
                    |> List.map ~f:Ipaddr.V4.Prefix.of_string_exn
                    |> Ip4.of_list
         in
-        let observ = Ip4.diff ip_a ip_b |> Ip4.to_list in
+        let observ = Ip4.diff ip_a ip_b
+                     |> Ip4.to_list
+        in
         let expect = ["127.0.0.1/32"; "128.0.0.32/27"; "128.0.0.64/26"; "128.0.0.128/25"; ]
                      |> List.map ~f:Ipaddr.V4.Prefix.of_string_exn
         in

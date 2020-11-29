@@ -94,10 +94,10 @@ let process_rule _table (rules, targets') =
         let protocols = list2string p |> List.map ~f:Ir.Protocol.of_string |> Set.Poly.of_list in
         gen_op targets ((Ir.Protocol(l, protocols), neg) :: acc) xs
     | F.Icmp6 (types, neg) :: xs ->
-        let types = list2string types |> List.map ~f:Icmp.V6.of_string |> Set.Poly.of_list in
+        let types = list2ints types |> Set.Poly.of_list in
         gen_op targets ((Ir.Icmp6 types, neg) :: acc) xs
     | F.Icmp4 (types, neg) :: xs ->
-        let types = list2string types |> List.map ~f:Icmp.V4.of_string |> Set.Poly.of_list in
+        let types = list2ints types |> Set.Poly.of_list in
         gen_op targets ((Ir.Icmp4 types, neg) :: acc) xs
     | F.TcpFlags(flags, mask, neg) :: xs -> begin
         let flags' = list2string flags |> List.map ~f:Ir.Tcp_flags.of_string |> Set.Poly.of_list in

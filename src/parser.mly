@@ -1,7 +1,4 @@
 %{
-  (* Include commonly used modules *)
-
-module F = Frontend
 %}
 %token ZONE PROCESS RULE IMPORT
 %token DEFINE
@@ -31,16 +28,16 @@ main:
   | stms = terminated(list(statement), END)            { stms }
 
 statement:
-  | IMPORT s=string                                          { F.Import(s) }
-  | ZONE id=id LBRACE stms=separated_list_opt(SEMI, zone_stm) RBRACE { F.Zone(id, stms) }
-  | DEFINE id=id_quote EQ POLICY policies=policy_seq         { F.DefinePolicy(id, policies) }
-  | DEFINE id=id_quote EQ rule=rule_seq                      { F.DefineStms(id, rule) }
-  | DEFINE id=id_quote EQ b = bool                           { F.DefineStms(id, [ b ]) }
-(*  | DEFINE id=id_quote EQ rule=rule_stm                    { F.DefineStms(id, [ rule ]) } *)
-  | DEFINE id=id_quote EQ RULE r=rule_seq p=policy_opt       { F.DefineStms(id, [ F.Rule (r, p) ]) }
-  | DEFINE id=id_quote EQ data=data_list                     { F.DefineList(id, data) }
-  | DEFINE id=id_quote APPEND data=data_list                 { F.AppendList(id, data) }
-  | PROCESS t=id r=rule_seq POLICY p=policy_seq              { F.Process (t,r,p) }
+  | IMPORT s=string                                          { Frontend.Import(s) }
+  | ZONE id=id LBRACE stms=separated_list_opt(SEMI, zone_stm) RBRACE { Frontend.Zone(id, stms) }
+  | DEFINE id=id_quote EQ POLICY policies=policy_seq         { Frontend.DefinePolicy(id, policies) }
+  | DEFINE id=id_quote EQ rule=rule_seq                      { Frontend.DefineStms(id, rule) }
+  | DEFINE id=id_quote EQ b = bool                           { Frontend.DefineStms(id, [ b ]) }
+(*  | DEFINE id=id_quote EQ rule=rule_stm                    { Frontend.DefineStms(id, [ rule ]) } *)
+  | DEFINE id=id_quote EQ RULE r=rule_seq p=policy_opt       { Frontend.DefineStms(id, [ Frontend.Rule (r, p) ]) }
+  | DEFINE id=id_quote EQ data=data_list                     { Frontend.DefineList(id, data) }
+  | DEFINE id=id_quote APPEND data=data_list                 { Frontend.AppendList(id, data) }
+  | PROCESS t=id r=rule_seq POLICY p=policy_seq              { Frontend.Process (t,r,p) }
 
 rule_seq:
   | LBRACE rules=separated_list_opt(SEMI, rule_stm) RBRACE { rules }
@@ -48,11 +45,11 @@ rule_seq:
 (* Scan elements within a zone. *)
 
 zone_stm:
-  | NETWORK EQ data=data_list                          { F.Network (data) }
-  | VLAN EQ data=data_list                             { F.Vlan (data) }
-  | INTERFACE EQ data=data_list                        { F.Interface(data)}
-  | PROCESS t=id r=rule_seq p=policy_opt               { F.ZoneRules (t,r,p) }
-  | SNAT zones=data_list ip=ipv4                       { F.ZoneSnat(zones, fst ip) }
+  | NETWORK EQ data=data_list                          { Frontend.Network (data) }
+  | VLAN EQ data=data_list                             { Frontend.Vlan (data) }
+  | INTERFACE EQ data=data_list                        { Frontend.Interface(data)}
+  | PROCESS t=id r=rule_seq p=policy_opt               { Frontend.ZoneRules (t,r,p) }
+  | SNAT zones=data_list ip=ipv4                       { Frontend.ZoneSnat(zones, fst ip) }
 
 policy_opt:
   | { [] }
@@ -62,16 +59,16 @@ policy_opt:
    of rules enclosed in curly braces, seperated by semicolon. *)
 
 rule_stm:
-  | RULE r=rule_seq p=policy_opt                  { F.Rule (r, p) }
-  | NOT USE id=id                                 { F.Reference (id, true) }
-  | USE id=id                                     { F.Reference (id, false) }
-  | d=id f=filter_stm                             { F.Filter (d, fst f, snd f) }
-  | STATE o=oper states=data_list                 { F.State (states, o) }
-  | IPV4 o=oper d=data_list                       { F.Protocol (Ir.Protocol.Ip4, d, o) }
-  | IPV6 o=oper d=data_list                       { F.Protocol (Ir.Protocol.Ip6, d, o) }
-  | ICMP6 o=oper d=data_list                      { F.Icmp6 (d, o) }
-  | ICMP4 o=oper d=data_list                      { F.Icmp4 (d, o) }
-  | TCPFLAGS o=oper f=data_list SLASH m=data_list { F.TcpFlags (f, m, o) }
+  | RULE r=rule_seq p=policy_opt                  { Frontend.Rule (r, p) }
+  | NOT USE id=id                                 { Frontend.Reference (id, true) }
+  | USE id=id                                     { Frontend.Reference (id, false) }
+  | d=id f=filter_stm                             { Frontend.Filter (d, fst f, snd f) }
+  | STATE o=oper states=data_list                 { Frontend.State (states, o) }
+  | IPV4 o=oper d=data_list                       { Frontend.Protocol (Ir.Protocol.Ip4, d, o) }
+  | IPV6 o=oper d=data_list                       { Frontend.Protocol (Ir.Protocol.Ip6, d, o) }
+  | ICMP6 o=oper d=data_list                      { Frontend.Icmp6 (d, o) }
+  | ICMP4 o=oper d=data_list                      { Frontend.Icmp4 (d, o) }
+  | TCPFLAGS o=oper f=data_list SLASH m=data_list { Frontend.TcpFlags (f, m, o) }
   | b = bool                                      { b }
 
 (* A policy can be a single policy, or a list of policies
@@ -85,21 +82,21 @@ string:
   | s=QUOTE                                            { s }
 
 policy:
-  | USER_CHAIN s=string                                { F.User_chain s }
-  | COUNTER                                            { F.Counter }
-  | ALLOW                                              { F.Allow }
-  | DENY                                               { F.Deny }
-  | REJECT s=string                                    { F.Reject (Some s) }
-  | REJECT                                             { F.Reject (None) }
-  | LOG s=string                                       { F.Log(fst s) }
-  | id=id                                              { F.Ref(id) }
+  | USER_CHAIN s=string                                { Frontend.User_chain s }
+  | COUNTER                                            { Frontend.Counter }
+  | ALLOW                                              { Frontend.Allow }
+  | DENY                                               { Frontend.Deny }
+  | REJECT s=string                                    { Frontend.Reject (Some s) }
+  | REJECT                                             { Frontend.Reject (None) }
+  | LOG s=string                                       { Frontend.Log(fst s) }
+  | id=id                                              { Frontend.Ref(id) }
 
 (* Rules for a generic filter. *)
 
 filter_stm:
-  | id=id PORT o=oper d=data_list                      { (F.Ports (id, d), o) }
-  | ADDRESS o=oper d=data_list                         { (F.Address d, o) }
-  | ZONE o=oper d=data_list                            { (F.FZone d, o) }
+  | id=id PORT o=oper d=data_list                      { (Frontend.Ports (id, d), o) }
+  | ADDRESS o=oper d=data_list                         { (Frontend.Address d, o) }
+  | ZONE o=oper d=data_list                            { (Frontend.FZone d, o) }
 
 oper:
   | EQ                                                 { false }
@@ -114,16 +111,16 @@ data_list:
 ;
 
 data:
-  | i=INT                                              { let n, pos = i in F.Number (n, pos) }
-  | id=id                                              { F.Id id }
-  | ip=ip                                              { F.Ip (fst ip, snd ip) }
-  | s=QUOTE                                            { let s, pos = s in F.String (s, pos) }
+  | i=INT                                              { let n, pos = i in Frontend.Number (n, pos) }
+  | id=id                                              { Frontend.Id id }
+  | ip=ip                                              { Frontend.Ip (fst ip, snd ip) }
+  | s=QUOTE                                            { let s, pos = s in Frontend.String (s, pos) }
 
 bool:
   | TRUE
-  | NOT FALSE                                          { F.True }
+  | NOT FALSE                                          { Frontend.True }
   | NOT TRUE
-  | FALSE                                              { F.False }
+  | FALSE                                              { Frontend.False }
 
 (* Separated list, allowing seperator at the end *)
 separated_list_opt(SEP, T):
@@ -139,8 +136,8 @@ id_quote:
   | q = QUOTE { q }
 
 ip:
-  | ip=ipv4 { F.Ipv4 (fst ip), snd ip }
-  | ip=ipv6 { F.Ipv6 (fst ip), snd ip }
+  | ip=ipv4 { Frontend.Ipv4 (fst ip), snd ip }
+  | ip=ipv6 { Frontend.Ipv6 (fst ip), snd ip }
 
 ipv4:
   | ip=IPv4 { let (i, mask, pos) = ip in

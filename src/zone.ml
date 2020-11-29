@@ -38,7 +38,7 @@ let init stms =
   List.fold_left ~init:{ interfaces = []; networks = []; vlans = [] } ~f:inner stms
 
 let rec filter_zonerules table = function
-  | F.ZoneRules (t, r, p) :: xs when (fst t) = (fst table) -> (r, p) :: filter_zonerules table xs
+  | F.ZoneRules (t, r, p) :: xs when Poly.((fst t) = (fst table)) -> (r, p) :: filter_zonerules table xs
   | _ :: xs -> filter_zonerules table xs
   | [] -> []
 

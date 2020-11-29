@@ -48,7 +48,7 @@ module Tcp_flags = struct
     | "rst" -> Rst
     | "urg" -> Urg
     | "psh" -> Psh
-    | _ -> parse_error ~id:flag ~pos "Unknown icmp type"
+    | _ -> parse_error ~id:flag ~pos "Unknown tcp flag"
 end
 
 module Protocol = struct
@@ -98,8 +98,8 @@ type condition = Interface of Direction.t * id Set.Poly.t
                | Ip6Set of Direction.t * Ip6.t
                | Ip4Set of Direction.t * Ip4.t
                | Protocol of Protocol.layer * Protocol.t Set.Poly.t
-               | Icmp6 of Icmp.V6.t Set.Poly.t
-               | Icmp4 of Icmp.V4.t Set.Poly.t
+               | Icmp6 of int Set.Poly.t
+               | Icmp4 of int Set.Poly.t
                | Mark of int * int
                | TcpFlags of Tcp_flags.t Set.Poly.t * Tcp_flags.t Set.Poly.t
                | Vlan of int Set.Poly.t
@@ -124,6 +124,7 @@ type chain = { id: Chain_id.t; rules : oper list; comment: string; }
 
 (** Test if two conditions are idential *)
 let eq_cond (x, n) (y, m) =
+  let (=) = Poly.equal in
   let eq = function
     | Interface (d, s) -> (function Interface (d', s') -> d = d' && Set.Poly.equal s s' | _ -> false)
     | Zone (d, s) -> (function Zone (d', s') -> d = d' && Set.Poly.equal s s' | _ -> false)
@@ -145,12 +146,15 @@ let eq_conds a b =
   List.equal eq_cond a b
 
 let eq_oper (conds, effects, action) (conds', effects', action') =
+  let open Poly in
   action = action' && effects = effects' && eq_conds conds conds'
 
 let eq_rules a b =
   List.equal eq_oper a b
 
-let eq_effect = function
+let eq_effect =
+  let (=) = Poly.equal in
+  function
   | MarkZone (dir, zone) -> begin function MarkZone (dir', zone') -> dir = dir' && zone = zone' | _ -> false end
   | Counter -> begin function Counter -> true | _ -> false end
   | Notrack -> begin function Notrack -> true | _ -> false end
@@ -206,7 +210,9 @@ let compare (cond1, neg1) (cond2, neg2) =
     if res = 0 then compare neg1 neg2 else res
 
 (** Test if expr always evaluates to value *)
-let is_always value = function
+let is_always value =
+  let open Poly in
+  function
   | State states, neg when State.is_empty states -> neg = value
   | Zone (_, s), neg when Set.is_empty s -> neg = value
   | Ports (_, _, s), neg when Set.is_empty s -> neg = value

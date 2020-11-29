@@ -53,40 +53,6 @@ let chain_premable chain =
   | Named _ ->
       [ sprintf "chain %s {" name ]
 
-let string_of_icmp6_type = function
-  | Icmp.V6.DestinationUnreachable -> "destination-unreachable"
-  | Icmp.V6.PacketTooBig           -> "packet-too-big"
-  | Icmp.V6.TimeExceeded           -> "time-exceeded"
-  | Icmp.V6.EchoRequest            -> "echo-request"
-  | Icmp.V6.EchoReply              -> "echo-reply"
-  | Icmp.V6.ListenerQuery          -> "mld-listener-query"
-  | Icmp.V6.ListenerReport         -> "mld-listener-report"
-  | Icmp.V6.ListenerReduction      -> "mld-listener-reduction"
-  | Icmp.V6.RouterSolicitation     -> "nd-router-solicit"
-  | Icmp.V6.RouterAdvertisement    -> "nd-router-advert"
-  | Icmp.V6.NeighborSolicitation   -> "nd-neighbor-solicit"
-  | Icmp.V6.NeighborAdvertisement  -> "nd-neighbor-advert"
-  | Icmp.V6.Redirect               -> "nd-redirect"
-  | Icmp.V6.ParameterProblem       -> "parameter-problem"
-  | Icmp.V6.RouterRenumbering      -> "router-renumbering"
-
-let string_of_icmp4_type = function
-  | Icmp.V4.EchoRequest            -> "echo-request"
-  | Icmp.V4.EchoReply              -> "echo-reply"
-  | Icmp.V4.DestinationUnreachable -> "destination-unreachable"
-  | Icmp.V4.SourceQuench           -> "source-quench"
-  | Icmp.V4.Redirect               -> "redirect"
-  | Icmp.V4.TimeExceeded           -> "time-exceeded"
-  | Icmp.V4.ParameterProblem       -> "parameter-problem"
-  | Icmp.V4.TimestampRequest       -> "timestamp-request"
-  | Icmp.V4.TimestampReply         -> "timestamp-reply"
-  | Icmp.V4.InfoRequest            -> "info-request"
-  | Icmp.V4.InfoReply              -> "info-reply"
-  | Icmp.V4.RouterAdvertisement    -> "router-advertisement"
-  | Icmp.V4.RouterSolicitation     -> "router-solicication"
-  | Icmp.V4.AddressMaskRequest     -> "address-mask-request"
-  | Icmp.V4.AddressMaskReply       -> "address-mask-reply"
-
 let string_of_tcpflag = function
   | Ir.Tcp_flags.Syn -> "syn"
   | Ir.Tcp_flags.Ack -> "ack"
@@ -100,7 +66,7 @@ let string_of_layer = function
   | Ir.Protocol.Ip6 -> "ip6 nexthdr"
 
 let string_of_protocol l = function
-  | Ir.Protocol.Icmp when l = Ir.Protocol.Ip4 -> "icmpv6"
+  | Ir.Protocol.Icmp when Poly.(l = Ir.Protocol.Ip4) -> "icmpv6"
   | Ir.Protocol.Icmp -> "icmp"
   | Ir.Protocol.Tcp -> "tcp"
   | Ir.Protocol.Udp -> "udp"
@@ -110,7 +76,6 @@ let string_of_state state = match state with
   | State.Established -> "established"
   | State.Related -> "related"
   | State.Invalid -> "invalid"
-
 
 let gen_cond neg cond =
   let neg_str = match neg with
@@ -193,14 +158,14 @@ let gen_cond neg cond =
       sprintf "%s %s { %s }" prefix neg_str set, None
   | Ir.Icmp6 types ->
       let set = Set.to_list types
-                |> List.map ~f:string_of_icmp6_type
+                |> List.map ~f:string_of_int
                 |> String.concat ~sep:", "
                 |> sprintf "{ %s }"
       in
       sprintf "ip6 nexthdr icmpv6 icmpv6 type %s%s" neg_str set, None
   | Ir.Icmp4 types ->
       let set = Set.to_list types
-                |> List.map ~f:string_of_icmp4_type
+                |> List.map ~f:string_of_int
                 |> String.concat ~sep:", "
                 |> sprintf "{ %s }"
       in

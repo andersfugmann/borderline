@@ -1,5 +1,4 @@
 .PHONY: deb debian force
-
 .DEFAULT_GOAL := build
 
 debian:
@@ -11,8 +10,9 @@ install: build
 	mkdir -p $(DESTDIR)/etc/init.d/
 	mkdir -p $(DESTDIR)/usr/sbin/
 	make -C configuration install
-	$(CP) _build/default/bin/borderline.exe $(DESTDIR)/usr/sbin/borderline
-	$(CP) _build/default/bin/bl_configure.exe $(DESTDIR)/usr/sbin/bl_configure
+	cp _build/default/bin/borderline.exe $(DESTDIR)/usr/sbin/borderline
+	cp _build/default/bin/bl_configure.exe $(DESTDIR)/usr/sbin/bl_configure
+
 
 unittest:
 	dune exec bin/unit_test.exe
