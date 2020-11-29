@@ -10,6 +10,7 @@ define common = {
 
     rule {
         state = new;
+
         # Allow router information for link local networks, and Neighbor Discovery (rfc 2461)
         rule { use link_address; #if
                source address = link_local;
@@ -20,7 +21,9 @@ define common = {
                          neighbor-advertisement-6,
                          redirect-message-6,
                        ];
-        } policy allow;
+               rule { source zone = self } policy log_allow;
+               rule { destination zone = self } policy log_allow;
+        };
 
         rule { icmp6 = [ echo-request, echo-reply ] } policy log_allow;
         rule { icmp4 = [ echo-request-6, echo-reply-6 ] } policy log_allow;

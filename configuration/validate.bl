@@ -5,6 +5,13 @@ define validate = rule {
     rule {
         state = new;
         rule { tcpflags != "SYN" / [ "SYN", "ACK", "FIN", "RST" ] } policy { log_invalid };
+
+        # Never forward link local addresses.
+        rule { source zone != self;
+               destination zone != self;
+               rule { source address = link_local; } policy { log_invalid };
+               rule { destination address = link_local; } policy { log_invalid };
+        };
         rule {
             source zone = external;
             rule {
