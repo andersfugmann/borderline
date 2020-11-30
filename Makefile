@@ -36,3 +36,6 @@ force:
 
 clean:
 	dune clean
+
+deb:
+	dpkg-buildpackage --no-sign --build=binary

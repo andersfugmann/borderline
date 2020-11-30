@@ -17,13 +17,18 @@ let str_of_set s =
   |> sprintf "{ %s }"
 
 let zones = Hashtbl.Poly.create ~size:100 ()
+
+(* Place mars as zone id 0 *)
 let get_zone_id zone =
   match Hashtbl.Poly.find zones zone with
   | Some id -> id
   | None ->
-      let id = 1 lsl (Hashtbl.length zones + 1)  in
+      let id = 1 lsl (Hashtbl.length zones)  in
       Hashtbl.add_exn ~key:zone ~data:id zones;
       id
+
+(* Mars has first zone id *)
+let (_: int) = get_zone_id Zone.mars
 
 let chain_name = function
   | Ir.Chain_id.Temporary n -> sprintf "temp_%d" n
