@@ -1,6 +1,9 @@
 zone int {
      interface = int;
-     network = [ fe80::/64, ff00::/8, 2001:470:dc46:1::/64, 10.0.0.0/24, 224.0.0.0/3 ];
-     vlan = [ 4, 5 ];
-     process filter { } policy log_deny;
+     network = link-local;
+     network = multicast;
+     network = 1111:2222:3333:1::/64;
+     network = 10.0.0.0/24;
+     process filter {
+     } policy deny;
 }

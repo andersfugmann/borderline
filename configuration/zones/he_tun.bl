@@ -1,5 +1,6 @@
 zone he_tun {
     interface = he_tun;
-    process filter { } policy log_allow;
+    process filter {
+    } policy log_allow;
 }
 define external += [ he_tun ]

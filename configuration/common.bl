@@ -6,27 +6,30 @@ define common = {
     rule { source zone = self; } policy log_allow;
 
     rule { state = [ related, established ]; } policy log_allow;
+
     use validate;
+    # Allow router information for link local networks, and Neighbor Discovery (rfc 2461)
+    rule { use link_address; #if
+           destination address = [link_local, ip6_multicast];
+           destination zone = self;
+           icmp6 = [ router-solicitation-6,
+                     router-advertisement-6,
+                     neighbor-solicitation-6,
+                     neighbor-advertisement-6,
+                     redirect-message-6,
+                     multicast-listener-query-6 ];
+    } policy log_allow;
 
     rule {
         state = new;
 
-        # Allow router information for link local networks, and Neighbor Discovery (rfc 2461)
-        rule { use link_address; #if
-               source address = link_local;
-               destination address = link_local;
-               icmp6 = [ router-solicitation-6,
-                         router-advertisement-6,
-                         neighbor-solicitation-6,
-                         neighbor-advertisement-6,
-                         redirect-message-6,
-                       ];
-               rule { source zone = self } policy log_allow;
-               rule { destination zone = self } policy log_allow;
-        };
+	# Dhcp server
+	rule { src zone = int;
+	       destination udp port = 67
+        } policy log_allow;
 
-        rule { icmp6 = [ echo-request, echo-reply ] } policy log_allow;
-        rule { icmp4 = [ echo-request-6, echo-reply-6 ] } policy log_allow;
+        rule { icmp6 = [ echo-request ] } policy log_allow;
+        rule { icmp4 = [ echo-request-6 ] } policy log_allow;
 
         rule { destination tcp port = global_tcp_ports; } policy log_allow;
         rule { destination udp port = global_udp_ports; } policy log_allow;
