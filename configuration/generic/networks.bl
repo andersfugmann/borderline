@@ -1,5 +1,6 @@
-define link-local = [ fe80::/10 ]
-define neighbor-discovery = [ ff02:0:0:0:0:1:ff00::/104, ff02::1, ff02::2 ]
+define link_local = [ fe80::/10 ]
+define neighbor_discovery = [ ff02:0:0:0:0:1:ff00::/104, ff02::1, ff02::2 ]
 define local = [ link_local, neighbor_discovery ]
-define rfc1918-addr = [ 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 ]
-define multicast-addr = [ 224.0.0.0/4;  ff00::/8]
+define rfc1918_addr = [ 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 ]
+define ip4_multicast = 224.0.0.0/3
+define ip6_multicast = ff00::/8 

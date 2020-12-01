@@ -1,9 +1,10 @@
 zone int {
      interface = int;
-     network = link-local;
-     network = multicast;
+     network = fe80::/64;
+     network = ff00::/8;
      network = 1111:2222:3333:1::/64;
      network = 10.0.0.0/24;
+     network = 224.0.0.0/3;
      process filter {
      } policy deny;
 }

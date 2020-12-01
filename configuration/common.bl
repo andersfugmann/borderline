@@ -1,35 +1,34 @@
 # Rules for all zones.
 define common = {
+
     # Drop any martian packets
     rule { src zone = mars; } policy log_martian;
     rule { dst zone = mars; } policy log_martian;
     rule { source zone = self; } policy log_allow;
 
-    rule { state = [ related, established ]; } policy log_allow;
-
-    use validate;
-    # Allow router information for link local networks, and Neighbor Discovery (rfc 2461)
+    # Accept router annoucements
     rule { use link_address; #if
-           destination address = [link_local, ip6_multicast];
-           destination zone = self;
            icmp6 = [ router-solicitation-6,
                      router-advertisement-6,
                      neighbor-solicitation-6,
                      neighbor-advertisement-6,
                      redirect-message-6,
                      multicast-listener-query-6 ];
+
+           destination address = [ip6_multicast, local];
+           destination zone = self;
     } policy log_allow;
+
+    rule { state = [ related, established ]; } policy log_allow;
+
+    use validate;
+    # Allow router information for link local networks, and Neighbor Discovery (rfc 2461)
 
     rule {
         state = new;
 
-	# Dhcp server
-	rule { src zone = int;
-	       destination udp port = 67
-        } policy log_allow;
-
-        rule { icmp6 = [ echo-request ] } policy log_allow;
-        rule { icmp4 = [ echo-request-6 ] } policy log_allow;
+        rule { icmp4 = [ echo-request ] } policy log_allow;
+        rule { icmp6 = [ echo-request-6 ] } policy log_allow;
 
         rule { destination tcp port = global_tcp_ports; } policy log_allow;
         rule { destination udp port = global_udp_ports; } policy log_allow;
@@ -42,5 +41,24 @@ define common = {
             use allow_outbound; #if
             destination zone = external;
         } policy allow;
+
+         # Dhcp v6 on external interfaces
+	 rule {
+             use external_dhcp; #if
+             rule {
+                ipv6 = [ "udp" ];
+                source address = local;
+	        destination address = local;
+                destination zone = self;
+		source udp port = dhcpv6-server;
+		destination udp port = dhcpv6-client;
+             } policy log_allow;
+             rule {
+                ipv4 = [ "udp" ];
+                destination zone = self;
+		source udp port = bootps;
+		destination udp port = bootpc;
+             } policy log_allow;
+         };
     };
 }

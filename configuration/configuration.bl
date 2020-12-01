@@ -25,13 +25,16 @@ define global_udp_ports = []
 
 define public_tcp_ports = [ ssh, smtp, ssmtp, domain, imap, imaps, http, https, ntp, sieve ]
 
-define public_udp_ports = [ domain, ntp ]
+define public_udp_ports = [ domain ]
 
 # Allow outbond traffic on all interfaces defined in the alias external
 # bl_configure will automatically set this on interfaces with a default router:
 # To add zones as external use alias append:
 # e.g. define external += zone_name
-define allow_outbound = true
+define allow_outbound = false
+
+# Allow dhcp requests on external interfaces
+define external_dhcp = true
 
 # Further configuration is best made in the zone files, where zone inbound
 # traffic can be defined on a per zone basis.

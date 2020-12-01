@@ -1,13 +1,8 @@
 # This zone defines all traffic to and from the machine itself,
 # Along with the loopback device.
 zone self {
-    interface = lo;
-    process filter {
-        rule { source zone = [ int ] } policy log_allow;
-	rule { source address = link-local;
-	       destination address = link-local;
-	       source udp port = 547;
-               destination udp port = 546;
-	} policy log_allow;
-    } policy deny;
+     interface = lo;
+     process filter {
+         rule { source zone = [ int ] } policy log_allow;
+     } policy deny;
 }

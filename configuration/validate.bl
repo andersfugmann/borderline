@@ -21,7 +21,7 @@ define validate = rule {
             rule {
                 use bogons4; #if
                 source address != rfc1918_addr;
-                source address != multicast_addr;
+                source address != ip4_multicast;
                 source address = bogon4;
             } policy { log_bogon };
             rule {
@@ -30,7 +30,7 @@ define validate = rule {
             } policy { log_bogon };
             rule {
                 ! use multicast;
-                source address = multicast_addr;
+                source address = ip4_multicast;
             } policy { log_bogon };
         };
         rule {
@@ -43,7 +43,7 @@ define validate = rule {
                 use bogons4; #if
                 destination address = bogon4;
                 destination address != rfc1918_addr;
-                destination address != multicast_addr;
+                destination address != ip4_multicast;
             } policy { log_bogon };
             rule {
                 ! use rfc1918;
@@ -51,7 +51,7 @@ define validate = rule {
             } policy { log_bogon };
             rule {
                 ! use multicast;
-                destination address = multicast_addr;
+                destination address = ip4_multicast;
             } policy { log_bogon };
         };
     };
