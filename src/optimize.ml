@@ -6,8 +6,7 @@ module Ip6 = Ipset.Ip6
 module Ip4 = Ipset.Ip4
 
 (** Define the saving in conditions when inlining. *)
-let min_inline_saving = 0
-let max_inline_size = -3
+let max_inline_cost = -1
 
 let is_satisfiable conds =
   not (List.exists ~f:(is_always false) conds)
@@ -17,7 +16,6 @@ let is_subset_eq a b =
 
 let is_eq a b =
   is_subset_eq a b && is_subset_eq b a
-
 
 let chain_reference_count id chains =
   let count_references rules =
@@ -361,7 +359,7 @@ let filter_protocol chain =
   filter_chain chain
 
 (** Inline chains that satifies p *)
-let rec inline p chains =
+let rec inline cost_f chains =
   let rec inline_chain chain = function
     | (conds, effects, target) :: xs when target = Jump(chain.id) && (Chain.is_temp chain.id)-> begin
         let rec inline_rules (conds, effects) = function
@@ -374,16 +372,31 @@ let rec inline p chains =
     | [] -> []
   in
 
-  (* Find one chain that satifies p *)
-  let p' chains chain =
-    Chain.is_temp chain.id &&
-    chain_reference_count chain.id chains > 0
-    && p chains chain in
-  try
-    let chains_to_inline = List.hd_exn (Chain.filter (p' chains) chains) in
+  (* Select the chain with the least cost *)
+  let chain_to_inline =
+    Map.fold ~init:None
+      ~f:(fun ~key:_ ~data:chain acc ->
+          match Chain.is_temp chain.id &&
+                chain_reference_count chain.id chains > 0 with
+          | true -> begin
+              let cost = cost_f chains chain in
+              match cost, acc with
+              | c, _ when c > max_inline_cost -> acc
+              | _, Some (_, c) when c < cost -> acc
+              | _ -> Some (chain, cost)
+            end
+          | false -> acc
+        ) chains
+    |> Option.map ~f:fst
+  in
+  (* Inline the chain *)
+  match chain_to_inline with
+  | Some chain ->
     printf "I";
-    inline p (map_chain_rules (inline_chain chains_to_inline) chains)
-  with Failure _ -> chains
+    let chains = map_chain_rules (inline_chain chain) chains in
+    inline cost_f chains
+  | None -> chains
+
 
 let rec eliminate_dead_rules = function
   | ([], effects, target) :: xs when is_terminal target ->
@@ -441,10 +454,8 @@ let remove_true_rules rules =
 let count_rules chains =
   Map.fold ~f:(fun ~key:_ ~data:chn acc -> acc + List.length chn.rules) chains ~init:0
 
-(** Determine if a chain should be linined. The algorithm is based on
-    number of conditions before and after the merge, with a slight
-    tendency to inline *)
-let should_inline cs c =
+(** Determine the cost of inlining. *)
+let inline_cost cs c =
   (* Number of conditions in the chain to be inlined *)
   let chain_conds = List.fold_left ~f:(fun acc (cl, _ef, _t) -> acc + List.length cl) ~init:0 c.rules in
   (* Number of conditions for each reference to the chain to be inlined. *)
@@ -453,7 +464,7 @@ let should_inline cs c =
   let old_conds = (List.fold_left ~f:(+) ~init:0 rule_conds) + chain_conds + List.length rule_conds + List.length c.rules in
   (* Inlined count of conditions + targets *)
   let new_conds = List.fold_left ~f:(fun acc n -> acc + n * List.length c.rules + chain_conds) ~init:0 rule_conds + (List.length rule_conds * List.length c.rules) in
-  old_conds - new_conds > min_inline_saving
+  new_conds - old_conds
 
 let conds chains =
   Map.fold ~init:0 ~f:(fun ~key:_ ~data:chn acc ->
@@ -476,7 +487,7 @@ let optimize_pass chains =
     join;
     merge_adjecent_rules;
     (* reduce; *)
-    inline should_inline;
+    inline inline_cost;
     map_chain_rules (fun rls -> Common.map_filter_exceptions (fun (opers, effect, tg) -> (merge_opers opers, effect, tg)) rls);
     remove_unreferenced_chains;
   ] in
