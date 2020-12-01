@@ -6,7 +6,7 @@ module Ip6 = Ipset.Ip6
 module Ip4 = Ipset.Ip4
 
 (** Define the saving in conditions when inlining. *)
-let max_inline_cost = -1
+let max_inline_cost = 1
 
 let is_satisfiable conds =
   not (List.exists ~f:(is_always false) conds)
