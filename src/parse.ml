@@ -1,7 +1,8 @@
 module V = Validate
 open Core
-open Poly
 module F = Frontend
+module Unix = Core_unix
+module Sys = Stdlib.Sys
 
 (** Precompiled regular expressions *)
 let include_regex = Str.regexp "^.*[.]bl$"
@@ -43,14 +44,14 @@ and include_path dir_handle =
   | None -> []
 
 and expand = function
-  | F.Import(path, _) :: xs when Sys.is_directory path = `Yes ->
+  | F.Import(path, _) :: xs when Sys.is_directory path ->
       let dir = Unix.opendir path in
       let prev_dir = Unix.getcwd () in
       let () = Unix.chdir path in
       let res = include_path dir in
       let () = Unix.chdir prev_dir in
       res @ expand xs
-  | F.Import(file, _) :: xs when Sys.is_directory file <> `Yes ->
+  | F.Import(file, _) :: xs when not (Sys.is_directory file) ->
       parse_file file @ expand xs
   | x :: xs -> x :: expand xs
   | [ ] -> [ ]

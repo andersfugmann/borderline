@@ -4,6 +4,8 @@
 
 open Core
 open Arg
+module Sys = Stdlib.Sys
+module Unix = Core_unix
 
 module Interface_map = Map.Make(struct
   type t = string
@@ -61,11 +63,11 @@ let has_external_zone interfaces =
 
 let validate_dir output_dir =
   match Sys.is_directory output_dir with
-  | `Yes -> ()
-  | `No | `Unknown -> raise (Usage_error ("Not a directory: " ^ output_dir))
+  | true -> ()
+  | false -> raise (Usage_error ("Not a directory: " ^ output_dir))
 
 let validate_file force file =
-  let exists = Poly.(Sys.file_exists file = `Yes) in
+  let exists = Sys.file_exists file in
   match (force || exists) with
   | true -> ()
   | false -> raise (Usage_error ("File already exists: " ^ file))

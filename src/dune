@@ -1,6 +1,6 @@
 (library
  (name        borderline_lib)
- (libraries   str ounit2 core ipaddr)
+ (libraries   str ounit2 core ipaddr menhirLib core_unix)
  (synopsis "")
  (preprocess (pps ppx_jane ppx_compare ppx_sexp_conv))
 )

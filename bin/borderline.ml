@@ -1,5 +1,5 @@
 open Core
-
+module Sys = Stdlib.Sys
 (** Main file. *)
 
 open Borderline_lib
@@ -11,7 +11,7 @@ let _ =
   Sys.catch_break true;
 
   try
-    let files = List.tl_exn (Array.to_list (Sys.get_argv ())) in
+    let files = List.tl_exn (Array.to_list Sys.argv) in
     Printf.eprintf "Parsing file%s: %s\n%!"
       (match List.length files > 1 with true -> "s" | false -> "")
       (String.concat ~sep:", " files);
