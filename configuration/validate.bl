@@ -12,6 +12,7 @@ define validate = rule {
                rule { source address = link_local; } policy { log_invalid };
                rule { destination address = link_local; } policy { log_invalid };
         };
+
         rule {
             source zone = external;
             rule {

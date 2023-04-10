@@ -7,7 +7,7 @@
 %token POLICY
 %token ADDRESS STATE USE
 %token SEMI IPV4 IPV6
-%token PORT ICMP6 ICMP4 TCPFLAGS TRUE FALSE
+%token PORT ICMP6 ICMP4 TCPFLAGS TRUE FALSE HOPLIMIT
 %token EQ NE NOT APPEND
 
 %token <int * Lexing.position> INT
@@ -68,6 +68,7 @@ rule_stm:
   | IPV6 o=oper d=data_list                       { Frontend.Protocol (Ir.Protocol.Ip6, d, o) }
   | ICMP6 o=oper d=data_list                      { Frontend.Icmp6 (d, o) }
   | ICMP4 o=oper d=data_list                      { Frontend.Icmp4 (d, o) }
+  | HOPLIMIT o=oper d=data_list                   { Frontend.Hoplimit (d, o) }
   | TCPFLAGS o=oper f=data_list SLASH m=data_list { Frontend.TcpFlags (f, m, o) }
   | b = bool                                      { b }
 

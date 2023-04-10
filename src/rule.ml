@@ -99,7 +99,7 @@ let process_rule _table (rules, targets') =
     | F.Icmp4 (types, neg) :: xs ->
         let types = list2ints types |> Set.Poly.of_list in
         gen_op targets ((Ir.Icmp4 types, neg) :: acc) xs
-    | F.TcpFlags(flags, mask, neg) :: xs -> begin
+    | F.TcpFlags (flags, mask, neg) :: xs -> begin
         let flags' = list2string flags |> List.map ~f:Ir.Tcp_flags.of_string |> Set.Poly.of_list in
         let mask' = list2string mask |> List.map ~f:Ir.Tcp_flags.of_string |> Set.Poly.of_list in
 
@@ -110,6 +110,8 @@ let process_rule _table (rules, targets') =
         | true ->
             gen_op targets ((Ir.TcpFlags (flags', mask'), neg) :: acc) xs
       end
+    | F.Hoplimit (limits, neg) :: xs ->
+        gen_op targets ((Ir.Hoplimit (list2ints limits |> Set.Poly.of_list), neg) :: acc) xs
     | F.True :: xs ->
         gen_op targets ((Ir.True, false) :: acc) xs
     | F.False :: xs ->

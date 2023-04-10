@@ -103,6 +103,7 @@ type condition = Interface of Direction.t * id Set.Poly.t
                | Mark of int * int
                | TcpFlags of Tcp_flags.t Set.Poly.t * Tcp_flags.t Set.Poly.t
                | Vlan of int Set.Poly.t
+               | Hoplimit of int Set.Poly.t
                | True
 
 type effect = MarkZone of Direction.t * zone
@@ -138,6 +139,7 @@ let eq_cond (x, n) (y, m) =
     | Mark (m1, m2) -> (function Mark (m1', m2') -> m1 = m1' && m2 = m2' | _ -> false)
     | TcpFlags (s1, s2) -> (function TcpFlags (s1', s2') -> Set.Poly.equal s1 s1' && Set.Poly.equal s2 s2' | _ -> false)
     | Vlan ids -> (function Vlan ids' -> Set.Poly.equal ids ids' | _ -> false)
+    | Hoplimit limit -> (function Hoplimit limit' -> Set.Poly.equal limit limit' | _ -> false)
     | True -> (function True -> true | _ -> false)
   in
   Bool.equal n m && eq x y
@@ -185,6 +187,7 @@ let get_dir = function
   | Mark _ -> None
   | TcpFlags _ -> None
   | Vlan _ -> None
+  | Hoplimit _ -> None
   | True -> None
 
 let enumerate_cond = function
@@ -200,7 +203,8 @@ let enumerate_cond = function
   | TcpFlags _ -> 10
   | Mark _ -> 11
   | Vlan _ -> 12
-  | True -> 13
+  | Hoplimit _ -> 13
+  | True -> 14
 
 let cond_type_identical cond1 cond2 =
   (enumerate_cond cond1) = (enumerate_cond cond2)
@@ -224,9 +228,10 @@ let is_always value =
       | true -> Set.is_empty mask && not neg = value
       | false -> neg = value
     end
-  | Ip6Set (_, s), neg -> Ip6.is_empty s && (value = neg)
-  | Ip4Set (_, s), neg -> Ip4.is_empty s && (value = neg)
+  | Ip6Set (_, s), neg -> Ip6.is_empty s && (neg = value)
+  | Ip4Set (_, s), neg -> Ip4.is_empty s && (neg = value)
   | Vlan ids, neg -> Set.Poly.is_empty ids && (neg = value)
+  | Hoplimit cnts, neg -> Set.is_empty cnts && (neg = value)
   | State states, neg -> State.is_empty states && (neg = value)
   | Interface (_, ifs), neg -> Set.Poly.is_empty ifs && (neg = value)
   | Zone (_, zs), neg -> Set.Poly.is_empty zs && (neg = value)

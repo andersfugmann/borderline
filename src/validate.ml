@@ -135,6 +135,7 @@ let expand nodes =
       | F.State _ as state -> state
       | F.Rule (rls, pols) -> F.Rule (expand_rule_list seen rls, expand_policy_list seen pols)
       | F.TcpFlags (flags, mask, pol) -> F.TcpFlags (expand_list seen flags, expand_list seen mask, pol)
+      | F.Hoplimit (limits, pol) -> F.Hoplimit (expand_list seen limits, pol)
       | F.True -> F.True
       | F.False -> F.False
     in

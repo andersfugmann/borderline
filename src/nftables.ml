@@ -190,7 +190,12 @@ let gen_cond neg cond =
                  |> String.concat ~sep:", "
                  |> sprintf "ether type vlan vlan id { %s }"
       in rule, None
-
+  | Ir.Hoplimit limits ->
+    let rule = Set.to_list limits
+               |> List.map ~f:string_of_int
+               |> String.concat ~sep:", "
+               |> sprintf "ip6 hoplimit { %s }"
+    in rule, None
   | Ir.True when neg ->
       (* Any false statement *)
       "meta mark | 0x1 == 0x0", None
