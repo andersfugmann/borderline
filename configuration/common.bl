@@ -28,7 +28,7 @@ define common = {
                      multicast-listener-discovery2-6 ];
            destination address = [ ip6_multicast, local ];
            destination zone = self;
-           source address = [ fe80::/10 ];
+           source address = [ link_local ];
     } policy log_allow;
 
     rule { use link_address; #if
@@ -37,7 +37,7 @@ define common = {
                      multicast-router-termination-6 ];
            hoplimit = 1;
            destination zone = self;
-           source address = [ fe80::/10 ];
+           source address = [ link_local ];
     } policy log_allow;
 
     rule { state = [ related, established ]; } policy log_allow;
