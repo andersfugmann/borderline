@@ -1,5 +1,5 @@
 (**
-   Output a nft sctipt.
+   Output a nft script.
 *)
 
 open Core
@@ -220,7 +220,7 @@ let gen_effect = function
   | Ir.Counter -> "counter"
   | Ir.Notrack -> ""
   | Ir.Log prefix -> sprintf "log prefix \"%s: \" level info" prefix
-  | Ir.Snat ip -> sprintf "snat %s" (Ipaddr.V4.to_string ip)
+  | Ir.Snat ip -> sprintf "snat ip to %s" (Ipaddr.V4.to_string ip)
 
 let gen_target = function
   | Ir.Accept -> "accept"
@@ -279,23 +279,18 @@ let emit_chain { Ir.id; rules; comment } =
   [ "#" ^ comment ] @ premable @ rules @ [ "}" ]
 
 
-let emit_filter_chains (chains : (Ir.Chain_id.t, Ir.chain, 'a) Map.t) : string list =
-  (* How does this work. Dont we need a strict ordering of chains here? *)
+let emit_filter_rules (chains : (Ir.Chain_id.t, Ir.chain, 'a) Map.t) : string list =
   let rules =
     Map.data chains
     |> List.concat_map ~f:emit_chain
   in
   (* Dump zone mapping *)
-
   Hashtbl.iteri ~f:(fun ~key:zone ~data:id -> printf "#zone %s -> 0x%04x\n" zone id) zones;
-  [ "table inet filter {" ] @ rules @ [ "}" ]
+  rules
 
-let emit_nat_chain rules =
-  (* Artificial chain *)
-  let chains =
-    { Ir.id = Ir.Chain_id.Builtin Ir.Chain_type.Pre_routing; rules=[]; comment = "Nat" } ::
-    { Ir.id = Ir.Chain_id.Builtin Ir.Chain_type.Post_routing;rules; comment = "Nat" } ::
-    []
-  in
-  let rules = List.concat_map ~f:emit_chain chains in
-  [ "table ip nat {" ] @ rules @ [ "}" ]
+let emit_nat_rules rules =
+    { Ir.id = Ir.Chain_id.Builtin Ir.Chain_type.Post_routing; rules; comment = "Nat" }
+  |> emit_chain
+
+let emit rules =
+  "table inet borderline {" :: rules @ [ "}" ]

@@ -1,3 +1,12 @@
+borderline (1.0.0) unstable; urgency=medium
+
+  * Use interface idx instead of name matching
+  * Update ipv6 icmp packet validation
+  * Use nft optimization pass
+  * Inline comments into nft ruleset
+
+ -- Anders Fugmann <anders@fugmann.net>  Wed, 12 Apr 2022 22:39:01 +0100
+
 borderline (0.9.11) unstable; urgency=medium
 
   * Change icmp types to be inegers and creates defines
@@ -7,7 +16,7 @@ borderline (0.9.11) unstable; urgency=medium
  -- Anders Fugmann <anders@fugmann.net>  Tue, 29 Nov 2020 21:59:01 +0100
 
 
-borderline (0.9.11) unstable; urgency=medium
+borderline (0.9.10) unstable; urgency=medium
 
   * Add counter target, and fix ipv4 and ipv6 rule generation when both are present in the same rule
   * Updates

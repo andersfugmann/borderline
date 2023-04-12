@@ -30,9 +30,12 @@ let _ =
     Chain.add { Ir.id = Ir.Chain_id.Builtin Ir.Chain_type.Forward ; rules = forward_opers @ filter_ops; comment = "Builtin" };
     Chain.optimize Optimize.optimize;
 
-    let lines = Chain.emit Nftables.emit_filter_chains @
-                (Nftables.emit_nat_chain post_routing)
+    let lines =
+      Chain.emit Nftables.emit_filter_rules @
+      (Nftables.emit_nat_rules post_routing)
+      |> Nftables.emit
     in
+
     List.iter ~f:(fun l -> print_endline l) lines;
     Printf.printf "\n#Lines: %d\n" (List.length lines)
 

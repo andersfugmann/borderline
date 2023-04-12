@@ -37,14 +37,16 @@ NFT="/usr/sbin/nft"
 BORDERLINE="/usr/sbin/borderline"
 
 function flush () {
-    ${NFT} flush ruleset
+    ${NFT} flush table borderline
 }
 
 function panic () {
     FILE=$(mktemp -t borderline.XXXXXX)
     cat <<EOF > ${FILE}
-flush ruleset
-table inet filter {
+table inet borderline { }
+flush table inet borderline
+delete table inet borderline
+table inet borderline {
   chain input { type filter hook input priority 0; policy drop; }
   chain output { type filter hook output priority 0; policy drop; }
   chain forward { type filter hook forward priority 0; policy drop; }
@@ -60,19 +62,28 @@ EOF
 function apply () {
     echo "Generating firewall rules."
     FILE=$(mktemp -t borderline.XXXXXX)
+    LOG=$(mktemp -t borderline.XXXXXX)
     chmod 600 ${FILE}
     cat <<EOF > ${FILE}
-flush ruleset
-table inet common {
+table inet borderline { }
+flush table inet borderline
+delete table inet borderline
+table inet borderline {
   chain borderline {
     continue comment "Appled: $(date)"
   }
 }
 EOF
     ${BORDERLINE} ${MAIN} >> ${FILE}
-    ${NFT} -f ${FILE}
+    ${NFT} -c -o -f ${FILE} > ${LOG} 2>&1
     RES=$?
-    rm -f ${FILE}
+    if [ ${RES} -eq 0 ]; then
+        ${NFT} -o -f ${FILE} > /dev/null 2>&1
+        echo "Borderline firewall applied"
+    else
+        cat ${LOG} > /dev/stderr
+    fi
+    rm -f ${FILE} ${LOG}
     return $?
 }
 
