@@ -240,14 +240,15 @@ let gen_rule = function
         in
         let comments =
           List.filter_map ~f:Fn.id comments
-          |> function [] -> []
-                    | cs -> "#" :: cs
+          |> function [] -> ""
+                    | cs -> String.concat ~sep:" " cs
+                            |> sprintf "comment \"%s\""
         in
-        String.concat ~sep:" " conds, String.concat ~sep:" " comments
+        String.concat ~sep:" " conds, comments
       in
       let effects = List.map ~f:gen_effect effects |> String.concat ~sep:" " in
       let target = gen_target target in
-      sprintf "%s %s %s; %s" conds effects target comments
+      sprintf "%s %s %s %s;" conds effects target comments
 
 let expand_rule (rls, effects, target) =
   let rec split (rules, (ip4, neg4), (ip6, neg6)) = function
