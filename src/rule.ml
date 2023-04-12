@@ -111,7 +111,8 @@ let process_rule _table (rules, targets') =
             gen_op targets ((Ir.TcpFlags (flags', mask'), neg) :: acc) xs
       end
     | F.Hoplimit (limits, neg) :: xs ->
-        gen_op targets ((Ir.Hoplimit (list2ints limits |> Set.Poly.of_list), neg) :: acc) xs
+        let limits = list2ints limits |> Set.Poly.of_list in
+        gen_op targets ((Ir.Hoplimit limits, neg) :: acc) xs
     | F.True :: xs ->
         gen_op targets ((Ir.True, false) :: acc) xs
     | F.False :: xs ->

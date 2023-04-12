@@ -217,12 +217,10 @@ let compare (cond1, neg1) (cond2, neg2) =
 let is_always value =
   let open Poly in
   function
-  | State states, neg when State.is_empty states -> neg = value
-  | Zone (_, s), neg when Set.is_empty s -> neg = value
-  | Ports (_, _, s), neg when Set.is_empty s -> neg = value
-  | Protocol (_, s), neg when Set.is_empty s -> neg = value
-  | Icmp6 s, neg when Set.is_empty s -> neg = value
-  | Icmp4 s, neg when Set.is_empty s -> neg = value
+  | State states, neg -> State.is_empty states && (neg = value)
+  | Zone (_, zs), neg -> Set.Poly.is_empty zs && (neg = value)
+  | Ports (_, _, ps), neg -> Set.Poly.is_empty ps && (neg = value)
+  | Protocol (_, s), neg -> Set.is_empty s && neg = value
   | TcpFlags (flags, mask), neg -> begin
       match Set.diff flags mask |> Set.is_empty with
       | true -> Set.is_empty mask && not neg = value
@@ -231,15 +229,11 @@ let is_always value =
   | Ip6Set (_, s), neg -> Ip6.is_empty s && (neg = value)
   | Ip4Set (_, s), neg -> Ip4.is_empty s && (neg = value)
   | Vlan ids, neg -> Set.Poly.is_empty ids && (neg = value)
-  | Hoplimit cnts, neg -> Set.is_empty cnts && (neg = value)
-  | State states, neg -> State.is_empty states && (neg = value)
   | Interface (_, ifs), neg -> Set.Poly.is_empty ifs && (neg = value)
-  | Zone (_, zs), neg -> Set.Poly.is_empty zs && (neg = value)
-  | Ports (_, _, ps), neg -> Set.Poly.is_empty ps && (neg = value)
   | Icmp6 is, neg -> Set.Poly.is_empty is && (neg = value)
   | Icmp4 is, neg -> Set.Poly.is_empty is && (neg = value)
+  | Hoplimit cnts, neg -> Set.Poly.is_empty cnts && (neg = value)
   | True, neg -> not neg = value
   | Mark (0, 0), neg -> neg <> value
   | Mark (_, 0), neg -> neg = value
-  | Protocol _, _ -> false
   | Mark _, _ -> false
