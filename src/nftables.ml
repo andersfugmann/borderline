@@ -91,8 +91,8 @@ let gen_cond neg cond =
   | Ir.Interface (dir, zones) ->
       let zones = sprintf "{ %s }" (Set.to_list zones |> List.map ~f:(sprintf "\"%s\"") |> String.concat ~sep:", ") in
       let classifier = match dir with
-        | Ir.Direction.Source -> "iifname"
-        | Ir.Direction.Destination -> "oifname"
+        | Ir.Direction.Source -> "iif"
+        | Ir.Direction.Destination -> "oif"
       in
       sprintf "%s %s%s" classifier neg_str zones, None
   | Ir.Zone (dir, zones) ->
