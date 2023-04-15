@@ -47,6 +47,7 @@ table inet borderline { }
 flush table inet borderline
 delete table inet borderline
 table inet borderline {
+  comment "Appled: $(date)"
   chain input { type filter hook input priority 0; policy drop; }
   chain output { type filter hook output priority 0; policy drop; }
   chain forward { type filter hook forward priority 0; policy drop; }
@@ -69,9 +70,7 @@ table inet borderline { }
 flush table inet borderline
 delete table inet borderline
 table inet borderline {
-  chain borderline {
-    continue comment "Appled: $(date)"
-  }
+  comment "Appled: $(date)"
 }
 EOF
     ${BORDERLINE} ${MAIN} >> ${FILE}
