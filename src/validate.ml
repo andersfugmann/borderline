@@ -1,5 +1,5 @@
 (* Function for validating the AST *)
-open Core
+open Base
 
 open Common
 module F = Frontend

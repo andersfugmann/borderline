@@ -1,4 +1,4 @@
-open Core
+open Base
 (** Operations on chains *)
 
 (** This module keeps global state of all chains. *)
@@ -33,7 +33,7 @@ let add chain =
     chains := Map.add_exn ~key:chain.id ~data:chain !chains
   with
   | _ ->
-    failwithf "Could not add chain: %s" ([%sexp_of: Ir.Chain_id.t] chain.id |> Sexp.to_string) ()
+    Printf.failwithf "Could not add chain: %s" ([%sexp_of: Ir.Chain_id.t] chain.id |> Sexp.to_string) ()
 
 (** Delete a chain *)
 let delete id =
@@ -42,7 +42,7 @@ let delete id =
 (** Create a new unnamed chain *)
 let create rules comment =
   let id = !next_id in
-  incr next_id;
+  next_id := !next_id + 1;
   let chain = { id = Temporary(id); rules = rules; comment = comment } in
   add chain; chain
 

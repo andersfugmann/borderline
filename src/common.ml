@@ -1,5 +1,5 @@
 (** General functions *)
-open Core
+open Base
 open Printf
 
 type id = string

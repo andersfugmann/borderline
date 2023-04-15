@@ -1,4 +1,4 @@
-open Core
+open Base
 open Common
 module F = Frontend
 module Ip4 = Ipset.Ip4

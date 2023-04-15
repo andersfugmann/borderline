@@ -16,6 +16,7 @@ build: [
 
 depends: [
   "dune"
+  "base"
   "core"
   "core_unix"
   "ipaddr"

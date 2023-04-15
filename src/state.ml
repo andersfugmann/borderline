@@ -1,6 +1,5 @@
-open Core
-
-type states = New | Established | Related | Invalid
+open Base
+type state = New | Established | Related | Invalid
 let of_string (id, pos) =
   match String.lowercase id with
   | "new" -> New
@@ -9,15 +8,9 @@ let of_string (id, pos) =
   | "invalid" -> Invalid
   | _ -> Common.parse_error ~id ~pos "Unknown state"
 
-module State_set = Set.Make(
-  struct
-    type t = states
-    let compare = Poly.compare
-    let sexp_of_t _ = failwith "Not implemented"
-    let t_of_sexp _ = failwith "Not implemented"
-  end)
 
-include State_set
+include Set.Poly
+type t = state Set.Poly.t
 let intersect = inter
 
 let all = of_list [ New; Established; Related; Invalid ]

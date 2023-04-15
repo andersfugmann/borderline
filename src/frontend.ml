@@ -1,5 +1,5 @@
 (** Type and utility function for the frontend *)
-open Core
+open Base
 open Common
 module Ip6 = Ipset.Ip6
 module Ip4 = Ipset.Ip4

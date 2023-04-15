@@ -2,19 +2,14 @@
    Output a nft script.
 *)
 
-open Core
+open Base
+open Stdio
 open Printf
 module Ip6 = Ipset.Ip6
 module Ip4 = Ipset.Ip4
 
 let zone_bits = 8 (* Number of zones *)
 let zone_mask = 1 lsl zone_bits - 1
-
-let str_of_set s =
-  Set.to_list s
-  |> List.map ~f:string_of_int
-  |> String.concat ~sep:", "
-  |> sprintf "{ %s }"
 
 let zones = Hashtbl.Poly.create ~size:100 ()
 
@@ -82,6 +77,11 @@ let string_of_state state = match state with
   | State.Related -> "related"
   | State.Invalid -> "invalid"
 
+let string_of_int_set s =
+  Set.fold ~init:[] ~f:(fun acc e -> Int.to_string e :: acc) s
+  |> String.concat ~sep:", "
+  |> sprintf "{ %s }"
+
 let gen_cond neg cond =
   let neg_str = match neg with
     | true -> "!= "
@@ -96,7 +96,7 @@ let gen_cond neg cond =
       in
       sprintf "%s %s%s" classifier neg_str interfaces, None
   | Ir.If_group (dir, if_groups) ->
-    let if_groups = str_of_set if_groups in
+    let if_groups = string_of_int_set if_groups in
       let classifier = match dir with
         | Ir.Direction.Source -> "iifgroup"
         | Ir.Direction.Destination -> "oifgroup"
@@ -139,7 +139,7 @@ let gen_cond neg cond =
         | Ir.Port_type.Tcp -> "tcp"
         | Ir.Port_type.Udp -> "udp"
       in
-      sprintf "%s %s%s %s" classifier neg_str cond (str_of_set ports), None
+      sprintf "%s %s%s %s" classifier neg_str cond (string_of_int_set ports), None
   | Ir.Ip6Set (dir, ips) ->
       (* Should define a true ip set. these sets can become very large. *)
 
@@ -169,19 +169,11 @@ let gen_cond neg cond =
       let set = Set.to_list p |> List.map ~f:(string_of_protocol l) |> String.concat ~sep:"," in
       sprintf "%s %s { %s }" prefix neg_str set, None
   | Ir.Icmp6 types ->
-      let set = Set.to_list types
-                |> List.map ~f:string_of_int
-                |> String.concat ~sep:", "
-                |> sprintf "{ %s }"
-      in
+      let set = string_of_int_set types in
       sprintf "ip6 nexthdr icmpv6 icmpv6 type %s%s" neg_str set, None
   | Ir.Icmp4 types ->
-      let set = Set.to_list types
-                |> List.map ~f:string_of_int
-                |> String.concat ~sep:", "
-                |> sprintf "{ %s }"
-      in
-      sprintf "ip protocol icmp icmp type %s%s" neg_str set, None
+    let set = string_of_int_set types in
+    sprintf "ip protocol icmp icmp type %s%s" neg_str set, None
   | Ir.Mark (value, mask) ->
       sprintf "meta mark and 0x%08x %s0x%08x" mask neg_str value, None
   | Ir.TcpFlags (flags, mask) ->
@@ -192,16 +184,15 @@ let gen_cond neg cond =
       let neg_str = match neg with true -> "!=" | false -> "==" in
       sprintf "tcp flags & (%s) %s %s" (to_list mask) neg_str (to_list flags), None
   | Ir.Vlan ids ->
-      let rule = Set.to_list ids
-                 |> List.map ~f:string_of_int
-                 |> String.concat ~sep:", "
-                 |> sprintf "ether type vlan vlan id { %s }"
-      in rule, None
+      let rule =
+        string_of_int_set ids
+        |> sprintf "ether type vlan vlan id { %s }"
+      in
+      rule, None
   | Ir.Hoplimit limits ->
-    let rule = Set.to_list limits
-               |> List.map ~f:string_of_int
-               |> String.concat ~sep:", "
-               |> sprintf "ip6 hoplimit { %s }"
+    let rule =
+      string_of_int_set limits
+      |> sprintf "ip6 hoplimit { %s }"
     in rule, None
   | Ir.True when neg ->
       (* Any false statement *)

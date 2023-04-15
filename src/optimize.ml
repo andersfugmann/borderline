@@ -1,10 +1,9 @@
-open Core
+open Base
+open Stdio
 open Ir
-open Printf
 open Poly
 module Ip6 = Ipset.Ip6
 module Ip4 = Ipset.Ip4
-
 (** Define the saving in conditions when inlining. *)
 let max_inline_cost = 1
 

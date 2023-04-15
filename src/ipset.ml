@@ -1,4 +1,4 @@
-open Core
+open Base
 
 (** Range set is a set of ranges.
     The rangeset requires that elements are either subsets or distinct. I.e. No elements overlap partly
@@ -20,17 +20,21 @@ module type Ip = sig
     val mem: addr -> t -> bool
     val make: int -> addr -> t
   end
-
 end
 
 module Make(Ip : Ip) = struct
-  module IpSet = Set.Make_plain(
-    struct
-      include Ip.Prefix
-      let sexp_of_t _ = failwith "Not implemented - ipset"
-    end)
+
+  module IpSet = Set
   type elt = Ip.Prefix.t
-  type t = IpSet.t
+  module C = struct
+    type t = Ip.Prefix.t
+    include Comparator.Make( struct
+      type t = Ip.Prefix.t
+      let compare = Ip.Prefix.compare
+      let sexp_of_t _ = failwith "Not implemented for ip sets"
+    end)
+  end
+  type t = (elt, C.comparator_witness) IpSet.t
 
   let canonical t =
     let network = Ip.Prefix.network t in
@@ -38,10 +42,10 @@ module Make(Ip : Ip) = struct
     Ip.Prefix.make bits network
 
   let to_list t = IpSet.to_list t
-  let empty = IpSet.empty
-  let singleton elt = IpSet.singleton elt
+  let empty = IpSet.empty (module C)
+  let singleton elt = IpSet.singleton (module C) elt
   let add t elt = IpSet.add t elt
-  let of_list l = IpSet.of_list (List.map ~f:canonical l)
+  let of_list l = IpSet.of_list (module C) (List.map ~f:canonical l)
   let is_empty t = IpSet.is_empty t
 
   (* Call reduce as long as there are changes *)
@@ -162,8 +166,8 @@ module Test = struct
   open OUnit2
 
   module Ip4List = OUnitDiff.ListSimpleMake(struct
-      let pp_printer f t = Format.pp_print_string f (Ipaddr.V4.Prefix.to_string t)
-      let pp_print_sep f () = Format.pp_print_string f "; "
+      let pp_printer f t = Stdlib.Format.pp_print_string f (Ipaddr.V4.Prefix.to_string t)
+      let pp_print_sep f () = Stdlib.Format.pp_print_string f "; "
       type t = Ipaddr.V4.Prefix.t
       let compare = Ipaddr.V4.Prefix.compare
     end)
