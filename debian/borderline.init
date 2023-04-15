@@ -1,15 +1,17 @@
 #!/bin/bash
 ### BEGIN INIT INFO
 # Provides:          borderline
-# Required-Start:    $local_fs $remote_fs $syslog
-# Required-Stop:     $local_fs $remote_fs $syslog
+# Required-Start:    $local_fs $syslog
+# Required-Stop:     $local_fs $syslog
+# X-Start-Before:    $network
+# X-Stop-After:      $network
 # Default-Start:     S
 # Default-Stop:
 # Short-Description: A firewall compiler
 # Description:       Generates a packet filtering firewall.
 ### END INIT INFO
 
-# Author: Anders Peter Fugmann <afu@fugmann.net>
+# Author: Anders Peter Fugmann <anders@fugmann.net>
 
 set -e
 
