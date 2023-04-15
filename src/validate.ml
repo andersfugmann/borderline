@@ -157,6 +157,7 @@ let expand nodes =
      seen list, as zone stems are not recursive types. *)
   let rec expand_zone_stms = function
     | F.Interface _ as i :: xs -> i :: expand_zone_stms xs
+    | F.If_group _ as i :: xs -> i :: expand_zone_stms xs
     | F.Network _ as i :: xs -> i :: expand_zone_stms xs
     | F.ZoneSnat _ as i :: xs -> i :: expand_zone_stms xs
     | F.Vlan _ as i :: xs -> i :: expand_zone_stms xs

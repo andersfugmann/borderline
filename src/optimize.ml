@@ -321,6 +321,7 @@ let filter_protocol chain =
     | Ir.Protocol (l, p), false -> expand (l, p) |> Set.Poly.of_list
     | Ir.True, _ -> all
     | Ir.Interface (_,_), _ -> all
+    | Ir.If_group (_,_), _ -> all
     | Ir.Zone (_,_), _ -> all
     | Ir.State _, _ -> all
     | Ir.Vlan _, _ -> all

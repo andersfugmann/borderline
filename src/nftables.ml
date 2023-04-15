@@ -88,13 +88,20 @@ let gen_cond neg cond =
     | false -> ""
   in
   match cond with
-  | Ir.Interface (dir, zones) ->
-      let zones = sprintf "{ %s }" (Set.to_list zones |> List.map ~f:(sprintf "\"%s\"") |> String.concat ~sep:", ") in
+  | Ir.Interface (dir, interfaces) ->
+      let interfaces = sprintf "{ %s }" (Set.to_list interfaces |> List.map ~f:(sprintf "\"%s\"") |> String.concat ~sep:", ") in
       let classifier = match dir with
         | Ir.Direction.Source -> "iif"
         | Ir.Direction.Destination -> "oif"
       in
-      sprintf "%s %s%s" classifier neg_str zones, None
+      sprintf "%s %s%s" classifier neg_str interfaces, None
+  | Ir.If_group (dir, if_groups) ->
+    let if_groups = str_of_set if_groups in
+      let classifier = match dir with
+        | Ir.Direction.Source -> "iifgroup"
+        | Ir.Direction.Destination -> "oifgroup"
+      in
+      sprintf "%s %s%s" classifier neg_str if_groups, None
   | Ir.Zone (dir, zones) ->
       let shift = match dir with
         | Ir.Direction.Source -> 0

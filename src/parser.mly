@@ -2,7 +2,7 @@
 %}
 %token ZONE PROCESS RULE IMPORT
 %token DEFINE
-%token NETWORK INTERFACE SNAT VLAN
+%token NETWORK INTERFACE GROUP SNAT VLAN
 %token ALLOW DENY REJECT LOG COUNTER USER_CHAIN
 %token POLICY
 %token ADDRESS STATE USE
@@ -48,6 +48,7 @@ zone_stm:
   | NETWORK EQ data=data_list                          { Frontend.Network (data) }
   | VLAN EQ data=data_list                             { Frontend.Vlan (data) }
   | INTERFACE EQ data=data_list                        { Frontend.Interface(data)}
+  | GROUP EQ data=data_list                            { Frontend.If_group(data)}
   | PROCESS t=id r=rule_seq p=policy_opt               { Frontend.ZoneRules (t,r,p) }
   | SNAT zones=data_list ip=ipv4                       { Frontend.ZoneSnat(zones, fst ip) }
 

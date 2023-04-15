@@ -37,6 +37,7 @@ and node = Import of id
          | Process of id * rule_stm list * policytype list
 
 and zone_stm = Interface of data list
+             | If_group of data list
              | Network of data list
              | Vlan of data list
              | ZoneRules of id * rule_stm list * policytype list

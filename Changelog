@@ -2,6 +2,7 @@ Version 1.0.0 (UNRELEASED)
 * Add support hopcount match, and implement rfc4890
 * Apply nft optimizations
 * Use interface ids for faster packet handling, rather than matching on strings
+* Add option to select interface group.
 
 Version 0.99 (2016-01-16)
 * Add IPv4 support!

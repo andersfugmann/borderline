@@ -1,5 +1,5 @@
 zone guest {
-     interface = int;
+     group = 101;
      network = 1111:2222:3333:2::/64;
      network = 10.0.1.0/24;
      process filter { } policy log_allow;

@@ -30,6 +30,7 @@ rule token = parse
 (* zone definitions *)
   | "network"      { NETWORK }
   | "interface"    { INTERFACE }
+  | "group"        { GROUP }
   | "vlan"         { VLAN }
   | "snat"         { SNAT }
 

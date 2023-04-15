@@ -92,6 +92,7 @@ end
 
 
 type condition = Interface of Direction.t * id Set.Poly.t
+               | If_group of Direction.t * int Set.Poly.t
                | Zone of Direction.t * zone Set.Poly.t
                | State of State.t
                | Ports of Direction.t * Port_type.t * int Set.Poly.t
@@ -128,6 +129,7 @@ let eq_cond (x, n) (y, m) =
   let (=) = Poly.equal in
   let eq = function
     | Interface (d, s) -> (function Interface (d', s') -> d = d' && Set.Poly.equal s s' | _ -> false)
+    | If_group (d, s) -> (function If_group (d', s') -> d = d' && Set.Poly.equal s s' | _ -> false)
     | Zone (d, s) -> (function Zone (d', s') -> d = d' && Set.Poly.equal s s' | _ -> false)
     | State s -> (function State s' -> State.equal s s' | _ -> false)
     | Ports (d, t, s) -> (function Ports (d', t', s') -> d = d' && t = t' && Set.Poly.equal s s' | _ -> false)
@@ -176,6 +178,7 @@ let eq_effects a b =
 
 let get_dir = function
   | Interface _ -> None
+  | If_group _ -> None
   | Zone (direction, _) -> Some direction
   | State _ -> None
   | Ports (direction, _, _) -> Some direction
@@ -192,6 +195,7 @@ let get_dir = function
 
 let enumerate_cond = function
   | Interface _ -> 1
+  | If_group _ -> 1
   | Zone _ -> 2
   | State _ -> 3
   | Ports _ -> 4
@@ -230,6 +234,7 @@ let is_always value =
   | Ip4Set (_, s), neg -> Ip4.is_empty s && (neg = value)
   | Vlan ids, neg -> Set.Poly.is_empty ids && (neg = value)
   | Interface (_, ifs), neg -> Set.Poly.is_empty ifs && (neg = value)
+  | If_group (_, if_groups), neg -> Set.Poly.is_empty if_groups && (neg = value)
   | Icmp6 is, neg -> Set.Poly.is_empty is && (neg = value)
   | Icmp4 is, neg -> Set.Poly.is_empty is && (neg = value)
   | Hoplimit cnts, neg -> Set.Poly.is_empty cnts && (neg = value)
