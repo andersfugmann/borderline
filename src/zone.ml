@@ -84,9 +84,9 @@ let create_zone_chain direction (id, nodes) =
           let if_groups =
             List.map ~f:(function
               | F.Ip (_, pos) -> parse_error ~pos "Expected number, got ip"
-              | F.Number (n, _pos) -> n
+              | F.Number (n, _pos) -> `Int n
               | F.Id (_, pos) -> parse_error ~pos "Expected number, got id"
-              | F.String (_, pos) -> parse_error ~pos "Expected number, got string"
+              | F.String (s, _pos) -> `String s
             ) gs
           in
           [(Ir.If_group(direction, Set.Poly.of_list if_groups), false)]

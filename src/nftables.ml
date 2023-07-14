@@ -81,6 +81,12 @@ let string_of_int_set s =
   Set.fold ~init:[] ~f:(fun acc e -> Int.to_string e :: acc) s
   |> String.concat ~sep:", "
 
+let string_or_int_set s =
+  Set.fold ~init:[] ~f:(fun acc -> function
+    | `Int i -> Int.to_string i :: acc
+    | `String s -> Printf.sprintf "\"%s\"" s :: acc) s
+  |> String.concat ~sep:", "
+
 let gen_cond neg cond =
   let neg_str = match neg with
     | true -> "!= "
@@ -95,7 +101,7 @@ let gen_cond neg cond =
       in
       sprintf "%s %s { %s }" classifier neg_str interfaces, None
   | Ir.If_group (dir, if_groups) ->
-    let if_groups = string_of_int_set if_groups in
+    let if_groups = string_or_int_set if_groups in
       let classifier = match dir with
         | Ir.Direction.Source -> "iifgroup"
         | Ir.Direction.Destination -> "oifgroup"

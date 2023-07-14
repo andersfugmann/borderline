@@ -92,7 +92,7 @@ end
 
 
 type condition = Interface of Direction.t * id Set.Poly.t
-               | If_group of Direction.t * int Set.Poly.t
+               | If_group of Direction.t * [`Int of int | `String of string] Set.Poly.t
                | Zone of Direction.t * zone Set.Poly.t
                | State of State.t
                | Ports of Direction.t * Port_type.t * int Set.Poly.t
