@@ -27,8 +27,8 @@ let parse file =
 let rec parse_file file =
   if Str.string_match include_regex file 0 && not (Str.string_match exclude_regex file 0) then
     let prev_dir = Unix.getcwd () in
-    let () = Unix.chdir (Caml.Filename.dirname file) in
-    let res = expand (parse (Caml.Filename.basename file)) in
+    let () = Unix.chdir (Stdlib.Filename.dirname file) in
+    let res = expand (parse (Stdlib.Filename.basename file)) in
     let () = Unix.chdir prev_dir in
       res
   else

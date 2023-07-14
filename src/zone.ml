@@ -25,7 +25,6 @@ type t = {
   interfaces: F.data list;
   groups: F.data list;
   networks: F.data list;
-  vlans: F.data list;
 }
 
 let init stms =
@@ -33,11 +32,10 @@ let init stms =
     | F.Interface ifs -> { acc with interfaces = ifs @ acc.interfaces }
     | F.If_group groups -> { acc with groups = groups @ acc.groups }
     | F.Network ips -> { acc with networks = ips @ acc.networks }
-    | F.Vlan ids -> { acc with vlans = ids @ acc.vlans }
     | F.ZoneRules _ -> acc
     | F.ZoneSnat _ -> acc
   in
-  List.fold_left ~init:{ interfaces = []; groups = []; networks = []; vlans = [] } ~f:inner stms
+  List.fold_left ~init:{ interfaces = []; groups = []; networks = []; } ~f:inner stms
 
 let rec filter_zonerules table = function
   | F.ZoneRules (t, r, p) :: xs when Poly.((fst t) = (fst table)) -> (r, p) :: filter_zonerules table xs
@@ -95,27 +93,11 @@ let create_zone_chain direction (id, nodes) =
     in
     [ (cond, [], Ir.Jump chain.Ir.id) ]
   in
-  let create_vlan_rule chain vlans =
-    let cond = match vlans with
-      | [] -> []
-      | vs ->
-          let ids = List.map ~f:(function
-              | F.Ip (_, pos) -> parse_error ~pos "Expected number, got ip"
-              | F.Number (n, _pos) -> n
-              | F.Id (_, pos) -> parse_error ~pos "Expected number, got id"
-              | F.String (_, pos) -> parse_error ~pos "Expected number, got string"
-            ) vs
-          in
-          [(Ir.Vlan(Set.Poly.of_list ids), false)]
-    in
-    [ (cond, [], Ir.Jump chain.Ir.id) ]
-  in
-  let { networks; interfaces; groups; vlans; } = init nodes in
+  let { networks; interfaces; groups; } = init nodes in
   Chain.create [([], [Ir.MarkZone(direction, id)], Ir.Pass)] ("Mark zone " ^ id)
   |> (fun c -> Chain.create (create_network_rules c networks) ("Match networks for zone " ^ id))
   |> (fun c -> Chain.create (create_interface_rule c interfaces) ("Match interfaces for zone " ^ id))
-  |> (fun c -> Chain.create (create_vlan_rule c vlans) ("Match vlans for zone " ^ id))
-  |> (fun c -> Chain.create (create_group_rule c groups) ("Match vlans for zone " ^ id))
+  |> (fun c -> Chain.create (create_group_rule c groups) ("Match interface groups for zone " ^ id))
 
 
 let rec filter = function
@@ -166,7 +148,6 @@ let emit_nat (zones : (string * F.zone_stm list) list) : Ir.oper list =
     | F.Interface _
     | F.If_group _
     | F.Network _
-    | F.Vlan _
     | F.ZoneRules _ -> None
   in
 

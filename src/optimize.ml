@@ -323,7 +323,6 @@ let filter_protocol chain =
     | Ir.If_group (_,_), _ -> all
     | Ir.Zone (_,_), _ -> all
     | Ir.State _, _ -> all
-    | Ir.Vlan _, _ -> all
     | Ir.Ports (_, Ir.Port_type.Tcp, _), false -> [
         Ir.Protocol.Ip4, Ir.Protocol.Tcp;
         Ir.Protocol.Ip6, Ir.Protocol.Tcp;

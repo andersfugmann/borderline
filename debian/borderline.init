@@ -13,8 +13,6 @@
 
 # Author: Anders Peter Fugmann <anders@fugmann.net>
 
-set -e
-
 MAIN=/etc/borderline/borderline.bl
 if [ -f /etc/default/borderline ]; then
     source /etc/default/borderline

@@ -1,4 +1,4 @@
 (executables
  (names        borderline bl_configure unit_test)
  (public_names borderline bl_configure unit_test)
- (libraries    borderline_lib core core_unix))
+ (libraries    borderline_lib base stdio))

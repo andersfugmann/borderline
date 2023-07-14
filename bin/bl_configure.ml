@@ -2,17 +2,12 @@
    setup.
 *)
 
-open Core
-open Arg
+open Base
+open Stdio
+module Arg = Stdlib.Arg
+module Scanf = Stdlib.Scanf
+module Printf = Stdlib.Printf
 module Sys = Stdlib.Sys
-module Unix = Core_unix
-
-module Interface_map = Map.Make(struct
-  type t = string
-  let compare = String.compare
-  let sexp_of_t _ = failwith "Not implemented - interfaces"
-  let t_of_sexp _ = failwith "Not implemented - interfaces"
- end)
 
 exception Usage_error of string
 
@@ -30,7 +25,7 @@ let parse_route map line =
 
   let net, iface = parse line in
   Printf.printf "Parse line: %s %s\n" net iface;
-  Interface_map.add_multi ~key:iface ~data:net map
+  Base.Map.add_multi ~key:iface ~data:net map
 
 let write_external_zone ch_out interface _networks =
     Printf.fprintf ch_out "zone %s {\n" interface;
@@ -59,7 +54,7 @@ let write_zone filename interface networks =
 
 
 let has_external_zone interfaces =
-  Interface_map.fold ~f:(fun ~key:_ ~data:nets acc -> acc || is_external_zone nets) interfaces ~init:false
+  Map.fold ~f:(fun ~key:_ ~data:nets acc -> acc || is_external_zone nets) interfaces ~init:false
 
 let validate_dir output_dir =
   match Sys.is_directory output_dir with
@@ -77,8 +72,8 @@ let () =
       force = ref false
   in
   let arg_spec =
-    [ ("--output", Set_string(output_dir), "<dir>  Specify output directory");
-      ("--force", Set(force), " Force override ov existing files");
+    [ ("--output", Arg.Set_string(output_dir), "<dir>  Specify output directory");
+      ("--force", Arg.Set(force), " Force override ov existing files");
     ] in
   let _ = Arg.parse arg_spec ignore "Autogenerate Borderline Zone Configuration files." in
     (* Test if the file exist. We only warn (and stop) if override is false *)
@@ -88,7 +83,7 @@ let () =
       List.map ~f:Unix.open_process_in commands
       |> List.concat_map ~f:In_channel.input_lines
     in
-    List.fold_left ~f:parse_route ~init:Interface_map.empty routes
+    List.fold_left ~f:parse_route ~init:(Map.empty (module String)) routes
   in
   let create_file_name iface = !output_dir ^ "/" ^ iface ^ ".bl" in
   let found_external = has_external_zone interfaces in
@@ -100,11 +95,11 @@ let () =
         | true -> []
         | false -> [ !output_dir ^ "/" ^ "ext.bl" ]
       in
-      Interface_map.fold ~f:(fun ~key:iface ~data:_ acc -> (create_file_name iface) :: acc) ~init:files interfaces
+      Map.fold ~f:(fun ~key:iface ~data:_ acc -> (create_file_name iface) :: acc) ~init:files interfaces
     in
     let () = List.iter ~f:(validate_file !force) file_list in
 
-    Interface_map.iteri ~f:(fun ~key:iface ~data:nets -> write_zone (create_file_name iface) iface nets) interfaces;
+    Map.iteri ~f:(fun ~key:iface ~data:nets -> write_zone (create_file_name iface) iface nets) interfaces;
     begin
       match found_external with
       | false -> Printf.fprintf (Out_channel.create (!output_dir ^ "/" ^ "ext.bl")) "# No external interface found\ndefine external = "

@@ -80,7 +80,6 @@ let string_of_state state = match state with
 let string_of_int_set s =
   Set.fold ~init:[] ~f:(fun acc e -> Int.to_string e :: acc) s
   |> String.concat ~sep:", "
-  |> sprintf "{ %s }"
 
 let gen_cond neg cond =
   let neg_str = match neg with
@@ -89,19 +88,19 @@ let gen_cond neg cond =
   in
   match cond with
   | Ir.Interface (dir, interfaces) ->
-      let interfaces = sprintf "{ %s }" (Set.to_list interfaces |> List.map ~f:(sprintf "\"%s\"") |> String.concat ~sep:", ") in
+      let interfaces = Set.to_list interfaces |> List.map ~f:(sprintf "\"%s\"") |> String.concat ~sep:", " in
       let classifier = match dir with
         | Ir.Direction.Source -> "iif"
         | Ir.Direction.Destination -> "oif"
       in
-      sprintf "%s %s%s" classifier neg_str interfaces, None
+      sprintf "%s %s { %s }" classifier neg_str interfaces, None
   | Ir.If_group (dir, if_groups) ->
     let if_groups = string_of_int_set if_groups in
       let classifier = match dir with
         | Ir.Direction.Source -> "iifgroup"
         | Ir.Direction.Destination -> "oifgroup"
       in
-      sprintf "%s %s%s" classifier neg_str if_groups, None
+      sprintf "%s %s { %s }" classifier neg_str if_groups, None
   | Ir.Zone (dir, zones) ->
       let shift = match dir with
         | Ir.Direction.Source -> 0
@@ -139,7 +138,7 @@ let gen_cond neg cond =
         | Ir.Port_type.Tcp -> "tcp"
         | Ir.Port_type.Udp -> "udp"
       in
-      sprintf "%s %s%s %s" classifier neg_str cond (string_of_int_set ports), None
+      sprintf "%s %s%s { %s }" classifier neg_str cond (string_of_int_set ports), None
   | Ir.Ip6Set (dir, ips) ->
       (* Should define a true ip set. these sets can become very large. *)
 
@@ -170,10 +169,10 @@ let gen_cond neg cond =
       sprintf "%s %s { %s }" prefix neg_str set, None
   | Ir.Icmp6 types ->
       let set = string_of_int_set types in
-      sprintf "ip6 nexthdr icmpv6 icmpv6 type %s%s" neg_str set, None
+      sprintf "ip6 nexthdr icmpv6 icmpv6 type %s { %s }" neg_str set, None
   | Ir.Icmp4 types ->
     let set = string_of_int_set types in
-    sprintf "ip protocol icmp icmp type %s%s" neg_str set, None
+    sprintf "ip protocol icmp icmp type %s { %s }" neg_str set, None
   | Ir.Mark (value, mask) ->
       sprintf "meta mark and 0x%08x %s0x%08x" mask neg_str value, None
   | Ir.TcpFlags (flags, mask) ->
@@ -183,12 +182,6 @@ let gen_cond neg cond =
       in
       let neg_str = match neg with true -> "!=" | false -> "==" in
       sprintf "tcp flags & (%s) %s %s" (to_list mask) neg_str (to_list flags), None
-  | Ir.Vlan ids ->
-      let rule =
-        string_of_int_set ids
-        |> sprintf "ether type vlan vlan id { %s }"
-      in
-      rule, None
   | Ir.Hoplimit limits ->
     let rule =
       string_of_int_set limits

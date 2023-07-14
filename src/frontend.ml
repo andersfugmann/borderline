@@ -39,7 +39,6 @@ and node = Import of id
 and zone_stm = Interface of data list
              | If_group of data list
              | Network of data list
-             | Vlan of data list
              | ZoneRules of id * rule_stm list * policytype list
              | ZoneSnat of data list * Ip4.elt
 

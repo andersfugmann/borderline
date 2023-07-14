@@ -103,7 +103,6 @@ type condition = Interface of Direction.t * id Set.Poly.t
                | Icmp4 of int Set.Poly.t
                | Mark of int * int
                | TcpFlags of Tcp_flags.t Set.Poly.t * Tcp_flags.t Set.Poly.t
-               | Vlan of int Set.Poly.t
                | Hoplimit of int Set.Poly.t
                | True
 
@@ -140,7 +139,6 @@ let eq_cond (x, n) (y, m) =
     | Icmp4 s -> (function Icmp4 s' -> Set.Poly.equal s s' | _ -> false)
     | Mark (m1, m2) -> (function Mark (m1', m2') -> m1 = m1' && m2 = m2' | _ -> false)
     | TcpFlags (s1, s2) -> (function TcpFlags (s1', s2') -> Set.Poly.equal s1 s1' && Set.Poly.equal s2 s2' | _ -> false)
-    | Vlan ids -> (function Vlan ids' -> Set.Poly.equal ids ids' | _ -> false)
     | Hoplimit limit -> (function Hoplimit limit' -> Set.Poly.equal limit limit' | _ -> false)
     | True -> (function True -> true | _ -> false)
   in
@@ -189,7 +187,6 @@ let get_dir = function
   | Icmp4 _ -> None
   | Mark _ -> None
   | TcpFlags _ -> None
-  | Vlan _ -> None
   | Hoplimit _ -> None
   | True -> None
 
@@ -206,9 +203,8 @@ let enumerate_cond = function
   | Icmp4 _ -> 9
   | TcpFlags _ -> 10
   | Mark _ -> 11
-  | Vlan _ -> 12
-  | Hoplimit _ -> 13
-  | True -> 14
+  | Hoplimit _ -> 12
+  | True -> 13
 
 let cond_type_identical cond1 cond2 =
   (enumerate_cond cond1) = (enumerate_cond cond2)
@@ -232,7 +228,6 @@ let is_always value =
     end
   | Ip6Set (_, s), neg -> Ip6.is_empty s && (neg = value)
   | Ip4Set (_, s), neg -> Ip4.is_empty s && (neg = value)
-  | Vlan ids, neg -> Set.Poly.is_empty ids && (neg = value)
   | Interface (_, ifs), neg -> Set.Poly.is_empty ifs && (neg = value)
   | If_group (_, if_groups), neg -> Set.Poly.is_empty if_groups && (neg = value)
   | Icmp6 is, neg -> Set.Poly.is_empty is && (neg = value)

@@ -30,7 +30,6 @@ rule token = parse
   | "network"      { NETWORK }
   | "interface"    { INTERFACE }
   | "group"        { GROUP }
-  | "vlan"         { VLAN }
   | "snat"         { SNAT }
 
 (* Policy *)

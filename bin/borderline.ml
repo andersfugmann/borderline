@@ -1,4 +1,8 @@
-open Core
+open Base
+open Stdio
+module Scanf = Stdlib.Scanf
+module Printf = Stdlib.Printf
+
 module Sys = Stdlib.Sys
 (** Main file. *)
 
