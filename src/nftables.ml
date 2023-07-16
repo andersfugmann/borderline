@@ -62,14 +62,10 @@ let string_of_tcpflag = function
   | Ir.Tcp_flags.Psh -> "psh"
 
 let string_of_layer = function
-  | Ir.Protocol.Ip4 -> "ip protocol"
-  | Ir.Protocol.Ip6 -> "ip6 nexthdr"
+  | Ir.Ipv4 -> "ip"
+  | Ir.Ipv6 -> "ip6"
 
-let string_of_protocol l = function
-  | Ir.Protocol.Icmp when Poly.(l = Ir.Protocol.Ip4) -> "icmpv6"
-  | Ir.Protocol.Icmp -> "icmp"
-  | Ir.Protocol.Tcp -> "tcp"
-  | Ir.Protocol.Udp -> "udp"
+let string_of_protocol l = l
 
 let string_of_state state = match state with
   | State.New -> "new"
@@ -169,16 +165,15 @@ let gen_cond neg cond =
                 |> String.concat ~sep:", "
       in
       sprintf "ip %s %s{ %s }" classifier neg_str ips, None
-  | Ir.Protocol (l, p) ->
-      let prefix = string_of_layer l in
-      let set = Set.to_list p |> List.map ~f:(string_of_protocol l) |> String.concat ~sep:"," in
-      sprintf "%s %s { %s }" prefix neg_str set, None
+  | Ir.Protocol p ->
+      let set = Set.to_list p |> String.concat ~sep:"," in
+      sprintf "meta l4proto %s { %s }" neg_str set, None
   | Ir.Icmp6 types ->
       let set = string_of_int_set types in
-      sprintf "ip6 nexthdr icmpv6 icmpv6 type %s { %s }" neg_str set, None
+      sprintf "icmpv6 type %s { %s }" neg_str set, None
   | Ir.Icmp4 types ->
     let set = string_of_int_set types in
-    sprintf "ip protocol icmp icmp type %s { %s }" neg_str set, None
+    sprintf "icmp type %s { %s }" neg_str set, None
   | Ir.Mark (value, mask) ->
       sprintf "meta mark and 0x%08x %s0x%08x" mask neg_str value, None
   | Ir.TcpFlags (flags, mask) ->
@@ -193,6 +188,8 @@ let gen_cond neg cond =
       string_of_int_set limits
       |> sprintf "ip6 hoplimit { %s }"
     in rule, None
+  | Ir.Ip_type Ir.Ipv4 -> "meta protocol ip", None
+  | Ir.Ip_type Ir.Ipv6 -> "meta protocol ip6", None
   | Ir.True when neg ->
       (* Any false statement *)
       "meta mark | 0x1 == 0x0", None

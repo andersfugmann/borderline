@@ -10,6 +10,8 @@ type zone = id
 type mask = int
 type prefix = string
 
+type ip_type = Ipv4 | Ipv6
+
 module Chain_type = struct
   type t = Input | Output | Forward | Pre_routing | Post_routing [@@deriving compare, sexp]
   include Comparator.Make(struct type nonrec t = t let compare = compare let sexp_of_t = sexp_of_t end)
@@ -51,20 +53,6 @@ module Tcp_flags = struct
     | _ -> parse_error ~id:flag ~pos "Unknown tcp flag"
 end
 
-module Protocol = struct
-  type layer = Ip4 | Ip6
-  type t = Icmp | Tcp | Udp [@@deriving compare, sexp]
-  module Compare = Comparator.Make(struct type nonrec t = t let compare = compare let sexp_of_t = sexp_of_t end)
-  include Compare
-  let all = [ Icmp; Tcp; Udp ] |> Set.Poly.of_list
-  let of_string (s, pos) =
-    match String.lowercase s with
-    | "icmp" -> Icmp
-    | "tcp" -> Tcp
-    | "udp" -> Udp
-    | s -> parse_error ~id:s ~pos "Unknown protocol identifier"
-end
-
 module Direction = struct
   type t = Source | Destination
   [@@deriving compare, sexp]
@@ -98,12 +86,13 @@ type condition = Interface of Direction.t * id Set.Poly.t
                | Ports of Direction.t * Port_type.t * int Set.Poly.t
                | Ip6Set of Direction.t * Ip6.t
                | Ip4Set of Direction.t * Ip4.t
-               | Protocol of Protocol.layer * Protocol.t Set.Poly.t
+               | Protocol of string Set.Poly.t
                | Icmp6 of int Set.Poly.t
                | Icmp4 of int Set.Poly.t
                | Mark of int * int
                | TcpFlags of Tcp_flags.t Set.Poly.t * Tcp_flags.t Set.Poly.t
                | Hoplimit of int Set.Poly.t
+               | Ip_type of ip_type
                | True
 
 type effect = MarkZone of Direction.t * zone
@@ -134,13 +123,14 @@ let eq_cond (x, n) (y, m) =
     | Ports (d, t, s) -> (function Ports (d', t', s') -> d = d' && t = t' && Set.Poly.equal s s' | _ -> false)
     | Ip6Set (d, s) -> (function Ip6Set (d', s') -> d = d' && Ip6.equal s s' | _ -> false)
     | Ip4Set (d, s) -> (function Ip4Set (d', s') -> d = d' && Ip4.equal s s' | _ -> false)
-    | Protocol (l, s) -> (function Protocol (l', s') -> l = l' && Set.Poly.equal s s' | _ -> false)
+    | Protocol s -> (function Protocol s' -> Set.Poly.equal s s' | _ -> false)
     | Icmp6 s -> (function Icmp6 s' -> Set.Poly.equal s s' | _ -> false)
     | Icmp4 s -> (function Icmp4 s' -> Set.Poly.equal s s' | _ -> false)
     | Mark (m1, m2) -> (function Mark (m1', m2') -> m1 = m1' && m2 = m2' | _ -> false)
     | TcpFlags (s1, s2) -> (function TcpFlags (s1', s2') -> Set.Poly.equal s1 s1' && Set.Poly.equal s2 s2' | _ -> false)
     | Hoplimit limit -> (function Hoplimit limit' -> Set.Poly.equal limit limit' | _ -> false)
     | True -> (function True -> true | _ -> false)
+    | Ip_type t -> (function Ip_type t' -> t = t' | _ -> false)
   in
   Bool.equal n m && eq x y
 
@@ -189,6 +179,7 @@ let get_dir = function
   | TcpFlags _ -> None
   | Hoplimit _ -> None
   | True -> None
+  | Ip_type _ -> None
 
 let enumerate_cond = function
   | Interface _ -> 1
@@ -201,10 +192,11 @@ let enumerate_cond = function
   | Protocol _ -> 7
   | Icmp6 _ -> 8
   | Icmp4 _ -> 9
-  | TcpFlags _ -> 10
-  | Mark _ -> 11
-  | Hoplimit _ -> 12
-  | True -> 13
+  | Ip_type _ -> 10
+  | TcpFlags _ -> 11
+  | Mark _ -> 12
+  | Hoplimit _ -> 13
+  | True -> 14
 
 let cond_type_identical cond1 cond2 =
   (enumerate_cond cond1) = (enumerate_cond cond2)
@@ -220,7 +212,7 @@ let is_always value =
   | State states, neg -> State.is_empty states && (neg = value)
   | Zone (_, zs), neg -> Set.Poly.is_empty zs && (neg = value)
   | Ports (_, _, ps), neg -> Set.Poly.is_empty ps && (neg = value)
-  | Protocol (_, s), neg -> Set.is_empty s && neg = value
+  | Protocol s, neg -> Set.is_empty s && neg = value
   | TcpFlags (flags, mask), neg -> begin
       match Set.diff flags mask |> Set.is_empty with
       | true -> Set.is_empty mask && not neg = value
@@ -237,3 +229,4 @@ let is_always value =
   | Mark (0, 0), neg -> neg <> value
   | Mark (_, 0), neg -> neg = value
   | Mark _, _ -> false
+  | Ip_type _, _ -> false

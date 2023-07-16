@@ -1,4 +1,5 @@
 open Base
+module Set = Set.Poly
 open Common
 module F = Frontend
 module Ip4 = Ipset.Ip4
@@ -33,7 +34,7 @@ let gen_targets targets =
   let (effect, target) = List.fold_left ~init:([], Ir.Pass) ~f:gen_target targets in
   (List.rev effect, target)
 
-let list2ints l =
+let list2ints : F.data list -> int list = fun l ->
   List.fold_left ~f:(fun acc ->
       function
       | F.Number (i, _) -> i :: acc
@@ -42,7 +43,7 @@ let list2ints l =
       | F.Id _ -> failwith "No all ids have been expanded correctly"
     ) ~init:[] l
 
-let list2ip l =
+let list2ip : F.data list -> Ip4.elt list * Ip6.elt list = fun l ->
   List.fold_left ~f:(fun (ip4, ip6) -> function
       | F.Number (_, pos) -> parse_error ~pos "Found integer, expected ip address while parsing list item"
       | F.String (_, pos) -> parse_error ~pos "Found string, expected ip address while parsing list item"
@@ -51,7 +52,7 @@ let list2ip l =
       | F.Id _ -> failwith "No all ids have been expanded correctly"
     ) ~init:([], []) l
 
-let list2ids l =
+let list2ids : F.data list -> F.id list = fun l ->
   List.fold_left ~f:(fun acc ->
       function
       | F.Number (_, pos) -> parse_error ~pos "Found integer, expected id while parsing list item"
@@ -60,7 +61,7 @@ let list2ids l =
       | F.Id id -> id :: acc
     ) ~init:[] l
 
-let list2string l =
+let list2string : F.data list -> (string * Lexing.position) list = fun l ->
   List.fold_left ~f:(fun acc ->
       function
       | F.Number (_, pos) -> parse_error ~pos "Found integer, expected string while parsing list item"
@@ -77,7 +78,7 @@ let process_rule _table (rules, targets') =
     | F.State(states, neg) :: xs ->
         gen_op targets ((Ir.State( list2ids states |> List.map ~f:State.of_string |> State.of_list), neg) :: acc) xs
     | F.Filter(dir, F.Ports(port_type, ports), neg) :: xs ->
-        gen_op targets ( (Ir.Ports(Ir.Direction.of_string dir, Ir.Port_type.of_string port_type, list2ints ports |> Set.Poly.of_list), neg) :: acc ) xs
+        gen_op targets ( (Ir.Ports(Ir.Direction.of_string dir, Ir.Port_type.of_string port_type, list2ints ports |> Set.of_list), neg) :: acc ) xs
     | F.Filter(dir, F.Address(ips), neg) :: xs ->
         (* Split into ipv4 and ipv6 *)
         let (ip4, ip6) = list2ip ips in
@@ -89,19 +90,19 @@ let process_rule _table (rules, targets') =
         ] "Rule"
     | F.Filter(dir, F.FZone(ids), neg) :: xs ->
         gen_op targets ((Ir.Zone(Ir.Direction.of_string dir,
-                                 list2ids ids |> List.map ~f:fst |> Set.Poly.of_list), neg) :: acc) xs
-    | F.Protocol (l, p, neg) :: xs ->
-        let protocols = list2string p |> List.map ~f:Ir.Protocol.of_string |> Set.Poly.of_list in
-        gen_op targets ((Ir.Protocol(l, protocols), neg) :: acc) xs
+                                 list2ids ids |> List.map ~f:fst |> Set.of_list), neg) :: acc) xs
+    | F.Protocol (p, neg) :: xs ->
+        let protocols = list2string p |> List.map ~f:fst |> Set.of_list in
+        gen_op targets ((Ir.Protocol protocols, neg) :: acc) xs
     | F.Icmp6 (types, neg) :: xs ->
-        let types = list2ints types |> Set.Poly.of_list in
+        let types = list2ints types |> Set.of_list in
         gen_op targets ((Ir.Icmp6 types, neg) :: acc) xs
     | F.Icmp4 (types, neg) :: xs ->
-        let types = list2ints types |> Set.Poly.of_list in
+        let types = list2ints types |> Set.of_list in
         gen_op targets ((Ir.Icmp4 types, neg) :: acc) xs
     | F.TcpFlags (flags, mask, neg) :: xs -> begin
-        let flags' = list2string flags |> List.map ~f:Ir.Tcp_flags.of_string |> Set.Poly.of_list in
-        let mask' = list2string mask |> List.map ~f:Ir.Tcp_flags.of_string |> Set.Poly.of_list in
+        let flags' = list2string flags |> List.map ~f:Ir.Tcp_flags.of_string |> Set.of_list in
+        let mask' = list2string mask |> List.map ~f:Ir.Tcp_flags.of_string |> Set.of_list in
 
         (* Test that flags are all in mask *)
         match Set.is_subset flags' ~of_:mask' with
@@ -111,7 +112,7 @@ let process_rule _table (rules, targets') =
             gen_op targets ((Ir.TcpFlags (flags', mask'), neg) :: acc) xs
       end
     | F.Hoplimit (limits, neg) :: xs ->
-        let limits = list2ints limits |> Set.Poly.of_list in
+        let limits = list2ints limits |> Set.of_list in
         gen_op targets ((Ir.Hoplimit limits, neg) :: acc) xs
     | F.True :: xs ->
         gen_op targets ((Ir.True, false) :: acc) xs
@@ -123,6 +124,7 @@ let process_rule _table (rules, targets') =
       let cont = Chain.replace cont.Ir.id (([], [], Ir.Jump rule_chain.Ir.id) :: cont.Ir.rules) cont.Ir.comment in
       Chain.create [ (acc, [], Ir.Jump cont.Ir.id) ] "Rule"
     | F.Reference _ :: _ -> parse_error "Reference to definition not expected"
+    | F.Type tpe :: xs -> gen_op targets ((Ir.Ip_type tpe, false) :: acc) xs
     | [] ->
         let (effects, target) = gen_targets targets in
         Chain.create [ (acc, effects, target) ] "Rule"

@@ -48,13 +48,14 @@ and filter_stm = Address of data list
 
 and rule_stm = Filter of id * filter_stm * Ir.pol
              | State of data list * Ir.pol
-             | Protocol of Ir.Protocol.layer * data list * Ir.pol
+             | Protocol of data list * Ir.pol
              | Icmp6 of data list * Ir.pol
              | Icmp4 of data list * Ir.pol
              | Rule of rule_stm list * policytype list
              | Reference of id * bool
              | TcpFlags of data list * data list * Ir.pol
              | Hoplimit of data list * Ir.pol
+             | Type of Ir.ip_type
              | True
              | False
 

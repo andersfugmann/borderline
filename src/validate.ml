@@ -129,7 +129,7 @@ let expand nodes =
       | F.Filter (dir, F.Ports (port_type, ports), pol) -> F.Filter (dir, F.Ports (port_type, expand_list seen ports), pol)
       | F.Filter (dir, F.FZone zones, pol) -> F.Filter (dir, F.FZone (expand_zone_list seen zones), pol)
       | F.Filter (dir, F.Address addr_list, pol) -> F.Filter (dir, F.Address (expand_list seen addr_list), pol)
-      | F.Protocol (l, protos, pol) -> F.Protocol (l, expand_list seen protos, pol)
+      | F.Protocol (protos, pol) -> F.Protocol (expand_list seen protos, pol)
       | F.Icmp6 (types, pol) -> F.Icmp6 (expand_list seen types, pol)
       | F.Icmp4 (types, pol) -> F.Icmp4 (expand_list seen types, pol)
       | F.State _ as state -> state
@@ -138,6 +138,7 @@ let expand nodes =
       | F.Hoplimit (limits, pol) -> F.Hoplimit (expand_list seen limits, pol)
       | F.True -> F.True
       | F.False -> F.False
+      | F.Type t -> F.Type t (* Maybe this should be transport = [ipv4 | ipv6]*)
     in
     match rules with
     | F.Reference (id, neg) :: xs ->

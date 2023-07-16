@@ -6,7 +6,7 @@
 %token ALLOW DENY REJECT LOG COUNTER USER_CHAIN
 %token POLICY
 %token ADDRESS STATE USE
-%token SEMI IPV4 IPV6
+%token SEMI IPV4 IPV6 PROTOCOL
 %token PORT ICMP6 ICMP4 TCPFLAGS TRUE FALSE HOPLIMIT
 %token EQ NE NOT APPEND
 
@@ -64,8 +64,9 @@ rule_stm:
   | USE id=id                                     { Frontend.Reference (id, false) }
   | d=id f=filter_stm                             { Frontend.Filter (d, fst f, snd f) }
   | STATE o=oper states=data_list                 { Frontend.State (states, o) }
-  | IPV4 o=oper d=data_list                       { Frontend.Protocol (Ir.Protocol.Ip4, d, o) }
-  | IPV6 o=oper d=data_list                       { Frontend.Protocol (Ir.Protocol.Ip6, d, o) }
+  | PROTOCOL o=oper d=data_list                   { Frontend.Protocol (d, o) }
+  | IPV4                                          { Frontend.Type Ir.Ipv4 }
+  | IPV6                                          { Frontend.Type Ir.Ipv6 }
   | ICMP6 o=oper d=data_list                      { Frontend.Icmp6 (d, o) }
   | ICMP4 o=oper d=data_list                      { Frontend.Icmp4 (d, o) }
   | HOPLIMIT o=oper d=data_list                   { Frontend.Hoplimit (d, o) }

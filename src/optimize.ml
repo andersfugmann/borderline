@@ -2,6 +2,7 @@ open Base
 open Stdio
 open Ir
 open Poly
+module Set = Set.Poly
 module Ip6 = Ipset.Ip6
 module Ip4 = Ipset.Ip4
 (** Define the saving in conditions when inlining. *)
@@ -83,7 +84,7 @@ let merge_oper ?(tpe=`Inter) a b =
   let merge_states = merge State.intersect State.union State.diff in
   let merge_ip6sets = merge Ip6.intersect Ip6.union Ip6.diff in
   let merge_ip4sets = merge Ip4.intersect Ip4.union Ip4.diff in
-  let merge_sets a b = merge Set.Poly.inter Set.union Set.diff a b in
+  let merge_sets a b = merge Set.inter Set.union Set.diff a b in
   match a, b with
   | (Interface (dir, is), neg), (Interface (dir', is'), neg') when dir = dir' ->
       let (is'', neg'') = merge_sets (is, neg) (is', neg') in
@@ -94,9 +95,9 @@ let merge_oper ?(tpe=`Inter) a b =
   | (Ports (dir, pt, ports), neg), (Ports (dir', pt', ports'), neg') when dir = dir' && pt = pt' ->
       let (ports'', neg'') = merge_sets (ports, neg) (ports', neg') in
       (Ports (dir, pt, ports''), neg'') |> Option.some
-  | (Protocol (l, p), neg), (Protocol (l', p'), neg') when l = l' ->
+  | (Protocol (p), neg), (Protocol (p'), neg') ->
       let (p'', neg'') = merge_sets (p, neg) (p', neg') in
-      (Protocol (l, p''), neg'') |> Option.some
+      (Protocol (p''), neg'') |> Option.some
   | (Icmp6 types, neg), (Icmp6 types', neg') ->
       let (types'', neg'') = merge_sets (types, neg) (types', neg') in
       (Icmp6 types'', neg'') |> Option.some
@@ -115,7 +116,7 @@ let merge_oper ?(tpe=`Inter) a b =
   | (TcpFlags (f, m), false), (TcpFlags (f', m'), false) -> begin
       let set_flags = Set.union f f' in
       let unset_flags = Set.union (Set.diff m f) (Set.diff m' f') in
-      match Set.Poly.inter set_flags unset_flags |> Set.is_empty with
+      match Set.inter set_flags unset_flags |> Set.is_empty with
       | true ->
           Some (TcpFlags (set_flags, Set.union m m'), false)
       | false -> Some (True, true)
@@ -302,61 +303,112 @@ let reorder rules =
   in
   reorder_rules [] rules
 
+type protocol_state = {
+  neg: bool;
+  l4: string Set.t;
+}
+type protocol_states = {
+  ipv4 : protocol_state;
+  ipv6 : protocol_state;
+}
+
+(* Need to construct for both tcp4 and tcp6 *)
 let filter_protocol chain =
-  let expand (l, p) = Set.to_list p |> List.map ~f:(fun p -> (l, p) ) in
-  let all =
-    (expand (Protocol.Ip4, Protocol.all)) @
-    (expand (Protocol.Ip6, Protocol.all))
-    |> Set.Poly.of_list
+  let merge state state' =
+    let inner state state' =
+      match state, state' with
+      | { neg = false; l4 }, { neg = false; l4 = l4' } ->
+        let l4 = Set.inter l4 l4' in
+        { neg = false; l4 }
+      | { neg = false; l4 }, { neg = true; l4 = l4' } ->
+        let l4 = Set.diff l4 l4' in
+        { neg = false; l4 }
+      | { neg = true; l4 }, { neg = false; l4 = l4' } ->
+        let l4 = Set.diff l4' l4 in
+        { neg = false; l4 }
+      | { neg = true; l4 }, { neg = true; l4 = l4' } ->
+        let l4 = Set.union l4 l4' in
+        { neg = true; l4 }
+    in
+    let ipv4 = inner state.ipv4 state'.ipv4 in
+    let ipv6 = inner state.ipv4 state'.ipv6 in
+    { ipv4; ipv6 }
+  in
+  let is_empty = function
+    | { ipv4 = { neg = false; l4 }; ipv6 = { neg = false; l4 = l4' } } ->
+      Set.is_empty l4 && Set.is_empty l4'
+    | _ -> false
+  in
+  let any = ([], true) in
+  let none = ([], false) in
+  (* Any or none??? If ipv4 is not mentioned, should it be excluded? *)
+  let make_state ~ipv4 ~ipv6 =
+    let ip4, neg4 = ipv4 in
+    let ip6, neg6 = ipv6 in
+    {
+      ipv4 = { neg = neg4; l4 = Set.of_list ip4 };
+      ipv6 = { neg = neg6; l4 = Set.of_list ip6 }
+    }
+  in
+  let to_protocol = function
+    | Ir.Protocol l4, neg -> { ipv4 = { l4; neg }; ipv6 = { l4; neg } }
+    | Ir.True, _ -> make_state ~ipv4:any ~ipv6:any
+    | Ir.Interface (_,_), _ -> make_state ~ipv4:any ~ipv6:any
+    | Ir.If_group (_,_), _ -> make_state ~ipv4:any ~ipv6:any
+    | Ir.Zone (_,_), _ -> make_state ~ipv4:any ~ipv6:any
+    | Ir.State _, _ -> make_state ~ipv4:any ~ipv6:any
+    | Ir.Ports (_, Ir.Port_type.Tcp, _), _ -> make_state ~ipv4:(["tcp"], false) ~ipv6:(["tcp"], false)
+    | Ir.Ports (_,Ir.Port_type.Udp, _), _ -> make_state ~ipv4:(["udp"], false) ~ipv6:(["udp"], false)
+    | Ir.Ip6Set (_,_), false -> make_state ~ipv4:none ~ipv6:any
+    | Ir.Ip6Set (_,_), true -> make_state ~ipv4:any ~ipv6:any
+    | Ir.Ip4Set (_,_), false -> make_state ~ipv4:any ~ipv6:none
+    | Ir.Ip4Set (_,_), true -> make_state ~ipv4:any ~ipv6:any
+    | Ir.Icmp6 _, _ -> make_state ~ipv4:none ~ipv6:(["ipv6-icmp"], false)
+    | Ir.Icmp4 _, _ -> make_state ~ipv4:(["icmp"], false) ~ipv6:none
+    | Ir.Hoplimit _, _ -> make_state ~ipv4:none ~ipv6:any
+    | Ir.Mark (_,_), _ -> make_state ~ipv4:any ~ipv6:any
+    | Ir.TcpFlags (_,_), _ -> make_state ~ipv4:(["tcp"], false) ~ipv6:(["tcp"], false)
+    | Ir.Ip_type Ir.Ipv4, true
+    | Ir.Ip_type Ir.Ipv6, false -> make_state ~ipv4:none ~ipv6:any
+    | Ir.Ip_type Ir.Ipv4, false
+    | Ir.Ip_type Ir.Ipv6, true -> make_state ~ipv4:any ~ipv6:none
+  in
+  let get_protocols rules =
+     List.map ~f:to_protocol rules
+     |> List.fold_left ~f:merge ~init:(make_state ~ipv4:any ~ipv6:any)
+  in
+  let equal_protocols p p' =
+    let state_equal { neg; l4 } { neg = neg'; l4 = l4' } =
+      neg = neg' && Set.equal l4 l4'
+    in
+    state_equal p.ipv4 p'.ipv4 &&
+    state_equal p.ipv6 p'.ipv6
   in
 
-  let to_protocol = function
-    | Ir.Protocol (Protocol.Ip4, p), true ->
-        (expand (Protocol.Ip4, Set.diff Protocol.all p)) @
-        (expand (Protocol.Ip6, Protocol.all)) |> Set.Poly.of_list
-    | Ir.Protocol (Protocol.Ip6, p), true ->
-        (expand (Protocol.Ip6, Set.diff Protocol.all p)) @
-        (expand (Protocol.Ip4, Protocol.all)) |> Set.Poly.of_list
-    | Ir.Protocol (l, p), false -> expand (l, p) |> Set.Poly.of_list
-    | Ir.True, _ -> all
-    | Ir.Interface (_,_), _ -> all
-    | Ir.If_group (_,_), _ -> all
-    | Ir.Zone (_,_), _ -> all
-    | Ir.State _, _ -> all
-    | Ir.Ports (_, Ir.Port_type.Tcp, _), false -> [
-        Ir.Protocol.Ip4, Ir.Protocol.Tcp;
-        Ir.Protocol.Ip6, Ir.Protocol.Tcp;
-      ] |> Set.Poly.of_list
-    | Ir.Ports (_,Ir.Port_type.Udp, _), false -> [
-        Ir.Protocol.Ip4, Ir.Protocol.Udp;
-        Ir.Protocol.Ip6, Ir.Protocol.Udp;
-      ] |> Set.Poly.of_list
-    | Ir.Ports (_, _ , _), true -> all
-    | Ir.Ip6Set (_,_), false ->
-        expand (Ir.Protocol.Ip6, Ir.Protocol.all) |> Set.Poly.of_list
-    | Ir.Ip6Set (_,_), true -> all
-    | Ir.Ip4Set (_,_), false ->
-        expand (Ir.Protocol.Ip4, Ir.Protocol.all)  |> Set.Poly.of_list
-    | Ir.Ip4Set (_,_), true -> all
-    | Ir.Icmp6 _, _ -> Set.Poly.singleton (Ir.Protocol.Ip6, Ir.Protocol.Icmp)
-    | Ir.Icmp4 _, _ -> Set.Poly.singleton (Ir.Protocol.Ip4, Ir.Protocol.Icmp)
-    | Ir.Hoplimit _, _ -> expand (Protocol.Ip6, Protocol.all) |> Set.Poly.of_list
-    | Ir.Mark (_,_), _ -> all
-    | Ir.TcpFlags (_,_), _ -> [
-        Ir.Protocol.Ip6, Ir.Protocol.Tcp;
-        Ir.Protocol.Ip4, Ir.Protocol.Tcp;
-      ] |> Set.Poly.of_list
+  let remove_reduntant_protocol protocols (rules, effect, target) =
+    let rec inner acc = function
+      | (Ir.Protocol _, _  | Ir.Ip_type _, _ ) :: rules when
+          equal_protocols protocols (get_protocols (acc @ rules)) ->
+        printf "p";
+        inner acc rules
+      | rule :: rules -> inner (rule :: acc) rules
+      | [] -> List.rev acc
+    in
+    (inner [] rules, effect, target)
   in
-  let rec filter_chain = function
-    | (rules, effect, target) :: xs -> begin
-        let protocols = List.fold_left ~f:(fun ps r -> Set.Poly.inter ps (to_protocol r)) ~init:all rules in
-        match Set.is_empty protocols with
-        | true -> printf "P"; filter_chain xs
-        | false -> (rules, effect, target) :: filter_chain xs
-      end
-    | [] -> []
+
+
+  let filter (rules, effect, target) =
+    let protocols =
+          List.map ~f:to_protocol rules
+          |> List.fold_left ~f:merge ~init:(make_state ~ipv4:any ~ipv6:any)
+    in
+    if (is_empty protocols) then printf "P";
+    Some (rules, effect, target)
+    |> Option.filter ~f:(fun _ -> not (is_empty protocols))
+    |> Option.map ~f:(remove_reduntant_protocol protocols)
   in
-  filter_chain chain
+  List.filter_map ~f:filter chain
 
 (** Inline chains that satifies p *)
 let rec inline cost_f chains =
@@ -515,9 +567,9 @@ module Test = struct
 
   let unittest = "Optimize" >::: [
       "merge_diff" >:: begin fun _ ->
-        let expect = Ir.Zone (Ir.Direction.Source, ["int"] |> Set.Poly.of_list), false in
-        let a = Ir.Zone (Ir.Direction.Source, ["int"; "ext"] |> Set.Poly.of_list), false in
-        let b = Ir.Zone (Ir.Direction.Source, ["ext"; "other"] |> Set.Poly.of_list), false in
+        let expect = Ir.Zone (Ir.Direction.Source, ["int"] |> Set.of_list), false in
+        let a = Ir.Zone (Ir.Direction.Source, ["int"; "ext"] |> Set.of_list), false in
+        let b = Ir.Zone (Ir.Direction.Source, ["ext"; "other"] |> Set.of_list), false in
         let res = merge_oper ~tpe:`Diff a b
         in
         assert_equal ~cmp:eq_cond_opt ~msg:"Wrong result" res (Some expect);
