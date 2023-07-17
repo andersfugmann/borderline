@@ -294,7 +294,7 @@ let emit rules =
     Hashtbl.to_alist zones
     |> List.sort ~compare:(fun (_, id) (_, id') -> Int.compare id id')
     |> List.map ~f:(fun (zone, id) ->
-      sprintf "    meta mark 0x%04x comment \"Zone %s\"" id zone)
+      sprintf "   iifname \"%s\" meta mark 0x%04x comment \"Zone %s\"" zone id zone)
   in
   "table inet borderline {" ::
   "  chain zones { " ::

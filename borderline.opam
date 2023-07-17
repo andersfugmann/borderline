@@ -13,6 +13,7 @@ depends: [
   "base"
   "stdio"
   "ppx_deriving"
+  "menhir"
   "odoc" {with-doc}
 ]
 build: [

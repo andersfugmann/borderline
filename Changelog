@@ -4,7 +4,7 @@ Version 1.0.0 (UNRELEASED)
 * Use interface ids for faster packet handling, rather than matching on strings
 * Add option to select interface group.
 * Remove broen vlan matching in zome definition. Use interface groups instead
-* Add 'protocol = [ "s1", "s2" ] to match protocols.
+* Add 'protocol = [ "s1", "s2" ]' to match l4 protocols (udp, tcp etc).
 * Improve rule optimization to remove redundant flags
 * Add classifier "ipv4|ipv6" to match only on ipv4 or ipv6
 
