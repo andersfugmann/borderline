@@ -35,23 +35,27 @@ let chain_name = function
   | Named name -> name
 
 (* TODO Use chain_name *)
-let chain_premable chain =
+let chain_premable chain comment =
   let name = chain_name chain in
   match chain with
   | Ir.Chain_id.Builtin Ir.Chain_type.Pre_routing
   | Builtin Ir.Chain_type.Post_routing ->
-      [ sprintf "chain %s {" name;
-        sprintf "  type nat hook %s priority 0;" name;
-        sprintf "  policy accept;" ]
+    [ sprintf "chain %s {" name;
+      sprintf "  comment \"%s\"" comment;
+      sprintf "  type nat hook %s priority 0;" name;
+      sprintf "  policy accept;" ]
   | Builtin Ir.Chain_type.Input
   | Builtin Ir.Chain_type.Output
   | Builtin Ir.Chain_type.Forward ->
-      [ sprintf "chain %s {" name;
-        sprintf "  type filter hook %s priority 0;" name;
-        sprintf "  policy drop;" ]
+    [ sprintf "chain %s {" name;
+      sprintf "  comment \"%s\"" comment;
+      sprintf "  type filter hook %s priority 0;" name;
+      sprintf "  policy drop;" ]
   | Temporary _
   | Named _ ->
-      [ sprintf "chain %s {" name ]
+    [ sprintf "chain %s {" name;
+      sprintf "  comment \"%s\"" comment;
+    ]
 
 let string_of_tcpflag = function
   | Ir.Tcp_flags.Syn -> "syn"
@@ -268,9 +272,8 @@ let emit_chain { Ir.id; rules; comment } =
     List.concat_map ~f:expand_rule rules
     |> List.map ~f:gen_rule
   in
-  let premable = chain_premable id in
-
-  [ "#" ^ comment ] @ premable @ rules @ [ "}" ]
+  let premable = chain_premable id comment in
+  premable @ rules @ [ "}" ]
 
 
 let emit_filter_rules (chains : (Ir.Chain_id.t, Ir.chain, 'a) Map.t) : string list =
@@ -287,4 +290,15 @@ let emit_nat_rules rules =
   |> emit_chain
 
 let emit rules =
-  "table inet borderline {" :: rules @ [ "}" ]
+  let zones =
+    Hashtbl.to_alist zones
+    |> List.sort ~compare:(fun (_, id) (_, id') -> Int.compare id id')
+    |> List.map ~f:(fun (zone, id) ->
+      sprintf "    meta mark 0x%04x comment \"Zone %s\"" id zone)
+  in
+  "table inet borderline {" ::
+  "  chain zones { " ::
+  "    comment \"zone ids\"" :: zones @
+  ["  }"] @
+  rules @
+  [ "}" ]
