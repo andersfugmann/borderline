@@ -1,5 +1,6 @@
 (** Intermidiate representation. *)
 open Base
+module Set = Set.Poly
 
 open Common
 module Ip6 = Ipset.Ip6
@@ -79,20 +80,20 @@ module Reject = struct
 end
 
 
-type condition = Interface of Direction.t * id Set.Poly.t
-               | If_group of Direction.t * [`Int of int | `String of string] Set.Poly.t
-               | Zone of Direction.t * zone Set.Poly.t
+type condition = Interface of Direction.t * id Set.t
+               | If_group of Direction.t * [`Int of int | `String of string] Set.t
+               | Zone of Direction.t * zone Set.t
                | State of State.t
-               | Ports of Direction.t * Port_type.t * int Set.Poly.t
+               | Ports of Direction.t * Port_type.t * int Set.t
                | Ip6Set of Direction.t * Ip6.t
                | Ip4Set of Direction.t * Ip4.t
-               | Protocol of string Set.Poly.t
-               | Icmp6 of int Set.Poly.t
-               | Icmp4 of int Set.Poly.t
+               | Protocol of string Set.t
+               | Icmp6 of int Set.t
+               | Icmp4 of int Set.t
                | Mark of int * int
-               | TcpFlags of Tcp_flags.t Set.Poly.t * Tcp_flags.t Set.Poly.t
-               | Hoplimit of int Set.Poly.t
-               | Address_family of address_family Set.Poly.t
+               | TcpFlags of Tcp_flags.t Set.t * Tcp_flags.t Set.t
+               | Hoplimit of int Set.t
+               | Address_family of address_family Set.t
                | True
 
 type effect = MarkZone of Direction.t * zone
@@ -116,19 +117,19 @@ type chain = { id: Chain_id.t; rules : oper list; comment: string; }
 let eq_cond (x, n) (y, m) =
   let (=) = Poly.equal in
   let eq = function
-    | Interface (d, s) -> (function Interface (d', s') -> d = d' && Set.Poly.equal s s' | _ -> false)
-    | If_group (d, s) -> (function If_group (d', s') -> d = d' && Set.Poly.equal s s' | _ -> false)
-    | Zone (d, s) -> (function Zone (d', s') -> d = d' && Set.Poly.equal s s' | _ -> false)
+    | Interface (d, s) -> (function Interface (d', s') -> d = d' && Set.equal s s' | _ -> false)
+    | If_group (d, s) -> (function If_group (d', s') -> d = d' && Set.equal s s' | _ -> false)
+    | Zone (d, s) -> (function Zone (d', s') -> d = d' && Set.equal s s' | _ -> false)
     | State s -> (function State s' -> State.equal s s' | _ -> false)
-    | Ports (d, t, s) -> (function Ports (d', t', s') -> d = d' && t = t' && Set.Poly.equal s s' | _ -> false)
+    | Ports (d, t, s) -> (function Ports (d', t', s') -> d = d' && t = t' && Set.equal s s' | _ -> false)
     | Ip6Set (d, s) -> (function Ip6Set (d', s') -> d = d' && Ip6.equal s s' | _ -> false)
     | Ip4Set (d, s) -> (function Ip4Set (d', s') -> d = d' && Ip4.equal s s' | _ -> false)
-    | Protocol s -> (function Protocol s' -> Set.Poly.equal s s' | _ -> false)
-    | Icmp6 s -> (function Icmp6 s' -> Set.Poly.equal s s' | _ -> false)
-    | Icmp4 s -> (function Icmp4 s' -> Set.Poly.equal s s' | _ -> false)
+    | Protocol s -> (function Protocol s' -> Set.equal s s' | _ -> false)
+    | Icmp6 s -> (function Icmp6 s' -> Set.equal s s' | _ -> false)
+    | Icmp4 s -> (function Icmp4 s' -> Set.equal s s' | _ -> false)
     | Mark (m1, m2) -> (function Mark (m1', m2') -> m1 = m1' && m2 = m2' | _ -> false)
-    | TcpFlags (s1, s2) -> (function TcpFlags (s1', s2') -> Set.Poly.equal s1 s1' && Set.Poly.equal s2 s2' | _ -> false)
-    | Hoplimit limit -> (function Hoplimit limit' -> Set.Poly.equal limit limit' | _ -> false)
+    | TcpFlags (s1, s2) -> (function TcpFlags (s1', s2') -> Set.equal s1 s1' && Set.equal s2 s2' | _ -> false)
+    | Hoplimit limit -> (function Hoplimit limit' -> Set.equal limit limit' | _ -> false)
     | True -> (function True -> true | _ -> false)
     | Address_family a -> (function Address_family a' -> Set.equal a a' | _ -> false)
   in
@@ -210,8 +211,8 @@ let is_always value =
   let open Poly in
   function
   | State states, neg -> State.is_empty states && (neg = value)
-  | Zone (_, zs), neg -> Set.Poly.is_empty zs && (neg = value)
-  | Ports (_, _, ps), neg -> Set.Poly.is_empty ps && (neg = value)
+  | Zone (_, zs), neg -> Set.is_empty zs && (neg = value)
+  | Ports (_, _, ps), neg -> Set.is_empty ps && (neg = value)
   | Protocol s, neg -> Set.is_empty s && neg = value
   | TcpFlags (flags, mask), neg -> begin
       match Set.diff flags mask |> Set.is_empty with
@@ -220,11 +221,11 @@ let is_always value =
     end
   | Ip6Set (_, s), neg -> Ip6.is_empty s && (neg = value)
   | Ip4Set (_, s), neg -> Ip4.is_empty s && (neg = value)
-  | Interface (_, ifs), neg -> Set.Poly.is_empty ifs && (neg = value)
-  | If_group (_, if_groups), neg -> Set.Poly.is_empty if_groups && (neg = value)
-  | Icmp6 is, neg -> Set.Poly.is_empty is && (neg = value)
-  | Icmp4 is, neg -> Set.Poly.is_empty is && (neg = value)
-  | Hoplimit cnts, neg -> Set.Poly.is_empty cnts && (neg = value)
+  | Interface (_, ifs), neg -> Set.is_empty ifs && (neg = value)
+  | If_group (_, if_groups), neg -> Set.is_empty if_groups && (neg = value)
+  | Icmp6 is, neg -> Set.is_empty is && (neg = value)
+  | Icmp4 is, neg -> Set.is_empty is && (neg = value)
+  | Hoplimit cnts, neg -> Set.is_empty cnts && (neg = value)
   | True, neg -> not neg = value
   | Mark (0, 0), neg -> neg <> value
   | Mark (_, 0), neg -> neg = value

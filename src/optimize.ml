@@ -1,8 +1,8 @@
 open Base
+module Set = Set.Poly
 open Stdio
 open Ir
 open Poly
-module Set = Set.Poly
 module Ip6 = Ipset.Ip6
 module Ip4 = Ipset.Ip4
 (** Define the saving in conditions when inlining. *)

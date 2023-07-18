@@ -14,7 +14,7 @@ let zone_mask = 1 lsl zone_bits - 1
 let zones = Hashtbl.Poly.create ~size:100 ()
 
 let get_zone_id zone =
-  match Hashtbl.Poly.find zones zone with
+  match Hashtbl.find zones zone with
   | Some id -> id
   | None ->
     let id = 1 lsl (Hashtbl.length zones) in
@@ -111,7 +111,7 @@ let gen_cond neg cond =
         | Ir.Direction.Source -> 0
         | Ir.Direction.Destination -> zone_bits
       in
-      let mask = Set.Poly.fold ~f:(fun acc zone ->
+      let mask = Set.fold ~f:(fun acc zone ->
           let zone_id = get_zone_id zone in
           let zone_val = zone_id lsl shift in
           acc + zone_val) zones ~init:0

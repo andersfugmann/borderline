@@ -1,9 +1,7 @@
 (* Function for validating the AST *)
 open Base
-
 open Common
 module F = Frontend
-
 
 (** To make sure the graph does not contain any cycles, a list of
     visited nodes (id's) is maintained. The \verb|mark_seen| function
@@ -111,7 +109,7 @@ let expand nodes =
   in
 
   let rec expand_zone_list seen = function
-    | (F.Id (id, _)) as x :: xs when Set.Poly.mem zones id -> x :: expand_zone_list seen xs
+    | (F.Id (id, _)) as x :: xs when Set.mem zones id -> x :: expand_zone_list seen xs
     | F.Id id :: xs -> (expand_zone_list (mark_seen (fst id) seen) (expand id)) @ (expand_zone_list seen xs)
     | F.Number (_, pos) :: _ -> parse_error ~pos "Find integer, expected zone name"
     | F.Ip (_, pos) :: _ -> parse_error ~pos "Found ip address, expected zone name"
