@@ -2,3 +2,11 @@
  (names        borderline bl_configure unit_test)
  (public_names borderline bl_configure unit_test)
  (libraries    borderline_lib base stdio))
+
+(rule
+ (alias runtest)
+ (deps
+  (:test unit_test.exe))
+ (action
+  (run %{test}))
+ (package borderline))
