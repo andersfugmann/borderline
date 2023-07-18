@@ -6,7 +6,7 @@ Version 1.0.0 (UNRELEASED)
 * Remove broen vlan matching in zome definition. Use interface groups instead
 * Add 'protocol = [ "s1", "s2" ]' to match l4 protocols (udp, tcp etc).
 * Improve rule optimization to remove redundant flags
-* Add classifier "ipv4|ipv6" to match only on ipv4 or ipv6
+* Add "address family = { ipv4, ipv6 }" to match address family
 
 Version 0.99 (2016-01-16)
 * Add IPv4 support!

@@ -191,8 +191,15 @@ let gen_cond neg cond =
       string_of_int_set limits
       |> sprintf "ip6 hoplimit { %s }"
     in rule, None
-  | Ir.Ip_type Ir.Ipv4 -> "meta protocol ip", None
-  | Ir.Ip_type Ir.Ipv6 -> "meta protocol ip6", None
+  | Ir.Address_family a ->
+    let proto = match Set.to_list a with
+      | [Ir.Ipv4] when not neg -> "ip"
+      | [Ir.Ipv6] when neg -> "ip"
+      | [Ir.Ipv6] when not neg -> "ip6"
+      | [Ir.Ipv4] when neg -> "ip6"
+      | _ -> failwith "Address family must be either ipv4 or ipv6"
+    in
+    sprintf "meta protocol %s" proto, None
   | Ir.True when neg ->
       (* Any false statement *)
       "meta mark | 0x1 == 0x0", None

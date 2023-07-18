@@ -69,7 +69,7 @@ define common = {
 	 rule {
              use external_dhcp; #if
              rule {
-                ipv6;
+                address family = ipv6;
                 protocol = [ "udp" ];
                 source address = local;
 	        destination address = local;
@@ -78,7 +78,7 @@ define common = {
 		destination udp port = dhcpv6-client;
              } policy log_allow;
              rule {
-                ipv4;
+                address family = ipv4;
                 protocol = [ "udp" ];
                 destination zone = self;
 		source udp port = bootps;

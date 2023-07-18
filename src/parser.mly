@@ -1,11 +1,12 @@
 %{
-%}
+    %}
+(* Restrict to address family *)
 %token ZONE PROCESS RULE IMPORT
 %token DEFINE
 %token NETWORK INTERFACE GROUP SNAT
 %token ALLOW DENY REJECT LOG COUNTER USER_CHAIN
 %token POLICY
-%token ADDRESS STATE USE
+%token ADDRESS FAMILY STATE USE
 %token SEMI IPV4 IPV6 PROTOCOL
 %token PORT ICMP6 ICMP4 TCPFLAGS TRUE FALSE HOPLIMIT
 %token EQ NE NOT APPEND
@@ -65,8 +66,7 @@ rule_stm:
   | d=id f=filter_stm                             { Frontend.Filter (d, fst f, snd f) }
   | STATE o=oper states=data_list                 { Frontend.State (states, o) }
   | PROTOCOL o=oper d=data_list                   { Frontend.Protocol (d, o) }
-  | IPV4                                          { Frontend.Type Ir.Ipv4 }
-  | IPV6                                          { Frontend.Type Ir.Ipv6 }
+  | ADDRESS FAMILY o=oper d=address_family_list   { Frontend.Address_family (d, o) }
   | ICMP6 o=oper d=data_list                      { Frontend.Icmp6 (d, o) }
   | ICMP4 o=oper d=data_list                      { Frontend.Icmp4 (d, o) }
   | HOPLIMIT o=oper d=data_list                   { Frontend.Hoplimit (d, o) }
@@ -110,13 +110,20 @@ oper:
 data_list:
   | LBRACKET data=separated_list_opt(COMMA, data) RBRACKET { data }
   | data=data                                              { [data] }
-;
 
 data:
   | i=INT                                              { let n, pos = i in Frontend.Number (n, pos) }
   | id=id                                              { Frontend.Id id }
   | ip=ip                                              { Frontend.Ip (fst ip, snd ip) }
   | s=QUOTE                                            { let s, pos = s in Frontend.String (s, pos) }
+
+address_family_list:
+  | LBRACKET data=separated_list_opt(COMMA, address_family) RBRACKET { data }
+  | data=address_family                                              { [ data ] }
+
+address_family:
+  | IPV4 { Ir.Ipv4 }
+  | IPV6 { Ir.Ipv6 }
 
 bool:
   | TRUE

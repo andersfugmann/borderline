@@ -124,7 +124,9 @@ let process_rule _table (rules, targets') =
       let cont = Chain.replace cont.Ir.id (([], [], Ir.Jump rule_chain.Ir.id) :: cont.Ir.rules) cont.Ir.comment in
       Chain.create [ (acc, [], Ir.Jump cont.Ir.id) ] "Rule"
     | F.Reference _ :: _ -> parse_error "Reference to definition not expected"
-    | F.Type tpe :: xs -> gen_op targets ((Ir.Ip_type tpe, false) :: acc) xs
+    | F.Address_family (address_family, neg) :: xs ->
+      let set = Set.of_list address_family in
+      gen_op targets ((Ir.Address_family set, neg) :: acc) xs
     | [] ->
         let (effects, target) = gen_targets targets in
         Chain.create [ (acc, effects, target) ] "Rule"

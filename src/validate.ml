@@ -138,7 +138,7 @@ let expand nodes =
       | F.Hoplimit (limits, pol) -> F.Hoplimit (expand_list seen limits, pol)
       | F.True -> F.True
       | F.False -> F.False
-      | F.Type t -> F.Type t (* Maybe this should be transport = [ipv4 | ipv6]*)
+      | F.Address_family (a, pol) -> F.Address_family (a, pol)
     in
     match rules with
     | F.Reference (id, neg) :: xs ->

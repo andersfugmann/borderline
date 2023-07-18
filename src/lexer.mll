@@ -49,6 +49,7 @@ rule token = parse
   | "icmp4"        { Parser.ICMP4 }
   | "state"        { Parser.STATE }
   | "address"      { Parser.ADDRESS }
+  | "family"       { Parser.FAMILY }
   | "protocol"     { Parser.PROTOCOL }
   | "use"          { Parser.USE }
   | "ipv4"         { Parser.IPV4 }

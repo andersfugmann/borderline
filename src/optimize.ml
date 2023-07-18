@@ -364,10 +364,16 @@ let filter_protocol chain =
     | Ir.Hoplimit _, _ -> make_protocol_state ~ipv4:none ~ipv6:any
     | Ir.Mark (_,_), _ -> make_protocol_state ~ipv4:any ~ipv6:any
     | Ir.TcpFlags (_,_), _ -> make_protocol_state ~ipv4:(["tcp"], false) ~ipv6:(["tcp"], false)
-    | Ir.Ip_type Ir.Ipv4, true
-    | Ir.Ip_type Ir.Ipv6, false -> make_protocol_state ~ipv4:none ~ipv6:any
-    | Ir.Ip_type Ir.Ipv4, false
-    | Ir.Ip_type Ir.Ipv6, true -> make_protocol_state ~ipv4:any ~ipv6:none
+    | Ir.Address_family a, neg ->
+      let gen = function
+        | true, true -> none
+        | false, true -> any
+        | true, false -> any
+        | false, false -> none
+      in
+      let ipv4 = gen (Set.mem a Ir.Ipv4, neg) in
+      let ipv6 = gen (Set.mem a Ir.Ipv6, neg) in
+      make_protocol_state ~ipv4 ~ipv6
   in
   let get_protocols rules =
      List.map ~f:to_protocol rules
@@ -383,7 +389,7 @@ let filter_protocol chain =
 
   let remove_reduntant_protocol protocols (rules, effect, target) =
     let rec inner acc = function
-      | (Ir.Protocol _, _  | Ir.Ip_type _, _ ) :: rules when
+      | (Ir.Protocol _, _  | Ir.Address_family _, _ ) :: rules when
           equal_protocols protocols (get_protocols (acc @ rules)) ->
         printf "p";
         inner acc rules

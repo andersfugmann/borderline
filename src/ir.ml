@@ -10,7 +10,7 @@ type zone = id
 type mask = int
 type prefix = string
 
-type ip_type = Ipv4 | Ipv6
+type address_family = Ipv4 | Ipv6
 
 module Chain_type = struct
   type t = Input | Output | Forward | Pre_routing | Post_routing [@@deriving compare, sexp]
@@ -92,7 +92,7 @@ type condition = Interface of Direction.t * id Set.Poly.t
                | Mark of int * int
                | TcpFlags of Tcp_flags.t Set.Poly.t * Tcp_flags.t Set.Poly.t
                | Hoplimit of int Set.Poly.t
-               | Ip_type of ip_type
+               | Address_family of address_family Set.Poly.t
                | True
 
 type effect = MarkZone of Direction.t * zone
@@ -130,7 +130,7 @@ let eq_cond (x, n) (y, m) =
     | TcpFlags (s1, s2) -> (function TcpFlags (s1', s2') -> Set.Poly.equal s1 s1' && Set.Poly.equal s2 s2' | _ -> false)
     | Hoplimit limit -> (function Hoplimit limit' -> Set.Poly.equal limit limit' | _ -> false)
     | True -> (function True -> true | _ -> false)
-    | Ip_type t -> (function Ip_type t' -> t = t' | _ -> false)
+    | Address_family a -> (function Address_family a' -> Set.equal a a' | _ -> false)
   in
   Bool.equal n m && eq x y
 
@@ -179,7 +179,7 @@ let get_dir = function
   | TcpFlags _ -> None
   | Hoplimit _ -> None
   | True -> None
-  | Ip_type _ -> None
+  | Address_family _ -> None
 
 let enumerate_cond = function
   | Interface _ -> 1
@@ -192,7 +192,7 @@ let enumerate_cond = function
   | Protocol _ -> 7
   | Icmp6 _ -> 8
   | Icmp4 _ -> 9
-  | Ip_type _ -> 10
+  | Address_family _ -> 10
   | TcpFlags _ -> 11
   | Mark _ -> 12
   | Hoplimit _ -> 13
@@ -229,4 +229,5 @@ let is_always value =
   | Mark (0, 0), neg -> neg <> value
   | Mark (_, 0), neg -> neg = value
   | Mark _, _ -> false
-  | Ip_type _, _ -> false
+  | Address_family a, neg ->
+    (Set.length a = 2 && not neg) || Set.is_empty a && neg
