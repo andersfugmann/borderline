@@ -14,10 +14,13 @@
  (synopsis "IPv4 and Ipv6 firewall generator for linux nftables")
  (depends
   (ocaml (>= 4.14.0))
-  (ounit2 :with-test)
+   ounit2
    base
    stdio
+   ipaddr
    ppx_deriving
+   ppx_compare
+   ppx_sexp_conv
    menhir
  )
 )

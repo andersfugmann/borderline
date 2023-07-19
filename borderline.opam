@@ -9,10 +9,13 @@ bug-reports: "https://github.com/andersfugmannn/borderline/issues"
 depends: [
   "dune" {>= "3.9"}
   "ocaml" {>= "4.14.0"}
-  "ounit2" {with-test}
+  "ounit2"
   "base"
   "stdio"
+  "ipaddr"
   "ppx_deriving"
+  "ppx_compare"
+  "ppx_sexp_conv"
   "menhir"
   "odoc" {with-doc}
 ]
