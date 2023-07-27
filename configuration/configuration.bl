@@ -23,7 +23,7 @@ define global_udp_ports = []
 # List of ports accessable on the firewall itself, accessable from the
 # outside.
 
-define public_tcp_ports = [ ssh, smtp, ssmtp, domain, imap, imaps, http, https, ntp, sieve ]
+define public_tcp_ports = [ ssh, smtp, submissions, domain, imap2, imaps, http, https, ntp, sieve ]
 
 define public_udp_ports = [ domain ]
 

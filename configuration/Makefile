@@ -15,7 +15,7 @@ generic/services.bl: /etc/services
 	@echo "Gen     :" $@
 	@egrep -v "^#" $< | while read name number rest; do \
           if [ "$${number##*/}" = "tcp" -o "$${number##*/}" = "udp" ]; then \
-	    for n in $${name} $${rest%#*}; do \
+	    for n in $${name}; do \
               echo "define \"$${n}\" += [ $${number%%/*} ]"; \
             done; \
           fi; \
