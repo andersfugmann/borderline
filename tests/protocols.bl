@@ -1,0 +1,11 @@
+# Test protocol definitions to ensure no name clash
+import "../configuration/generic/l4proto.bl"
+import "../configuration/generic/address_families.bl"
+
+process filter {
+        rule {
+             protocol = ipv6;
+             address family = ipv6;
+             address family = ipv4;
+        } policy allow;
+} policy deny

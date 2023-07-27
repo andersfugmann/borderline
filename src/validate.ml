@@ -10,7 +10,7 @@ module F = Frontend
 *)
 let mark_seen id seen =
   match List.mem ~equal:String.equal seen id with
-  | true  -> parse_error ~id  ( "Cyclic reference.\nReferenced From: " ^ (String.concat ~sep:"," seen))
+  | true  -> parse_errorf ~id "Cyclic reference.\nReferenced From: %s" (String.concat ~sep:"," seen)
   | false -> id :: seen
 
 (** Create a map of defines. While creating the map, make sure that no
@@ -19,10 +19,25 @@ let mark_seen id seen =
     already. If the id was present, a ParseError exception is raised in
     order to stop processing).
 *)
-let add_id_to_map (id, pos) def map =
-  match Map.Poly.mem map id with
-  | true -> parse_error ~id ~pos "Defintion shadows previous definition"
-  | false -> Map.Poly.add_exn ~key:id ~data:def map
+
+(* All positions will be off. We should define equality operations, where we simply ignore lexing positions *)
+
+let equal_data data data' =
+  let get_value = function
+    | F.Number (v, _) -> `Int v
+    | F.Id (id, _) -> `Id id
+    | F.Ip (ip, _) -> `Ip ip
+    | F.String (s, _) -> `String s
+  in
+  let data = List.map ~f:get_value data in
+  let data' = List.map ~f:get_value data' in
+  Poly.equal data data'
+
+let add_id_to_map (id, pos) (def : F.node) map =
+  match Map.Poly.find map id, def with
+  | Some F.DefineList (_, data), F.DefineList (_, data') when equal_data data data' -> map
+  | Some _, _ -> parse_errorf ~pos "Definition redefines previous definition of '%s'" id
+  | None, _ -> Map.Poly.add_exn ~key:id ~data:def map
 
 let extend_id_to_map (id, pos) lst map =
   let create = function
@@ -59,7 +74,7 @@ let expand nodes =
   let defines = create_define_map nodes in
 
   let expand_rules (id, pos) =
-    (* Expand single id reference into something sematically
+    (* Expand single id reference into something semantically
        corect. This allows simple definitions to work as aliases
        for other types of definitions. It is important that the
        function does not resolve the id here, as the system would
@@ -111,9 +126,9 @@ let expand nodes =
   let rec expand_zone_list seen = function
     | (F.Id (id, _)) as x :: xs when Set.mem zones id -> x :: expand_zone_list seen xs
     | F.Id id :: xs -> (expand_zone_list (mark_seen (fst id) seen) (expand id)) @ (expand_zone_list seen xs)
-    | F.Number (_, pos) :: _ -> parse_error ~pos "Find integer, expected zone name"
+    | F.Number (d, pos) :: _ -> parse_errorf ~pos "Found integer '%d', expected zone name" d
     | F.Ip (_, pos) :: _ -> parse_error ~pos "Found ip address, expected zone name"
-    | F.String (_, pos) :: _ -> parse_error ~pos "Found string, expected zone name"
+    | F.String (s, pos) :: _ -> parse_errorf ~pos "Found string \"%s\", expected zone name" s
     | [] -> []
   in
   let rec expand_policy_list seen = function
@@ -136,7 +151,7 @@ let expand nodes =
       | F.Hoplimit (limits, pol) -> F.Hoplimit (expand_list seen limits, pol)
       | F.True -> F.True
       | F.False -> F.False
-      | F.Address_family (a, pol) -> F.Address_family (a, pol)
+      | F.Address_family (address_family, pol) -> F.Address_family (expand_list seen address_family, pol)
     in
     match rules with
     | F.Reference (id, neg) :: xs ->

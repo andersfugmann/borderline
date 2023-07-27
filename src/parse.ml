@@ -3,7 +3,7 @@ open Stdio
 module F = Frontend
 module V = Validate
 
-(** Precompiled regular expressions *)
+(** Precompile regular expressions *)
 let include_regex = Str.regexp "^.*[.]bl$"
 let exclude_regex = Str.regexp "^[.][#~].*$"
 
@@ -12,7 +12,8 @@ let imported = ref (Set.empty (module String))
 let parse file =
   let full_path = (Unix.getcwd ()) ^ "/" ^ file in
   match Set.mem !imported full_path with
-  | true -> []
+  | true ->
+      []
   | false -> begin
       imported := (Set.add !imported full_path);
       eprintf "Parse: %s\n%!" full_path;

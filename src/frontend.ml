@@ -55,7 +55,7 @@ and rule_stm = Filter of id * filter_stm * Ir.pol
              | Reference of id * bool
              | TcpFlags of data list * data list * Ir.pol
              | Hoplimit of data list * Ir.pol
-             | Address_family of Ir.address_family list * Ir.pol
+             | Address_family of data list * Ir.pol
              | True
              | False
 

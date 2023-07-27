@@ -1,0 +1,3 @@
+define ipv4 = "ipv4"
+define ipv6 = "ipv6"
+define any = [ ipv4, ipv6 ]

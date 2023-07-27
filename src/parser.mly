@@ -7,7 +7,7 @@
 %token ALLOW DENY REJECT LOG COUNTER USER_CHAIN
 %token POLICY
 %token ADDRESS FAMILY STATE USE
-%token SEMI IPV4 IPV6 PROTOCOL
+%token SEMI PROTOCOL
 %token PORT ICMP6 ICMP4 TCPFLAGS TRUE FALSE HOPLIMIT
 %token EQ NE NOT APPEND
 
@@ -66,7 +66,7 @@ rule_stm:
   | d=id f=filter_stm                             { Frontend.Filter (d, fst f, snd f) }
   | STATE o=oper states=data_list                 { Frontend.State (states, o) }
   | PROTOCOL o=oper d=data_list                   { Frontend.Protocol (d, o) }
-  | ADDRESS FAMILY o=oper d=address_family_list   { Frontend.Address_family (d, o) }
+  | ADDRESS FAMILY o=oper family=data_list        { Frontend.Address_family (family, o) }
   | ICMP6 o=oper d=data_list                      { Frontend.Icmp6 (d, o) }
   | ICMP4 o=oper d=data_list                      { Frontend.Icmp4 (d, o) }
   | HOPLIMIT o=oper d=data_list                   { Frontend.Hoplimit (d, o) }
@@ -116,14 +116,6 @@ data:
   | id=id                                              { Frontend.Id id }
   | ip=ip                                              { Frontend.Ip (fst ip, snd ip) }
   | s=QUOTE                                            { let s, pos = s in Frontend.String (s, pos) }
-
-address_family_list:
-  | LBRACKET data=separated_list_opt(COMMA, address_family) RBRACKET { data }
-  | data=address_family                                              { [ data ] }
-
-address_family:
-  | IPV4 { Ir.Ipv4 }
-  | IPV6 { Ir.Ipv6 }
 
 bool:
   | TRUE

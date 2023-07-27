@@ -52,8 +52,6 @@ rule token = parse
   | "family"       { Parser.FAMILY }
   | "protocol"     { Parser.PROTOCOL }
   | "use"          { Parser.USE }
-  | "ipv4"         { Parser.IPV4 }
-  | "ipv6"         { Parser.IPV6 }
   | "tcpflags"     { Parser.TCPFLAGS }
   | "hoplimit"     { Parser.HOPLIMIT }
   | "true"         { Parser.TRUE }

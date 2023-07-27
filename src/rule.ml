@@ -38,25 +38,25 @@ let list2ints : F.data list -> int list = fun l ->
   List.fold_left ~f:(fun acc ->
       function
       | F.Number (i, _) -> i :: acc
-      | F.String (_, pos) -> parse_error ~pos "Found string, expected integer while parsing list item"
+      | F.String (s, pos) -> parse_errorf ~pos "Found \"%s\", expected integer while parsing list item" s
       | F.Ip (_, pos) -> parse_error ~pos "Found ip address, expected integer while parsing list item"
-      | F.Id _ -> failwith "No all ids have been expanded correctly"
+      | F.Id (s, pos) -> parse_errorf ~pos "Unable to resolve '%s' to an integer" s
     ) ~init:[] l
 
 let list2ip : F.data list -> Ip4.elt list * Ip6.elt list = fun l ->
   List.fold_left ~f:(fun (ip4, ip6) -> function
-      | F.Number (_, pos) -> parse_error ~pos "Found integer, expected ip address while parsing list item"
-      | F.String (_, pos) -> parse_error ~pos "Found string, expected ip address while parsing list item"
+      | F.Number (d, pos) -> parse_errorf ~pos "Found integer '%d', expected ip address while parsing list item" d
+      | F.String (s, pos) -> parse_errorf ~pos "Found string \"%s\", expected ip address while parsing list item" s
       | F.Ip (F.Ipv6 ip, _) -> ip4, ip :: ip6
       | F.Ip (F.Ipv4 ip, _) -> ip :: ip4, ip6
-      | F.Id _ -> failwith "No all ids have been expanded correctly"
+      | F.Id (s, pos) -> parse_errorf ~pos "Unable to resolve '%s' to an ip address" s
     ) ~init:([], []) l
 
 let list2ids : F.data list -> F.id list = fun l ->
   List.fold_left ~f:(fun acc ->
       function
-      | F.Number (_, pos) -> parse_error ~pos "Found integer, expected id while parsing list item"
-      | F.String (_, pos) -> parse_error ~pos "Found string, expected id while parsing list item"
+      | F.Number (d, pos) -> parse_errorf ~pos "Found integer '%d', expected id while parsing list item" d
+      | F.String (s, pos) -> parse_errorf ~pos "Found string \"%s\", expected id while parsing list item" s
       | F.Ip (_, pos) -> parse_error ~pos "Found ip address, expected id while parsing list item"
       | F.Id id -> id :: acc
     ) ~init:[] l
@@ -64,10 +64,10 @@ let list2ids : F.data list -> F.id list = fun l ->
 let list2string : F.data list -> (string * Lexing.position) list = fun l ->
   List.fold_left ~f:(fun acc ->
       function
-      | F.Number (_, pos) -> parse_error ~pos "Found integer, expected string while parsing list item"
+      | F.Number (d, pos) -> parse_errorf ~pos "Found integer '%d', expected string while parsing list item" d
       | F.String (s, pos) -> (s, pos) :: acc
       | F.Ip (_, pos) -> parse_error ~pos "Found ip address, expected string while parsing list item"
-      | F.Id _ -> failwith "No all ids have been expanded correctly"
+      | F.Id (s, pos) -> parse_errorf ~pos "Unable to resolve '%s' to a string" s
     ) ~init:[] l
 
 let process_rule _table (rules, targets') =
@@ -123,9 +123,13 @@ let process_rule _table (rules, targets') =
       let cont = gen_op targets [] xs in
       let cont = Chain.replace cont.Ir.id (([], [], Ir.Jump rule_chain.Ir.id) :: cont.Ir.rules) cont.Ir.comment in
       Chain.create [ (acc, [], Ir.Jump cont.Ir.id) ] "Rule"
-    | F.Reference _ :: _ -> parse_error "Reference to definition not expected"
-    | F.Address_family (address_family, neg) :: xs ->
-      let set = Set.of_list address_family in
+    | F.Reference ((s, pos), _) :: _ -> parse_errorf ~pos "Reference to definition '%s' not expected" s
+    | F.Address_family (data, neg) :: xs ->
+      let set =
+        list2string data
+        |> List.map ~f:(function "ipv4", _ -> Ir.Ipv4 | "ipv6", _ -> Ir.Ipv6 | s, pos -> parse_errorf ~pos "Unknown address family: %s" s)
+        |> Set.of_list
+      in
       gen_op targets ((Ir.Address_family set, neg) :: acc) xs
     | [] ->
         let (effects, target) = gen_targets targets in

@@ -7,6 +7,9 @@ type id = string
 exception ParseError of (string * id option * Lexing.position option)
 let parse_error ?pos ?id str = raise (ParseError (str, id, pos))
 
+let parse_errorf ?pos ?id fmt =
+  Printf.ksprintf (fun s -> parse_error ?pos ?id s) fmt
+
 let error2string (error, id, pos) =
   let prefix =
     let open Lexing in

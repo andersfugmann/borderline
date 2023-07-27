@@ -58,7 +58,7 @@ generic/l4proto.bl: force
 	@/usr/sbin/nft describe meta l4proto | \
           tail -n +2 | \
           while read name id; do \
-            echo "#define p_$${name} = \"$${name}\""; # $${id}\
+            echo "define $${name} = \"$${name}\""; # $${id}\
           done >> $@
 
 clean:
