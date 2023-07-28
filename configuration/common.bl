@@ -6,46 +6,9 @@ define common = {
     rule { dst zone = mars; } policy log_martian;
     rule { source zone = self; } policy log_allow;
 
-    # Accept router annoucements
-    rule { use link_address; #if
-           icmp6 = [ router-solicitation-6,
-                     router-advertisement-6,
-                     neighbor-solicitation-6,
-                     neighbor-advertisement-6,
-                     redirect-message-6,
-                     multicast-listener-query-6,
-                     indirect-neighbor-solicit-6,
-                     inverse-neighbor-discovery-advertisement-message-6 ];
-           hoplimit = 255;
-           # The recommendation seems wrong. Lets use any packet with our destination.
-           # These packets cannot be routed previously as the hoplimit is required to be 255
-           # destination address = [ ip6_multicast, local ];
-           destination zone = self;
-    } policy log_allow;
-
-    rule { use link_address; #if
-           icmp6 = [ multicast-listener-query-6,
-                     multicast-listener-report-6,
-                     multicast-listener-done-6,
-                     multicast-listener-discovery2-6 ];
-           destination address = [ ip6_multicast, local ];
-           destination zone = self;
-           source address = [ link_local ];
-    } policy log_allow;
-
-    rule { use link_address; #if
-           icmp6 = [ multicast-router-advertisement-6,
-                     multicast-router-solicitation-6,
-                     multicast-router-termination-6 ];
-           hoplimit = 1;
-           destination zone = self;
-           source address = [ link_local ];
-    } policy log_allow;
-
     rule { state = [ related, established ]; } policy log_allow;
 
     use validate;
-    # Allow router information for link local networks, and Neighbor Discovery (rfc 2461)
 
     rule {
         state = new;

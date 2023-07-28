@@ -2,6 +2,143 @@ define validate = rule {
     rule {
         state = invalid;
     } policy { log_invalid };
+
+    rule {
+        use allocations; #if
+        source zone = external;
+        source address != allocated6;
+    } policy { log_bogon };
+
+    # For RFC's for each icmpv6 type, see
+    # https://www.iana.org/assignments/icmpv6-parameters/icmpv6-parameters.xhtml#icmpv6-parameters-codes-type-160
+
+    # https://www.rfc-editor.org/rfc/rfc4861#section-6.1
+    rule { use link_address; #if
+           icmp6 = [ router-solicitation-6 ];
+           rule {
+                  hoplimit = 255;
+                  destination zone = self;
+           } policy log_allow;
+    } policy log_invalid;
+
+    rule { use link_address; #if
+           icmp6 = [ router-advertisement-6 ];
+           rule {
+                  hoplimit = 255;
+                  destination zone = self;
+                  source address = [ link_local ];
+           } policy log_allow;
+    } policy log_invalid;
+
+    # https://www.rfc-editor.org/rfc/rfc4861#section-7.1
+    rule { use link_address; #if
+           icmp6 = [ neighbor-solicitation-6 ];
+           rule {
+                  hoplimit = 255;
+                  destination zone = self;
+                  rule {
+                         source address = [ :: ];
+                         destination address = ip6_multicast;
+                  } policy log_allow;
+                  rule {
+                         source address != [ :: ];
+                         destination address = [ link_local ];
+                  } policy log_allow;
+           } policy log_invalid;
+    } policy log_invalid;
+
+    rule { use link_address; #if
+           icmp6 = [ neighbor-advertisement-6 ];
+           rule {
+                  hoplimit = 255;
+                  destination zone = self;
+           } policy log_allow;
+    } policy log_invalid;
+
+    # https://www.rfc-editor.org/rfc/rfc4861#section-8.1
+     rule { use link_address; #if
+           icmp6 = [ redirect-message-6 ];
+           rule {
+                  hoplimit = 255;
+                  destination zone = self;
+                  source address = [ link_local ];
+           } policy log_allow;
+    } policy log_invalid;
+
+    # TODO!
+    # https://www.rfc-editor.org/rfc/rfc3122.html
+    rule { use link_address; #if
+           icmp6 = [ indirect-neighbor-solicit-6,
+                     inverse-neighbor-discovery-advertisement-message-6 ];
+           rule {
+                  hoplimit = 255;
+                  destination zone = self;
+           } policy log_allow;
+    } policy log_invalid;
+
+    # https://www.rfc-editor.org/rfc/rfc3810#section-10
+    rule { use link_address; #if
+           icmp6 = [ multicast-listener-discovery2-6 ];
+           rule {
+                  destination zone = self;
+                  source address = [ link_local, unspecified_address ];
+                  hoplimit = 1;
+           } policy log_allow;
+    } policy log_invalid;
+
+    rule { use link_address; #if
+           icmp6 = [ multicast-listener-query-6 ];
+           rule {
+                  destination address = [ all_nodes_multicast, ip6_multicast ];
+                  destination zone = self;
+                  source address = [ link_local ];
+                  hoplimit = 1;
+           } policy log_allow;
+    } policy log_invalid;
+
+    rule { use link_address; #if
+           icmp6 = [ multicast-listener-done-6 ];
+           rule {
+                  destination zone = self;
+                  source address = [ link_local ];
+                  destination address = [ all_routers_multicast ];
+                  hoplimit = 1;
+           } policy log_allow;
+    } policy log_invalid;
+
+    rule { use link_address; #if
+           icmp6 = [ multicast-listener-report-6 ];
+           rule {
+                  destination zone = self;
+                  source address = [ link_local ];
+                  destination address = [ ip6_multicast ];
+                  hoplimit = 1;
+           } policy log_allow;
+    } policy log_invalid;
+
+    # https://www.rfc-editor.org/rfc/rfc4286#section-2
+    # https://www.rfc-editor.org/rfc/rfc4286#section-7
+    rule { use link_address; #if
+           icmp6 = [ multicast-router-advertisement-6,
+                     multicast-router-termination-6 ];
+           rule {
+                  hoplimit = 1;
+                  destination zone = self;
+                  destination address = [ all_snoopers_multicast ];
+                  source address = [ link_local ];
+           } policy log_allow;
+    } policy log_invalid;
+
+    rule { use link_address; #if
+           icmp6 = [ multicast-router-solicitation-6 ];
+           rule {
+                  hoplimit = 1;
+                  destination zone = self;
+                  destination address = [ all_routers_multicast ];
+                  source address = [ link_local ];
+           } policy log_allow;
+    } policy log_invalid;
+
     rule {
         state = new;
         rule { tcpflags != "SYN" / [ "SYN", "ACK", "FIN", "RST" ] } policy { log_invalid };
@@ -56,9 +193,4 @@ define validate = rule {
             } policy { log_bogon };
         };
     };
-    rule {
-        use allocations; #if
-        source zone = external;
-        source address != allocated6;
-    } policy { log_bogon };
 }
