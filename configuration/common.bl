@@ -1,4 +1,5 @@
 # Rules for all zones.
+import "icmp6.bl"
 define common = {
 
     # Drop any martian packets
@@ -12,6 +13,8 @@ define common = {
 
     rule {
         state = new;
+
+        use accept_icmp6;
 
         rule { icmp4 = [ echo-request ] } policy log_allow;
         rule { icmp6 = [ echo-request-6 ] } policy log_allow;

@@ -1,4 +1,3 @@
-import "validate_icmp6.bl"
 define validate = rule {
     rule {
         state = invalid;
@@ -10,17 +9,18 @@ define validate = rule {
         source address != allocated6;
     } policy { log_bogon };
 
-    use validate_icmp6;
-
     rule {
         state = new;
-        rule { tcpflags != "SYN" / [ "SYN", "ACK", "FIN", "RST" ] } policy { log_invalid };
+        rule {
+            tcpflags != "SYN" / [ "SYN", "ACK", "FIN", "RST" ];
+        } policy { log_invalid };
 
         # Never forward link local addresses.
-        rule { source zone != self;
-               destination zone != self;
-               rule { source address = link_local; } policy { log_invalid };
-               rule { destination address = link_local; } policy { log_invalid };
+        rule {
+            source zone != self;
+            destination zone != self;
+            rule { source address = link_local; } policy { log_invalid };
+            rule { destination address = link_local; } policy { log_invalid };
         };
 
         rule {
