@@ -288,18 +288,16 @@ let reorder rules =
     if can_reorder (cl1, ef1, act1) (cl2, ef2, act2) then
       match order act1 - order act2 with
       | n when n > 0 -> true
-      | 0 when List.length cl1 + List.length ef1 < List.length cl2 + List.length cl2 -> true
+      | 0 when List.length cl1 + List.length ef1 < List.length cl2 + List.length ef2 -> true
       | _ -> false
     else
       false
   in
-  let rec reorder_rules acc = function
-    | rule1 :: rule2 :: xs when should_reorder_rules rule1 rule2 ->
-      printf "R";
-      reorder_rules (rule2 :: acc) (rule1 :: xs)
-    | rule1 :: xs ->
-      reorder_rules (rule1 :: acc) xs
-    | [] -> List.rev acc
+  let reorder_rules _acc rules =
+    List.stable_sort ~compare:(fun r1 r2 -> match should_reorder_rules r1 r2 with
+      | true -> 1
+      | false -> -1
+    ) rules
   in
   reorder_rules [] rules
 
@@ -521,7 +519,7 @@ let conds chains =
           List.length cl + List.length ef + acc) ) chains
 
 let optimize_pass chains =
-  printf "#Optim: (%d, %d) " (count_rules chains) (conds chains); Out_channel.flush stdout;
+  printf "#Optim: (%d, %d) %!" (count_rules chains) (conds chains);
   let chains = fold_return_statements chains in
 
   let optimize_functions = [
@@ -535,7 +533,6 @@ let optimize_pass chains =
     map_chain_rules reorder;
     join;
     merge_adjecent_rules;
-    (* reduce; *)
     inline inline_cost;
     map_chain_rules (fun rls -> Common.map_filter_exceptions (fun (opers, effect, tg) -> (merge_opers opers, effect, tg)) rls);
     remove_unreferenced_chains;
@@ -547,7 +544,8 @@ let optimize_pass chains =
 let rec optimize chains =
   let chains' = optimize_pass chains in
   match (conds chains, count_rules chains) = (conds chains', count_rules chains') with
-  | true -> printf "#Optimization done\n"; chains'
+  | true -> printf "#Optimization done\n";
+    chains'
   | false -> optimize chains'
 
 module Test = struct

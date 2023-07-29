@@ -123,8 +123,8 @@ let gen_cond neg cond =
           | Ir.Direction.Source  -> "src"
           | Ir.Direction.Destination  -> "dest"
         in
-        let zones = Set.to_list zones |> String.concat ~sep:", " in
-        sprintf "%s%s zone in (%s)" neg dir zones
+        let zones = Set.to_list zones |> String.concat ~sep:"; " in
+        sprintf "%s%s zone in [ %s ]" neg dir zones
       in
       sprintf "meta mark & 0x%08x %s 0x0" mask neg_str, Some comment
   | Ir.State states ->
