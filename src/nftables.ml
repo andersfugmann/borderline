@@ -189,7 +189,7 @@ let gen_cond neg cond =
   | Ir.Hoplimit limits ->
     let rule =
       string_of_int_set limits
-      |> sprintf "ip6 hoplimit { %s }"
+      |> sprintf "ip6 hoplimit %s{ %s }" neg_str
     in rule, None
   | Ir.Address_family a ->
     let proto = match Set.to_list a with
