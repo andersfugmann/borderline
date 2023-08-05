@@ -9,6 +9,40 @@ define validate = rule {
         source address != allocated6;
     } policy { log_bogon };
 
+
+    # For RFC's for each icmpv6 type, see
+    # https://www.iana.org/assignments/icmpv6-parameters/icmpv6-parameters.xhtml#icmpv6-parameters-codes-type-160
+    # This could be made more precise to filter
+    # source and destination address spaces, but its expected
+    # that the kernel is hardend and will filter those packets.
+    # Filtering on hublimit basd on RFC's and making sure none of the messages gets routed
+    # should be enough.
+    rule {
+        use link_address; #if - should be called slaac
+        address family = ipv6;
+        protocol = [ ipv6-icmp ];
+        destination zone = self;
+        rule {
+            icmp6 = [ router-solicitation-6,
+                      router-advertisement-6,
+                      neighbor-solicitation-6,
+                      neighbor-advertisement-6,
+                      redirect-message-6,
+                      indirect-neighbor-solicit-6,
+                      inverse-neighbor-discovery-advertisement-message-6 ];
+            hoplimit != 255;
+         } policy log_invalid;
+         rule {
+             icmp6 = [ multicast-listener-discovery2-6,
+                       multicast-listener-query-6,
+                       multicast-listener-done-6,
+                       multicast-listener-report-6,
+                       multicast-router-advertisement-6,
+                       multicast-router-termination-6,
+                       multicast-router-solicitation-6 ];
+             hoplimit != 1;
+        } policy log_invalid;
+    };
     rule {
         state = new;
         rule {
