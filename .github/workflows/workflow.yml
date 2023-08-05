@@ -26,9 +26,20 @@ jobs:
         with:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
           dune-cache: true
+      - name: Install dependencies
+        run: apt update && apt install xsltproc --yes
 
-      - run: opam install . --deps-only --with-test
-      - run: opam exec -- dune build
-      - run: opam exec -- dune runtest
-      - run: opam exec -- make tests
-      - run: opam exec -- make test
+      - name: Opam dependencies
+        run: opam install . --deps-only --with-test
+
+      - name: Build
+        run: opam exec -- dune build
+
+      - name: Unittests
+        run: opam exec -- dune runtest
+
+      - name: Tests
+        run: opam exec -- make tests
+
+      - name: E2E tests
+        run: opam exec -- make test
