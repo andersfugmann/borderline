@@ -13,6 +13,8 @@
 
 # Author: Anders Peter Fugmann <anders@fugmann.net>
 
+set -o pipefail
+
 MAIN=/etc/borderline/borderline.bl
 if [ -f /etc/default/borderline ]; then
     source /etc/default/borderline
@@ -37,15 +39,13 @@ NFT="/usr/sbin/nft"
 BORDERLINE="/usr/sbin/borderline"
 
 function flush () {
-    ${NFT} flush table borderline
+    ${NFT} flush table inet borderline
 }
 
 function panic () {
     FILE=$(mktemp -t borderline.XXXXXX)
     cat <<EOF > ${FILE}
-table inet borderline { }
-flush table inet borderline
-delete table inet borderline
+destroy table inet borderline
 table inet borderline {
   comment "Appled: $(date)"
   chain input { type filter hook input priority 0; policy drop; }
@@ -66,16 +66,15 @@ function apply () {
     LOG=$(mktemp -t borderline.XXXXXX)
     chmod 600 ${FILE}
     cat <<EOF > ${FILE}
-table inet borderline { }
-flush table inet borderline
-delete table inet borderline
+destroy table inet borderline
 table inet borderline {
   comment "Appled: $(date)"
 }
 EOF
     ${BORDERLINE} ${MAIN} >> ${FILE}
-    ${NFT} -c -o -f ${FILE} > ${LOG} 2>&1
     RES=$?
+    [ ${RES} -ne 0 ] && return $RES
+    ${NFT} -c -o -f ${FILE} > ${LOG} 2>&1
     if [ ${RES} -eq 0 ]; then
         ${NFT} -o -f ${FILE} > /dev/null 2>&1
         echo "Borderline firewall applied"
