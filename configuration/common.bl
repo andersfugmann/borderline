@@ -1,6 +1,5 @@
 # Rules for all zones.
 define common = {
-
     # Drop any martian packets
     rule { src zone = mars; } policy log_martian;
     rule { dst zone = mars; } policy log_martian;
@@ -10,24 +9,28 @@ define common = {
 
     use validate;
 
+    # For some reason, icmpv6 packets are not in connection tracking, so
+    # they have ct state untracked
+    rule {
+        icmp6 = [ router-solicitation-6,
+                  router-advertisement-6,
+                  neighbor-solicitation-6,
+                  neighbor-advertisement-6,
+                  redirect-message-6,
+                  indirect-neighbor-solicit-6,
+                  inverse-neighbor-discovery-advertisement-message-6,
+                  multicast-listener-discovery2-6,
+                  multicast-listener-query-6,
+                  multicast-listener-done-6,
+                  multicast-listener-report-6,
+                  multicast-router-advertisement-6,
+                  multicast-router-termination-6,
+                  multicast-router-solicitation-6 ];
+    } policy log_allow;
+
+
     rule {
         state = new;
-        rule {
-            icmp6 = [ router-solicitation-6,
-                      router-advertisement-6,
-                      neighbor-solicitation-6,
-                      neighbor-advertisement-6,
-                      redirect-message-6,
-                      indirect-neighbor-solicit-6,
-                      inverse-neighbor-discovery-advertisement-message-6,
-                      multicast-listener-discovery2-6,
-                      multicast-listener-query-6,
-                      multicast-listener-done-6,
-                      multicast-listener-report-6,
-                      multicast-router-advertisement-6,
-                      multicast-router-termination-6,
-                      multicast-router-solicitation-6 ];
-        } policy log_allow;
 
         rule { icmp4 = [ echo-request ] } policy log_allow;
         rule { icmp6 = [ echo-request-6 ] } policy log_allow;
