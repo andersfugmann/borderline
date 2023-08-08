@@ -63,6 +63,8 @@ let string_of_tcpflag = function
   | Ir.Tcp_flags.Rst -> "rst"
   | Ir.Tcp_flags.Urg -> "urg"
   | Ir.Tcp_flags.Psh -> "psh"
+  | Ir.Tcp_flags.Ecn -> "ecn"
+  | Ir.Tcp_flags.Cwr -> "cwr"
 
 let string_of_layer = function
   | Ir.Ipv4 -> "ip"
@@ -75,6 +77,7 @@ let string_of_state state = match state with
   | State.Established -> "established"
   | State.Related -> "related"
   | State.Invalid -> "invalid"
+  | State.Untracked -> "untracked"
 
 let string_of_int_set s =
   Set.fold ~init:[] ~f:(fun acc e -> Int.to_string e :: acc) s

@@ -40,7 +40,7 @@ module Port_type = struct
 end
 
 module Tcp_flags = struct
-  type t = Syn | Ack | Fin | Rst | Urg | Psh
+  type t = Syn | Ack | Fin | Rst | Urg | Psh | Ecn | Cwr
   [@@deriving compare, sexp]
   include Comparator.Make(struct type nonrec t = t let compare = compare let sexp_of_t = sexp_of_t end)
   let of_string (flag, pos) =
@@ -51,6 +51,8 @@ module Tcp_flags = struct
     | "rst" -> Rst
     | "urg" -> Urg
     | "psh" -> Psh
+    | "ecn" -> Ecn
+    | "cwr" -> Cwr
     | _ -> parse_error ~id:flag ~pos "Unknown tcp flag"
 end
 

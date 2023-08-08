@@ -1,6 +1,5 @@
 # Test protocol definitions to ensure no name clash
 import "../configuration/generic/l4proto.bl"
-import "../configuration/generic/address_families.bl"
 
 process filter {
         rule {
