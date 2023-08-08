@@ -92,7 +92,7 @@ let process_rule _table (rules, targets') =
         gen_op targets ((Ir.Zone(Ir.Direction.of_string dir,
                                  list2ids ids |> List.map ~f:fst |> Set.of_list), neg) :: acc) xs
     | F.Protocol (p, neg) :: xs ->
-        let protocols = list2string p |> List.map ~f:fst |> Set.of_list in
+        let protocols = list2ints p |> Set.of_list in
         gen_op targets ((Ir.Protocol protocols, neg) :: acc) xs
     | F.Icmp6 (types, neg) :: xs ->
         let types = list2ints types |> Set.of_list in

@@ -169,7 +169,7 @@ let gen_cond neg cond =
       in
       sprintf "ip %s %s{ %s }" classifier neg_str ips, None
   | Ir.Protocol p ->
-      let set = Set.to_list p |> String.concat ~sep:"," in
+      let set = Set.to_list p |> List.map ~f:Int.to_string |> String.concat ~sep:"," in
       sprintf "meta l4proto %s { %s }" neg_str set, None
   | Ir.Icmp6 types ->
       let set = string_of_int_set types in

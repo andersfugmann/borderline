@@ -303,7 +303,7 @@ let reorder rules =
 
 type protocol_state = {
   neg: bool;
-  l4: string Set.t;
+  l4: int Set.t;
 }
 type protocol_states = {
   ipv4 : protocol_state;
@@ -334,6 +334,11 @@ let make_protocol_state ~ipv4 ~ipv6 =
       ipv6 = { neg = neg6; l4 = Set.of_list ip6 }
     }
 
+let icmp = 1
+let tcp = 6
+let udp = 17
+let ipv6_icmp = 58
+
 let filter_protocol chain =
   let is_empty = function
     | { ipv4 = { neg = false; l4 }; ipv6 = { neg = false; l4 = l4' } } ->
@@ -350,18 +355,18 @@ let filter_protocol chain =
     | Ir.If_group (_,_), _ -> make_protocol_state ~ipv4:any ~ipv6:any
     | Ir.Zone (_,_), _ -> make_protocol_state ~ipv4:any ~ipv6:any
     | Ir.State _, _ -> make_protocol_state ~ipv4:any ~ipv6:any
-    | Ir.Ports (_, Ir.Port_type.Tcp, _), false -> make_protocol_state ~ipv4:(["tcp"], false) ~ipv6:(["tcp"], false)
-    | Ir.Ports (_, Ir.Port_type.Udp, _), false -> make_protocol_state ~ipv4:(["udp"], false) ~ipv6:(["udp"], false)
+    | Ir.Ports (_, Ir.Port_type.Tcp, _), false -> make_protocol_state ~ipv4:([tcp], false) ~ipv6:([tcp], false)
+    | Ir.Ports (_, Ir.Port_type.Udp, _), false -> make_protocol_state ~ipv4:([udp], false) ~ipv6:([udp], false)
     | Ir.Ports (_, _, _), true ->make_protocol_state ~ipv4:any ~ipv6:any
     | Ir.Ip6Set (_,_), false -> make_protocol_state ~ipv4:none ~ipv6:any
     | Ir.Ip6Set (_,_), true -> make_protocol_state ~ipv4:any ~ipv6:any
     | Ir.Ip4Set (_,_), false -> make_protocol_state ~ipv4:any ~ipv6:none
     | Ir.Ip4Set (_,_), true -> make_protocol_state ~ipv4:any ~ipv6:any
-    | Ir.Icmp6 _, _ -> make_protocol_state ~ipv4:none ~ipv6:(["ipv6-icmp"], false)
-    | Ir.Icmp4 _, _ -> make_protocol_state ~ipv4:(["icmp"], false) ~ipv6:none
+    | Ir.Icmp6 _, _ -> make_protocol_state ~ipv4:none ~ipv6:([ipv6_icmp], false)
+    | Ir.Icmp4 _, _ -> make_protocol_state ~ipv4:([icmp], false) ~ipv6:none
     | Ir.Hoplimit _, _ -> make_protocol_state ~ipv4:none ~ipv6:any
     | Ir.Mark (_,_), _ -> make_protocol_state ~ipv4:any ~ipv6:any
-    | Ir.TcpFlags (_,_), _ -> make_protocol_state ~ipv4:(["tcp"], false) ~ipv6:(["tcp"], false)
+    | Ir.TcpFlags (_,_), _ -> make_protocol_state ~ipv4:([tcp], false) ~ipv6:([tcp], false)
     | Ir.Address_family a, neg ->
       let gen = function
         | true, true -> none
@@ -593,8 +598,8 @@ module Test = struct
         in
         let printer { ipv4 = { neg = neg4; l4 = l44 }; ipv6 = { neg = neg6; l4 = l46 } } =
           Printf.sprintf "(([ %s ], %b), ([ %s ], %b))"
-            (Set.to_list l44 |> String.concat ~sep:"; ") neg4
-            (Set.to_list l46 |> String.concat ~sep:"; ") neg6
+            (Set.to_list l44 |> List.map ~f:Int.to_string |> String.concat ~sep:"; ") neg4
+            (Set.to_list l46 |> List.map ~f:Int.to_string |> String.concat ~sep:"; ") neg6
         in
         let any_p = make_protocol_state ~ipv4:any ~ipv6:any in
         let none_p = make_protocol_state ~ipv4:none ~ipv6:none in
@@ -605,7 +610,7 @@ module Test = struct
         assert_equal (merge_protocol any_p any_p) any_p;
         assert_equal (merge_protocol none_p none_p) none_p;
 
-        let ipv4_udp = make_protocol_state ~ipv4:(["udp"], false) ~ipv6:none in
+        let ipv4_udp = make_protocol_state ~ipv4:([udp], false) ~ipv6:none in
         let ipv4_udp' =
           any_p
           |> merge_protocol ipv4_udp
