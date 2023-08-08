@@ -7,7 +7,7 @@ let of_string (id, pos) =
   | "related" -> Related
   | "invalid" -> Invalid
   | "untracked" -> Untracked
-  | _ -> Common.parse_error ~id ~pos "Unknown state"
+  | _ -> Common.parse_errorf ~pos "Unknown state: %s" id
 
 include Set.Poly
 type t = state Set.Poly.t

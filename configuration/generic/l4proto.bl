@@ -1,4 +1,4 @@
-# Extracted from 'describe meta l4proto'
+# Extracted from 'nft describe meta l4proto'
 define ip = 0
 define icmp = 1
 define igmp = 2

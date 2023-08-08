@@ -1,13 +1,9 @@
 {
 open Parser
-open Scanf
 
 let value_map = Base.Option.value_map
 
 exception Lexer_error of int
-
-let hex_of_string h : int =
-  sscanf h "%x" (fun i -> i)
 
 let new_line lexbuf =
   let pos = lexbuf.Lexing.lex_curr_p in
@@ -80,6 +76,7 @@ rule token = parse
     ('/' ((['0'-'9']+) as mask))?
     { IPv4 (addr, value_map ~default:32 ~f:int_of_string mask, lexbuf.Lexing.lex_start_p) }
   | ['0'-'9']+ as lxm { INT(int_of_string lxm, lexbuf.Lexing.lex_curr_p) }
+  | ("0x" ['0'-'9''a'-'f''A'-'F']+) as lxm { INT(Base.Int.Hex.of_string lxm, lexbuf.Lexing.lex_curr_p) }
   | ['a'-'z''A'-'Z''_']['a'-'z''A'-'Z''0'-'9''_''.''-']* as lxm { IDENT (lxm, lexbuf.Lexing.lex_start_p) }
   | '"'(['0'-'9' 'a'-'z' 'A'-'Z' '.' '/' '_' '-' ' ']+ as str)'"' { QUOTE (str, lexbuf.Lexing.lex_start_p) }
 

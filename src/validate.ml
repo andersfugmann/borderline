@@ -145,7 +145,7 @@ let expand nodes =
       | F.Protocol (protos, pol) -> F.Protocol (expand_list seen protos, pol)
       | F.Icmp6 (types, pol) -> F.Icmp6 (expand_list seen types, pol)
       | F.Icmp4 (types, pol) -> F.Icmp4 (expand_list seen types, pol)
-      | F.State _ as state -> state
+      | F.State (states, pol) -> F.State (expand_list seen states, pol)
       | F.Rule (rls, pols) -> F.Rule (expand_rule_list seen rls, expand_policy_list seen pols)
       | F.TcpFlags (flags, mask, pol) -> F.TcpFlags (expand_list seen flags, expand_list seen mask, pol)
       | F.Hoplimit (limits, pol) -> F.Hoplimit (expand_list seen limits, pol)

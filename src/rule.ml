@@ -76,7 +76,7 @@ let process_rule _table (rules, targets') =
      the filter can never be satisfied. *)
   let rec gen_op targets acc = function
     | F.State(states, neg) :: xs ->
-        gen_op targets ((Ir.State( list2ids states |> List.map ~f:State.of_string |> State.of_list), neg) :: acc) xs
+        gen_op targets ((Ir.State( list2string states |> List.map ~f:State.of_string |> State.of_list), neg) :: acc) xs
     | F.Filter(dir, F.Ports(port_type, ports), neg) :: xs ->
         gen_op targets ( (Ir.Ports(Ir.Direction.of_string dir, Ir.Port_type.of_string port_type, list2ints ports |> Set.of_list), neg) :: acc ) xs
     | F.Filter(dir, F.Address(ips), neg) :: xs ->
