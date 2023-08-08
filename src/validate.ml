@@ -151,7 +151,7 @@ let expand nodes =
       | F.Hoplimit (limits, pol) -> F.Hoplimit (expand_list seen limits, pol)
       | F.True -> F.True
       | F.False -> F.False
-      | F.Address_family (address_family, pol) -> F.Address_family (expand_list seen address_family, pol)
+      | F.Address_family (address_family, pol) -> F.Address_family (address_family, pol)
     in
     match rules with
     | F.Reference (id, neg) :: xs ->

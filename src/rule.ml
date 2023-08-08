@@ -126,7 +126,7 @@ let process_rule _table (rules, targets') =
     | F.Reference ((s, pos), _) :: _ -> parse_errorf ~pos "Reference to definition '%s' not expected" s
     | F.Address_family (data, neg) :: xs ->
       let set =
-        list2string data
+        list2ids data
         |> List.map ~f:(function "ipv4", _ -> Ir.Ipv4 | "ipv6", _ -> Ir.Ipv6 | s, pos -> parse_errorf ~pos "Unknown address family: %s" s)
         |> Set.of_list
       in
