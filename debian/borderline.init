@@ -75,10 +75,12 @@ EOF
     RES=$?
     [ ${RES} -ne 0 ] && return $RES
     ${NFT} -c -o -f ${FILE} > ${LOG} 2>&1
+    RES=$?
     if [ ${RES} -eq 0 ]; then
         ${NFT} -o -f ${FILE} > /dev/null 2>&1
         echo "Borderline firewall applied"
     else
+        echo "Borderline failed - Firewall has not been updated!"
         cat ${LOG} > /dev/stderr
     fi
     rm -f ${FILE} ${LOG}
