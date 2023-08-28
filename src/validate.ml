@@ -152,6 +152,8 @@ let expand nodes =
       | F.True -> F.True
       | F.False -> F.False
       | F.Address_family _ as address_family -> address_family
+      | F.Ifgroup (dir, groups, pol) -> F.Ifgroup (dir, expand_list seen groups, pol)
+      | F.Ifinterface (dir, interfaces, pol) -> F.Ifgroup (dir, expand_list seen interfaces, pol)
     in
     match rules with
     | F.Reference (id, neg) :: xs ->

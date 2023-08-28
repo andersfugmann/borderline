@@ -25,7 +25,7 @@ rule token = parse
 (* zone definitions *)
   | "network"      { NETWORK }
   | "interface"    { INTERFACE }
-  | "group"        { GROUP }
+  | "interface_group"     { GROUP }
   | "snat"         { SNAT }
 
 (* Policy *)

@@ -71,6 +71,8 @@ rule_stm:
   | ICMP4 o=oper d=data_list                      { Frontend.Icmp4 (d, o) }
   | HOPLIMIT o=oper d=data_list                   { Frontend.Hoplimit (d, o) }
   | TCPFLAGS o=oper f=data_list SLASH m=data_list { Frontend.TcpFlags (f, m, o) }
+  | d=id INTERFACE o=oper f=data_list             { Frontend.Ifinterface (d, f, o) }
+  | d=id GROUP o=oper f=data_list                 { Frontend.Ifgroup (d, f, o) }
   | b = bool                                      { b }
 
 (* A policy can be a single policy, or a list of policies

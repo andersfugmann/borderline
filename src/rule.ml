@@ -131,6 +131,28 @@ let process_rule _table (rules, targets') =
         |> Set.of_list
       in
       gen_op targets ((Ir.Address_family set, neg) :: acc) xs
+    | F.Ifgroup (dir, groups, neg) :: xs ->
+      let if_groups =
+        List.map ~f:(function
+          | F.Ip (_, pos) -> parse_error ~pos "Expected number, got ip"
+          | F.Number (n, _pos) -> `Int n
+          | F.Id (_, pos) -> parse_error ~pos "Expected number, got id"
+          | F.String (s, _pos) -> `String s
+        ) groups
+      in
+      let direction = Ir.Direction.of_string dir in
+      gen_op targets ((Ir.If_group(direction, Set.of_list if_groups), neg) :: acc) xs
+    | F.Ifinterface (dir, is, neg) :: xs ->
+      let interfaces =
+        List.map ~f:(function
+          | F.Ip (_, pos) -> parse_error ~pos "Expected string, got ip"
+          | F.Number (_, pos) -> parse_error ~pos "Expected string, got number"
+          | F.Id (s, _pos)
+          | F.String (s, _pos) -> s
+        ) is
+      in
+      let direction = Ir.Direction.of_string dir in
+      gen_op targets ((Ir.Interface(direction, Set.of_list interfaces), neg) :: acc) xs
     | [] ->
         let (effects, target) = gen_targets targets in
         Chain.create [ (acc, effects, target) ] "Rule"
