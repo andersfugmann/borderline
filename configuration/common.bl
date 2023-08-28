@@ -1,10 +1,12 @@
 # Rules for all zones.
 define common = {
-    # Drop any martian packets
-    rule { src zone = mars; } policy log_martian;
-    rule { dst zone = mars; } policy log_martian;
-    rule { source zone = self; } policy log_allow;
-
+    rule {
+        source address != 0.0.0.0;
+        # Drop any martian packets
+        rule { source zone = mars; } policy log_martian;
+        rule { destination zone = mars; } policy log_martian;
+    };
+    rule { source zone = self; destination zone = self; } policy log_allow;
     rule { state = [ related, established ]; } policy log_allow;
 
     use validate;
@@ -47,10 +49,10 @@ define common = {
             destination zone = external;
         } policy allow;
 
-         # Dhcp on external interfaces. This should not be needed.
-	 rule {
-             use external_dhcp; #if
-             rule {
+        # Dhcp on external interfaces. This should not be needed.
+        rule {
+            use external_dhcp; #if
+            rule {
                 address family = ipv6;
                 protocol = [ udp ];
                 source address = local;
@@ -58,14 +60,14 @@ define common = {
                 destination zone = self;
 		source udp port = dhcpv6-server;
 		destination udp port = dhcpv6-client;
-             } policy log_allow;
-             rule {
+            } policy log_allow;
+            rule {
                 address family = ipv4;
                 protocol = [ udp ];
                 destination zone = self;
 		source udp port = bootps;
 		destination udp port = bootpc;
-             } policy log_allow;
-         };
+            } policy log_allow;
+        };
     };
 }

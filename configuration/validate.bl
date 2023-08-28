@@ -5,6 +5,7 @@ define validate = rule {
 
     rule {
         use allocations; #if
+        address family = ipv6;
         source zone = external;
         source address != allocated6;
     } policy { log_bogon };

@@ -1,0 +1,6 @@
+# Extracted from 'nft describe ct state'
+define invalid = "invalid"
+define new = "new"
+define established = "established"
+define related = "related"
+define untracked = "untracked"
