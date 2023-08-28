@@ -3,7 +3,7 @@
 (* Restrict to address family *)
 %token ZONE PROCESS RULE IMPORT
 %token DEFINE
-%token NETWORK INTERFACE GROUP SNAT
+%token NETWORK INTERFACE GROUP SNAT IF_GROUP
 %token ALLOW DENY REJECT LOG COUNTER USER_CHAIN
 %token POLICY
 %token ADDRESS FAMILY STATE USE
@@ -49,6 +49,7 @@ zone_stm:
   | NETWORK EQ data=data_list                          { Frontend.Network (data) }
   | INTERFACE EQ data=data_list                        { Frontend.Interface(data)}
   | GROUP EQ data=data_list                            { Frontend.If_group(data)}
+  | IF_GROUP EQ data=data_list                         { Frontend.If_group(data)}
   | PROCESS t=id r=rule_seq p=policy_opt               { Frontend.ZoneRules (t,r,p) }
   | SNAT zones=data_list ip=ipv4                       { Frontend.ZoneSnat(zones, fst ip) }
 
@@ -72,7 +73,7 @@ rule_stm:
   | HOPLIMIT o=oper d=data_list                   { Frontend.Hoplimit (d, o) }
   | TCPFLAGS o=oper f=data_list SLASH m=data_list { Frontend.TcpFlags (f, m, o) }
   | d=id INTERFACE o=oper f=data_list             { Frontend.Ifinterface (d, f, o) }
-  | d=id GROUP o=oper f=data_list                 { Frontend.Ifgroup (d, f, o) }
+  | d=id IF_GROUP o=oper f=data_list              { Frontend.Ifgroup (d, f, o) }
   | b = bool                                      { b }
 
 (* A policy can be a single policy, or a list of policies
