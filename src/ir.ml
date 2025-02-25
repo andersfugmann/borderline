@@ -98,11 +98,11 @@ type condition = Interface of Direction.t * id Set.t
                | Address_family of address_family Set.t
                | True
 
-type effect = MarkZone of Direction.t * zone
-            | Counter
-            | Notrack
-            | Log of prefix
-            | Snat of Ipaddr.V4.t
+type effect_ = MarkZone of Direction.t * zone
+             | Counter
+             | Notrack
+             | Log of prefix
+             | Snat of Ipaddr.V4.t
 
 type target = Jump of Chain_id.t
             | Accept
@@ -111,7 +111,7 @@ type target = Jump of Chain_id.t
             | Reject of Reject.t
             | Pass (* Not terminal *)
 
-type oper = (condition * bool) list * effect list * target
+type oper = (condition * bool) list * effect_ list * target
 
 type chain = { id: Chain_id.t; rules : oper list; comment: string; }
 

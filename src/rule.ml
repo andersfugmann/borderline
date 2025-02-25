@@ -31,8 +31,8 @@ let gen_target (effects, target) = function
     (effects, Ir.Jump (Ir.Chain_id.Named s))
 
 let gen_targets targets =
-  let (effect, target) = List.fold_left ~init:([], Ir.Pass) ~f:gen_target targets in
-  (List.rev effect, target)
+  let (effect_, target) = List.fold_left ~init:([], Ir.Pass) ~f:gen_target targets in
+  (List.rev effect_, target)
 
 let list2ints : F.data list -> int list = fun l ->
   List.fold_left ~f:(fun acc ->

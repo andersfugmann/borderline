@@ -390,7 +390,7 @@ let filter_protocol chain =
     state_equal p.ipv6 p'.ipv6
   in
 
-  let remove_reduntant_protocol protocols (rules, effect, target) =
+  let remove_reduntant_protocol protocols (rules, effect_, target) =
     let rec inner acc = function
       | (Ir.Protocol _, _  | Ir.Address_family _, _ ) :: rules when
           equal_protocols protocols (get_protocols (acc @ rules)) ->
@@ -399,12 +399,12 @@ let filter_protocol chain =
       | rule :: rules -> inner (rule :: acc) rules
       | [] -> List.rev acc
     in
-    (inner [] rules, effect, target)
+    (inner [] rules, effect_, target)
   in
-  let filter (rules, effect, target) =
+  let filter (rules, effect_, target) =
     let protocols = get_protocols rules in
     if (is_empty protocols) then printf "P";
-    Some (rules, effect, target)
+    Some (rules, effect_, target)
     |> Option.filter ~f:(fun _ -> not (is_empty protocols))
     |> Option.map ~f:(remove_reduntant_protocol protocols)
   in
@@ -539,7 +539,7 @@ let optimize_pass chains =
     join;
     merge_adjecent_rules;
     inline inline_cost;
-    map_chain_rules (fun rls -> Common.map_filter_exceptions (fun (opers, effect, tg) -> (merge_opers opers, effect, tg)) rls);
+    map_chain_rules (fun rls -> Common.map_filter_exceptions (fun (opers, effect_, tg) -> (merge_opers opers, effect_, tg)) rls);
     remove_unreferenced_chains;
   ] in
   let chains' = List.fold_left ~f:(fun chains' optim_func -> optim_func chains') ~init:chains optimize_functions in
