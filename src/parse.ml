@@ -13,7 +13,7 @@ let parse file =
   let full_path = (Unix.getcwd ()) ^ "/" ^ file in
   match Set.mem !imported full_path with
   | true ->
-      []
+    []
   | false -> begin
       imported := (Set.add !imported full_path);
       eprintf "Parse: %s\n%!" full_path;
@@ -26,15 +26,15 @@ let parse file =
     end
 
 let rec parse_file file =
-  if Str.string_match include_regex file 0 && not (Str.string_match exclude_regex file 0) then
+  match Str.string_match include_regex file 0 && not (Str.string_match exclude_regex file 0) with
+  | true ->
     let prev_dir = Unix.getcwd () in
     let () = Unix.chdir (Stdlib.Filename.dirname file) in
     let res = expand (parse (Stdlib.Filename.basename file)) in
     let () = Unix.chdir prev_dir in
-      res
-  else
+    res
+  | false ->
     []
-
 
 and include_path dir_handle =
   match Unix.readdir dir_handle with
@@ -43,15 +43,18 @@ and include_path dir_handle =
   | exception _ -> []
 
 and expand = function
+  | F.Import(path, _) :: xs when Stdlib.Sys.file_exists path |> not ->
+    eprintf "import \"%s\" - not found\n" path;
+    expand xs
+  | F.Import(file, _) :: xs when Stdlib.Sys.is_regular_file file ->
+    parse_file file @ expand xs
   | F.Import(path, _) :: xs when Stdlib.Sys.is_directory path ->
-      let dir = Unix.opendir path in
-      let prev_dir = Unix.getcwd () in
-      let () = Unix.chdir path in
-      let res = include_path dir in
-      let () = Unix.chdir prev_dir in
-      res @ expand xs
-  | F.Import(file, _) :: xs when not (Stdlib.Sys.is_directory file) ->
-      parse_file file @ expand xs
+    let dir = Unix.opendir path in
+    let prev_dir = Unix.getcwd () in
+    let () = Unix.chdir path in
+    let res = include_path dir in
+    let () = Unix.chdir prev_dir in
+    res @ expand xs
   | x :: xs -> x :: expand xs
   | [ ] -> [ ]
 

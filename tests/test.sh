@@ -2,6 +2,7 @@
 
 FAILED=0
 SUCCESS=0
+WARN=0
 
 if [ ! -x "${BORDERLINE}" ]; then
     echo "Borderline not found"
@@ -35,13 +36,15 @@ function execute () {
     OKS=$(grep -o '"OK[^"]*"' ${TEST_RESULT} | sort -u | wc -l)
     ERRORS=$(grep -e '"ERROR[^"]*"' ${TEST_RESULT} | sort -u | wc -l)
 
-#    if (( OKS == EXPECTED && ERRORS == 0 )); then
-    if (( ERRORS == 0 && OKS == EXPECTED)); then
+    if (( OKS == EXPECTED && ERRORS == 0 )); then
         echo -n "success"
         let SUCCESS++
+    elif (( OKS == EXPECTED )); then
+        echo -n "warn. Expected (${EXPECTED}, 0). Got:  "
+        let WARN++
     else
-        echo -n "fail. Expected (${EXPECTED}, 0). Got:  "
-        let FAILED++
+        echo -n "error. Expected (${EXPECTED}, 0). Got:  "
+        let ERRORS++
     fi
     echo "(${OKS}, ${ERRORS})"
 }
@@ -51,7 +54,11 @@ for test_file in ${TESTS}; do
 done
 
 echo
-echo "tests: $(( SUCCESS + FAILED )) success: ${SUCCESS} fail: ${FAILED}"
+echo "tests: $(( SUCCESS + WARN + FAILED ))"
+echo "- success: ${SUCCESS}"
+echo "- warnings: ${WARN}"
+echo "- fail: ${FAILED}"
+
 if (( FAILED != 0 )); then
     exit 1
 else

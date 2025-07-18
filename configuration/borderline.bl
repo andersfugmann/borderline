@@ -16,11 +16,12 @@
 # along with Borderline.  If not, see <http://www.gnu.org/licenses/>.
 
 import "./configuration.bl"
-import "./conf.d
+import "./conf.d"
 import "./common.bl"
 import "./validate.bl"
 import "./generic"
 import "./zones"
+
 process filter {
     rule {
         rule {

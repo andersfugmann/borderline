@@ -10,7 +10,8 @@ Version 1.0.0 (UNRELEASED)
 * Add 'check' to init.d script
 * Better checking for redundant rules
 * Update nft rule generation to be more ideomatic
-
+* Dont dump stacktrace on syntax errors
+*
 
 Version 0.99 (2016-01-16)
 * Add IPv4 support!

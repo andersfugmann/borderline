@@ -25,6 +25,9 @@ integration:
 	echo "#!/usr/sbin/nft -f" > test.nft
 	echo "flush ruleset" >> test.nft
 	dune exec bin/borderline.exe -- configuration/borderline.bl | tee -a test.nft
+	sed -i 's/ifgroup/ifname/g' test.nft
+	sed -i 's/if[ ]* {/ifname {/g' test.nft
+	sudo /usr/sbin/nft -c -o -n -f test.nft
 
 .PHONY: build
 build:
