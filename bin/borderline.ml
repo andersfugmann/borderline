@@ -47,4 +47,5 @@ let _ =
   | ParseError err ->
     Out_channel.flush stdout;
     prerr_endline (error2string err);
+    Stdlib.exit 1
     (* raise exn *)

@@ -257,6 +257,7 @@ let gen_rule = function
     let target = gen_target target in
     sprintf "%s %s %s %s;" conds effects target comments
 
+(* Why do we have ipv4 set and ipv6 set? Those should be unified *)
 let expand_rule (rls, effects, target) =
   let rec split (rules, (ip4, neg4), (ip6, neg6)) = function
     | (Ir.Ip4Set _, n) as r :: xs -> split (rules, (r :: ip4, neg4 && n), (ip6, neg6)) xs

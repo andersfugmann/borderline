@@ -7,4 +7,22 @@ process filter {
              address family = ipv6;
              address family = ipv4;
         } policy allow;
+
+        rule {
+             address family = ipv6;
+
+             address family = ipv4;
+        } policy allow;
+
+        rule {
+             address family = ipv6;
+             protocol = [ ipv6-icmp ];
+             rule {
+                  icmp6 = [ 1,2 ];
+                  hoplimit != 255;
+              } policy { log "OK" };
+             rule { source address = 1.1.1.1 } policy { log "ERROR" };
+             rule { source address = 1::1 } policy { log "OK1" };
+         } policy { log "OK2" };
+
 } policy deny

@@ -87,7 +87,7 @@ type condition = Interface of Direction.t * id Set.t
                | Zone of Direction.t * zone Set.t
                | State of State.t
                | Ports of Direction.t * Port_type.t * int Set.t
-               | Ip6Set of Direction.t * Ip6.t
+               | Ip6Set of Direction.t * Ip6.t (* Merge into a generic set *)
                | Ip4Set of Direction.t * Ip4.t
                | Protocol of int Set.t
                | Icmp6 of int Set.t
