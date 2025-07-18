@@ -98,6 +98,25 @@ type condition = Interface of Direction.t * id Set.t
                | Address_family of address_family Set.t
                | True
 
+let string_of_condition = function
+  | Interface (_, _) -> "Interface"
+  | If_group (_, _) -> "If_group"
+  | Zone (_, _) -> "Zone"
+  | State _ -> "State"
+  | Ports (_, _, _) -> "Ports"
+  | Ip6Set (_, _) -> "Ip6Set"
+  | Ip4Set (_, _) -> "Ip4Set"
+  | Protocol s ->
+    Set.to_list s |> List.map ~f:Int.to_string |> String.concat ~sep:";" |> Printf.sprintf "Protocol [ %s ]"
+  | Icmp6 _ -> "Icmp6"
+  | Icmp4 _ -> "Icmp4"
+  | Mark (_, _) -> "Mark"
+  | TcpFlags (_, _) -> "TcpFlags"
+  | Hoplimit _ -> "Hoplimit"
+  | Address_family _ -> "Address_family"
+  | True -> "True"
+
+
 type effect_ = MarkZone of Direction.t * zone
              | Counter
              | Notrack
@@ -233,4 +252,6 @@ let is_always value =
   | Mark (_, 0), neg -> neg = value
   | Mark _, _ -> false
   | Address_family a, neg ->
-    (Set.length a = 2 && not neg) || Set.is_empty a && neg
+    match value with
+    | true -> (Set.length a = 2 && not neg) || Set.is_empty a && neg
+    | false -> (Set.length a = 2 && neg) || Set.is_empty a && not neg

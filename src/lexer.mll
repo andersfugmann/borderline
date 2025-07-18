@@ -79,7 +79,7 @@ rule token = parse
   | ['0'-'9']+ as lxm { INT(int_of_string lxm, lexbuf.Lexing.lex_curr_p) }
   | ("0x" ['0'-'9''a'-'f''A'-'F']+) as lxm { INT(Base.Int.Hex.of_string lxm, lexbuf.Lexing.lex_curr_p) }
   | ['a'-'z''A'-'Z''_']['a'-'z''A'-'Z''0'-'9''_''.''-']* as lxm { IDENT (lxm, lexbuf.Lexing.lex_start_p) }
-  | '"'(['0'-'9' 'a'-'z' 'A'-'Z' '.' '/' '_' '-' ' ']+ as str)'"' { QUOTE (str, lexbuf.Lexing.lex_start_p) }
+  | '"' ([^'"']+ as str) '"'  { QUOTE (str, lexbuf.Lexing.lex_start_p) }
 
 
 (* Simple tokens *)

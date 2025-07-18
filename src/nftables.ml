@@ -175,13 +175,13 @@ let gen_cond neg cond =
     (* We cannot match everything, so we may need to create subchains and use return *)
 
     let set = Set.to_list p |> List.map ~f:Int.to_string |> String.concat ~sep:"," in
-    sprintf "meta l4proto %s { %s }" neg_str set, None
+    sprintf "meta l4proto %s{ %s }" neg_str set, None
   | Ir.Icmp6 types ->
     let set = string_of_int_set types in
-    sprintf "icmpv6 type %s { %s }" neg_str set, None
+    sprintf "icmpv6 type %s{ %s }" neg_str set, None
   | Ir.Icmp4 types ->
     let set = string_of_int_set types in
-    sprintf "icmp type %s { %s }" neg_str set, None
+    sprintf "icmp type %s{ %s }" neg_str set, None
   | Ir.Mark (value, mask) ->
     sprintf "meta mark and 0x%08x %s0x%08x" mask neg_str value, None
   | Ir.TcpFlags (flags, mask) ->
@@ -197,12 +197,17 @@ let gen_cond neg cond =
       |> sprintf "ip6 hoplimit %s{ %s }" neg_str
     in rule, None
   | Ir.Address_family a ->
-    let proto = match Set.to_list a with
-      | [Ir.Ipv4] -> "ipv4"
-      | [Ir.Ipv6] -> "ipv6"
-      | _ -> failwith "Address family must be either ipv4 or ipv6"
+    let proto_to_string = function
+      | Ir.Ipv4 -> "ipv4"
+      | Ir.Ipv6 -> "ipv6"
     in
-    sprintf "meta nfproto %s%s" neg_str proto, None
+    let set =
+      Set.to_list a
+      |> List.map ~f:proto_to_string
+      |> String.concat ~sep:","
+      |> sprintf "{ %s }"
+    in
+    sprintf "meta nfproto %s%s" neg_str set, None
   | Ir.True when neg ->
     (* Any false statement *)
     "meta mark | 0x1 == 0x0", None
