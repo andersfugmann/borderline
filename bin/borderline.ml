@@ -44,7 +44,7 @@ let _ =
     Printf.printf "\n#Lines: %d\n" (List.length lines)
 
   with
-  | ParseError err as excpt ->
+  | ParseError err as exn ->
     Out_channel.flush stdout;
     prerr_endline (error2string err);
-    raise excpt
+    raise exn

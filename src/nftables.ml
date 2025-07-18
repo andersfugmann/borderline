@@ -26,14 +26,13 @@ let (_: int) = get_zone_id Zone.mars
 
 let chain_name = function
   | Ir.Chain_id.Temporary n -> sprintf "temp_%d" n
-  | Builtin Ir.Chain_type.Input -> "input"
-  | Builtin Ir.Chain_type.Output -> "output"
-  | Builtin Ir.Chain_type.Forward  -> "forward"
-  | Builtin Ir.Chain_type.Pre_routing  -> "prerouting"
-  | Builtin Ir.Chain_type.Post_routing  -> "postrouting"
-  | Named name -> name
+  | Ir.Chain_id.Builtin Ir.Chain_type.Input -> "input"
+  | Ir.Chain_id.Builtin Ir.Chain_type.Output -> "output"
+  | Ir.Chain_id.Builtin Ir.Chain_type.Forward  -> "forward"
+  | Ir.Chain_id.Builtin Ir.Chain_type.Pre_routing  -> "prerouting"
+  | Ir.Chain_id.Builtin Ir.Chain_type.Post_routing  -> "postrouting"
+  | Ir.Chain_id.Named name -> name
 
-(* TODO Use chain_name *)
 let chain_premable chain comment =
   let name = chain_name chain in
   match chain with
@@ -96,99 +95,102 @@ let gen_cond neg cond =
   in
   match cond with
   | Ir.Interface (dir, interfaces) ->
-      let interfaces = Set.to_list interfaces |> List.map ~f:(sprintf "\"%s\"") |> String.concat ~sep:", " in
-      let classifier = match dir with
-        | Ir.Direction.Source -> "iif"
-        | Ir.Direction.Destination -> "oif"
-      in
-      sprintf "%s %s { %s }" classifier neg_str interfaces, None
+    let interfaces = Set.to_list interfaces |> List.map ~f:(sprintf "\"%s\"") |> String.concat ~sep:", " in
+    let classifier = match dir with
+      | Ir.Direction.Source -> "iif"
+      | Ir.Direction.Destination -> "oif"
+    in
+    sprintf "%s %s { %s }" classifier neg_str interfaces, None
   | Ir.If_group (dir, if_groups) ->
     let if_groups = string_or_int_set if_groups in
-      let classifier = match dir with
-        | Ir.Direction.Source -> "iifgroup"
-        | Ir.Direction.Destination -> "oifgroup"
-      in
-      sprintf "%s %s { %s }" classifier neg_str if_groups, None
+    let classifier = match dir with
+      | Ir.Direction.Source -> "iifgroup"
+      | Ir.Direction.Destination -> "oifgroup"
+    in
+    sprintf "%s %s { %s }" classifier neg_str if_groups, None
   | Ir.Zone (dir, zones) ->
-      let shift = match dir with
-        | Ir.Direction.Source -> 0
-        | Ir.Direction.Destination -> zone_bits
+    let shift = match dir with
+      | Ir.Direction.Source -> 0
+      | Ir.Direction.Destination -> zone_bits
+    in
+    let mask = Set.fold ~f:(fun acc zone ->
+      let zone_id = get_zone_id zone in
+      let zone_val = zone_id lsl shift in
+      acc + zone_val) zones ~init:0
+    in
+    let neg_str = match neg with true -> "==" | false -> "!=" in
+    let comment =
+      let neg = match neg with true -> "not " | false -> "" in
+      let dir = match dir with
+        | Ir.Direction.Source  -> "src"
+        | Ir.Direction.Destination  -> "dest"
       in
-      let mask = Set.fold ~f:(fun acc zone ->
-          let zone_id = get_zone_id zone in
-          let zone_val = zone_id lsl shift in
-          acc + zone_val) zones ~init:0
-      in
-      let neg_str = match neg with true -> "==" | false -> "!=" in
-      let comment =
-        let neg = match neg with true -> "not " | false -> "" in
-        let dir = match dir with
-          | Ir.Direction.Source  -> "src"
-          | Ir.Direction.Destination  -> "dest"
-        in
-        let zones = Set.to_list zones |> String.concat ~sep:"; " in
-        sprintf "%s%s zone in [ %s ]" neg dir zones
-      in
-      sprintf "meta mark & 0x%08x %s 0x0" mask neg_str, Some comment
+      let zones = Set.to_list zones |> String.concat ~sep:"; " in
+      sprintf "%s%s zone in [ %s ]" neg dir zones
+    in
+    sprintf "meta mark & 0x%08x %s 0x0" mask neg_str, Some comment
   | Ir.State states ->
-      let states =
-        State.to_list states
-        |> List.map ~f:string_of_state
-        |> String.concat ~sep:", "
-      in
-      sprintf "ct state %s{ %s }" neg_str states, None
+    let states =
+      State.to_list states
+      |> List.map ~f:string_of_state
+      |> String.concat ~sep:", "
+    in
+    sprintf "ct state %s{ %s }" neg_str states, None
   | Ir.Ports (dir, port_type, ports) ->
-      let cond = match dir with
-        | Ir.Direction.Source -> "sport"
-        | Ir.Direction.Destination -> "dport"
-      in
-      let classifier = match port_type with
-        | Ir.Port_type.Tcp -> "tcp"
-        | Ir.Port_type.Udp -> "udp"
-      in
-      sprintf "%s %s%s { %s }" classifier neg_str cond (string_of_int_set ports), None
+    let cond = match dir with
+      | Ir.Direction.Source -> "sport"
+      | Ir.Direction.Destination -> "dport"
+    in
+    let classifier = match port_type with
+      | Ir.Port_type.Tcp -> "tcp"
+      | Ir.Port_type.Udp -> "udp"
+    in
+    sprintf "%s %s%s { %s }" classifier neg_str cond (string_of_int_set ports), None
   | Ir.Ip6Set (dir, ips) ->
-      (* Should define a true ip set. these sets can become very large. *)
+    (* Should define a true ip set. these sets can become very large. *)
 
-      let classifier = match dir with
-        | Ir.Direction.Source -> "saddr"
-                                     | Ir.Direction.Destination  -> "daddr"
-      in
-      let ips = Ip6.to_list ips
-                |> Ip6.reduce
-                |> List.map ~f:Ipaddr.V6.Prefix.to_string
-                |> String.concat ~sep:", "
-      in
-      sprintf "ip6 %s %s{ %s }" classifier neg_str ips, None
+    let classifier = match dir with
+      | Ir.Direction.Source -> "saddr"
+      | Ir.Direction.Destination  -> "daddr"
+    in
+    let ips = Ip6.to_list ips
+              |> Ip6.reduce
+              |> List.map ~f:Ipaddr.V6.Prefix.to_string
+              |> String.concat ~sep:", "
+    in
+    sprintf "ip6 %s %s{ %s }" classifier neg_str ips, None
   | Ir.Ip4Set (dir, ips) ->
-      let classifier = match dir with
-        | Ir.Direction.Source -> "saddr"
-        | Ir.Direction.Destination  -> "daddr"
-      in
-      let ips = Ip4.to_list ips
-                |> Ip4.reduce
-                |> List.map ~f:Ipaddr.V4.Prefix.to_string
-                |> String.concat ~sep:", "
-      in
-      sprintf "ip %s %s{ %s }" classifier neg_str ips, None
+    let classifier = match dir with
+      | Ir.Direction.Source -> "saddr"
+      | Ir.Direction.Destination  -> "daddr"
+    in
+    let ips = Ip4.to_list ips
+              |> Ip4.reduce
+              |> List.map ~f:Ipaddr.V4.Prefix.to_string
+              |> String.concat ~sep:", "
+    in
+    sprintf "ip %s %s{ %s }" classifier neg_str ips, None
   | Ir.Protocol p ->
-      let set = Set.to_list p |> List.map ~f:Int.to_string |> String.concat ~sep:"," in
-      sprintf "meta l4proto %s { %s }" neg_str set, None
+    (* This is not easy. *)
+    (* We cannot match everything, so we may need to create subchains and use return *)
+
+    let set = Set.to_list p |> List.map ~f:Int.to_string |> String.concat ~sep:"," in
+    sprintf "meta l4proto %s { %s }" neg_str set, None
   | Ir.Icmp6 types ->
-      let set = string_of_int_set types in
-      sprintf "icmpv6 type %s { %s }" neg_str set, None
+    let set = string_of_int_set types in
+    sprintf "icmpv6 type %s { %s }" neg_str set, None
   | Ir.Icmp4 types ->
     let set = string_of_int_set types in
     sprintf "icmp type %s { %s }" neg_str set, None
   | Ir.Mark (value, mask) ->
-      sprintf "meta mark and 0x%08x %s0x%08x" mask neg_str value, None
+    sprintf "meta mark and 0x%08x %s0x%08x" mask neg_str value, None
   | Ir.TcpFlags (flags, mask) ->
-      let to_list f = Set.to_list f
-                      |> List.map ~f:string_of_tcpflag
-                      |> String.concat ~sep:"|"
-      in
-      let neg_str = match neg with true -> "!=" | false -> "==" in
-      sprintf "tcp flags & (%s) %s %s" (to_list mask) neg_str (to_list flags), None
+    let to_list f = Set.to_list f
+                    |> List.map ~f:string_of_tcpflag
+                    |> String.concat ~sep:"|"
+    in
+    let neg_str = match neg with true -> "!=" | false -> "==" in
+    sprintf "tcp flags & (%s) %s %s" (to_list mask) neg_str (to_list flags), None
   | Ir.Hoplimit limits ->
     let rule =
       string_of_int_set limits
@@ -204,10 +206,10 @@ let gen_cond neg cond =
     in
     sprintf "meta protocol %s" proto, None
   | Ir.True when neg ->
-      (* Any false statement *)
-      "meta mark | 0x1 == 0x0", None
+    (* Any false statement *)
+    "meta mark | 0x1 == 0x0", None
   | Ir.True ->
-      "", None
+    "", None
 
 let reject_to_string = function
   | Ir.Reject.HostUnreachable -> "reject with icmpx type host-unreachable"
@@ -218,12 +220,12 @@ let reject_to_string = function
 
 let gen_effect = function
   | Ir.MarkZone (dir, id) ->
-      let shift = match dir with
-        | Ir.Direction.Source -> 0
-        | Ir.Direction.Destination -> zone_bits
-      in
-      let mask = zone_mask lsl (zone_bits - shift) in
-      sprintf "meta mark set mark & 0x%08x or 0x%08x" mask ((get_zone_id id) lsl shift)
+    let shift = match dir with
+      | Ir.Direction.Source -> 0
+      | Ir.Direction.Destination -> zone_bits
+    in
+    let mask = zone_mask lsl (zone_bits - shift) in
+    sprintf "meta mark set mark & 0x%08x or 0x%08x" mask ((get_zone_id id) lsl shift)
   | Ir.Counter -> "counter"
   | Ir.Notrack -> ""
   | Ir.Log prefix -> sprintf "log prefix \"%s: \" level info" prefix
@@ -240,22 +242,22 @@ let gen_target = function
 let gen_rule = function
   | ([], [], Ir.Pass) -> "# Empty rule"
   | (conds, effects, target) ->
+    let conds, comments =
       let conds, comments =
-        let conds, comments =
-          List.map ~f:(fun (op, neg) -> gen_cond neg op) conds
-          |> List.unzip
-        in
-        let comments =
-          List.filter_map ~f:Fn.id comments
-          |> function [] -> ""
-                    | cs -> String.concat ~sep:" " cs
-                            |> sprintf "comment \"%s\""
-        in
-        String.concat ~sep:" " conds, comments
+        List.map ~f:(fun (op, neg) -> gen_cond neg op) conds
+        |> List.unzip
       in
-      let effects = List.map ~f:gen_effect effects |> String.concat ~sep:" " in
-      let target = gen_target target in
-      sprintf "%s %s %s %s;" conds effects target comments
+      let comments =
+        List.filter_map ~f:Fn.id comments
+        |> function [] -> ""
+                  | cs -> String.concat ~sep:" " cs
+                          |> sprintf "comment \"%s\""
+      in
+      String.concat ~sep:" " conds, comments
+    in
+    let effects = List.map ~f:gen_effect effects |> String.concat ~sep:" " in
+    let target = gen_target target in
+    sprintf "%s %s %s %s;" conds effects target comments
 
 let expand_rule (rls, effects, target) =
   let rec split (rules, (ip4, neg4), (ip6, neg6)) = function
@@ -295,7 +297,7 @@ let emit_filter_rules (chains : (Ir.Chain_id.t, Ir.chain, 'a) Map.t) : string li
   rules
 
 let emit_nat_rules rules =
-    { Ir.id = Ir.Chain_id.Builtin Ir.Chain_type.Post_routing; rules; comment = "Nat" }
+  { Ir.id = Ir.Chain_id.Builtin Ir.Chain_type.Post_routing; rules; comment = "Nat" }
   |> emit_chain
 
 let emit rules =
