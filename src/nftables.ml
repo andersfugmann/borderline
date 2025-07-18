@@ -275,8 +275,30 @@ let expand_rule (rls, effects, target) =
   | (ip4, true), (ip6, true) -> [(ip4 @ rules, effects, target);
                                  (ip6 @ rules, effects, target) ] (* Cannot both be an ipv4 and a ipv6 address *)
 
-let emit_chain { Ir.id; rules; comment } =
 
+(* Need to expand based on protocol *)
+(* We cheat, and just create new chains *)
+let expand_rules chain_name (rls, effects, target) =
+  let rec inner protocols rules =
+    match protocols with
+    | (protos, neg) :: protocols ->
+      (* Match all options *)
+
+
+
+    (* Create jump targets for protocols if needed *)
+
+  (* Return a list of chains to emit:
+     chain_name, rules
+  *)
+
+
+  (* Can we create sub-chains here? *)
+  (* We should do that earlier! *)
+()
+
+
+let emit_chain { Ir.id; rules; comment } =
   let rules =
     List.concat_map ~f:expand_rule rules
     |> List.map ~f:gen_rule
@@ -286,6 +308,7 @@ let emit_chain { Ir.id; rules; comment } =
 
 
 let emit_filter_rules (chains : (Ir.Chain_id.t, Ir.chain, 'a) Map.t) : string list =
+  (* Can we create new chains here? *)
   let rules =
     Map.data chains
     |> List.concat_map ~f:emit_chain

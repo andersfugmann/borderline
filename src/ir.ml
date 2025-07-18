@@ -12,6 +12,7 @@ type mask = int
 type prefix = string
 
 type address_family = Ipv4 | Ipv6
+type protocol = Udp | Tcp | Icmpv4 | Icmpv6 | Ipv6in4
 
 module Chain_type = struct
   type t = Input | Output | Forward | Pre_routing | Post_routing [@@deriving compare, sexp]
@@ -89,7 +90,7 @@ type condition = Interface of Direction.t * id Set.t
                | Ports of Direction.t * Port_type.t * int Set.t
                | Ip6Set of Direction.t * Ip6.t
                | Ip4Set of Direction.t * Ip4.t
-               | Protocol of int Set.t
+               | Protocol of protocol Set.t
                | Icmp6 of int Set.t
                | Icmp4 of int Set.t
                | Mark of int * int

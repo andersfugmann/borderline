@@ -340,75 +340,145 @@ let udp = 17
 let ipv6_icmp = 58
 
 let filter_protocol chain =
-  let is_empty = function
-    | { ipv4 = { neg = false; l4 }; ipv6 = { neg = false; l4 = l4' } } ->
-      Set.is_empty l4 && Set.is_empty l4'
-    | _ -> false
-  in
-  let any = ([], true) in
-  let none = ([], false) in
-  (* Any or none??? If ipv4 is not mentioned, should it be excluded? *)
-  let to_protocol = function
-    | Ir.Protocol l4, neg -> { ipv4 = { l4; neg }; ipv6 = { l4; neg } }
-    | Ir.True, _ -> make_protocol_state ~ipv4:any ~ipv6:any
-    | Ir.Interface (_,_), _ -> make_protocol_state ~ipv4:any ~ipv6:any
-    | Ir.If_group (_,_), _ -> make_protocol_state ~ipv4:any ~ipv6:any
-    | Ir.Zone (_,_), _ -> make_protocol_state ~ipv4:any ~ipv6:any
-    | Ir.State _, _ -> make_protocol_state ~ipv4:any ~ipv6:any
-    | Ir.Ports (_, Ir.Port_type.Tcp, _), false -> make_protocol_state ~ipv4:([tcp], false) ~ipv6:([tcp], false)
-    | Ir.Ports (_, Ir.Port_type.Udp, _), false -> make_protocol_state ~ipv4:([udp], false) ~ipv6:([udp], false)
-    | Ir.Ports (_, _, _), true ->make_protocol_state ~ipv4:any ~ipv6:any
-    | Ir.Ip6Set (_,_), false -> make_protocol_state ~ipv4:none ~ipv6:any
-    | Ir.Ip6Set (_,_), true -> make_protocol_state ~ipv4:any ~ipv6:any
-    | Ir.Ip4Set (_,_), false -> make_protocol_state ~ipv4:any ~ipv6:none
-    | Ir.Ip4Set (_,_), true -> make_protocol_state ~ipv4:any ~ipv6:any
-    | Ir.Icmp6 _, _ -> make_protocol_state ~ipv4:none ~ipv6:([ipv6_icmp], false)
-    | Ir.Icmp4 _, _ -> make_protocol_state ~ipv4:([icmp], false) ~ipv6:none
-    | Ir.Hoplimit _, _ -> make_protocol_state ~ipv4:none ~ipv6:any
-    | Ir.Mark (_,_), _ -> make_protocol_state ~ipv4:any ~ipv6:any
-    | Ir.TcpFlags (_,_), _ -> make_protocol_state ~ipv4:([tcp], false) ~ipv6:([tcp], false)
-    | Ir.Address_family a, neg ->
-      let gen = function
-        | true, true -> none
-        | false, true -> any
-        | true, false -> any
-        | false, false -> none
-      in
-      let ipv4 = gen (Set.mem a Ir.Ipv4, neg) in
-      let ipv6 = gen (Set.mem a Ir.Ipv6, neg) in
-      make_protocol_state ~ipv4 ~ipv6
-  in
-  let get_protocols rules =
-     List.map ~f:to_protocol rules
-     |> List.fold_left ~f:merge_protocol ~init:(make_protocol_state ~ipv4:any ~ipv6:any)
-  in
-  let equal_protocols p p' =
-    let state_equal { neg; l4 } { neg = neg'; l4 = l4' } =
-      neg = neg' && Set.equal l4 l4'
-    in
-    state_equal p.ipv4 p'.ipv4 &&
-    state_equal p.ipv6 p'.ipv6
+  (* Returns a new "optimized" chain *)
+  let protocol_of_rule = function
+    | Ir.Protocol p, neg -> p, neg
+    | Ir.True, _
+    | Ir.Interface (_,_), _
+    | Ir.If_group (_,_), _
+    | Ir.Zone (_,_), _
+    | Ir.State _, _
+    | Ir.Ip6Set (_,_), _
+    | Ir.Ip4Set (_,_), _
+    | Ir.Hoplimit _, _
+    | Ir.Mark (_,_), _ ->
+      Set.empty, true
+    | Ir.Ports (_, Ir.Port_type.Tcp, _), _ ->
+      Set.singleton Ir.Tcp, false
+    | Ir.Ports (_, Ir.Port_type.Udp, _), _ ->
+      Set.singleton Ir.Udp, false
+    | Ir.Icmp4 _, _ ->
+      Set.singleton Ir.Icmpv4, false
+    | Ir.Icmp6 _, _ ->
+      Set.singleton Ir.Icmpv6, false
+    | Ir.TcpFlags (_,_), _ ->
+      Set.singleton Ir.Tcp, false
+    | Ir.Address_family fs, neg ->
+      match Set.to_list fs, neg with
+      | [ Ir.Ipv4 ], false
+      | [ Ir.Ipv6 ], true ->
+        Set.of_list [ Ir.Icmpv6 ], true
+      | [ Ir.Ipv4 ], true
+      | [ Ir.Ipv6 ], false ->
+        Set.of_list [ Ir.Icmpv4; Ir.Ipv6in4 ], true
+      | [], neg -> Set.empty, neg
+      | _ (* ipv4 and ipv6) *), neg -> Set.empty, not neg
   in
 
-  let remove_reduntant_protocol protocols (rules, effect_, target) =
-    let rec inner acc = function
-      | (Ir.Protocol _, _  | Ir.Address_family _, _ ) :: rules when
-          equal_protocols protocols (get_protocols (acc @ rules)) ->
-        printf "p";
-        inner acc rules
-      | rule :: rules -> inner (rule :: acc) rules
-      | [] -> List.rev acc
+  let merge_protocol (s, n) (s', n') =
+    match (s, n), (s', n') with
+    | (s, false), (s', false) -> Set.inter s s', false (* Take the intersection of the two lists *)
+    | (s, false), (s', true)
+    | (s', true), (s, false) -> Set.diff s s', false
+    | (s, true), (s', true) -> Set.union s s', true
+  in
+
+  let can_match p p' =
+    match p, p' with
+    | (s, false), (s', false) -> Set.are_disjoint s s' |> not
+    | (_s, true), (_s', true) -> true
+    | (s, false), (s', true)
+    | (s', true), (s, false) ->
+      Set.is_subset s ~of_:s' |> not
+  in
+  (* Marvolous *)
+  (* Now map all rules to their protocol and then compute the protocol matched.
+     Then reduce to the matching protocol.
+
+     For each rule, we understand if it can be matched. If not - delete the rule
+     If there are any Protocols, we delete them - they will not be needed any more.
+     The last pass will construct a new protocol that matches whatever the existing rules doe not match (Is that even possible)
+
+  *)
+
+  let get_protocol rules =
+    List.fold ~init:(Set.empty, true) ~f:(fun acc (protocol, _) ->
+      merge_protocol acc protocol
+    ) rules
+  in
+
+  let calculate_protocol protocol protocol' =
+    (* Protocol is used to reduce even further. *)
+    let protocol =
+      match protocol, protocol' with
+      | (s, false), (s', false) ->
+        (Set.inter s s', false)
+      | (s, true), (s', false) ->
+        (* We dont accept some protcols. We already require some protocols *)
+        (* For those we require, filter those that we dont accept *)
+        (Set.diff s' s, false)
+      | (s, false), (s', true) ->
+        (* We only accept some protcols, but not s' protocols. *)
+        (Set.diff s s', false)
+      | (s, true), (s', true) ->
+        (* We already dont accept s'
+         Now we dont accept some additional ones.
+         We only need to add those *)
+        (Set.diff s s', true)
     in
-    (inner [] rules, effect_, target)
+    match protocol, protocol' with
+    | (s, neg), (s', neg') when Set.equal s s' && Bool.equal neg neg' ->
+      None
+    | (s, true), _ when Set.is_empty s ->
+      None
+    | protocol, _ ->
+      Some protocol
+  in
+
+  let filter_rules rules =
+    (* We may have an empty rule set. That not the same as possible to match *)
+    (* So we need to understand if the *)
+    let rules = List.map ~f:(fun rule -> protocol_of_rule rule, rule) rules in
+    let protocol = get_protocol rules in
+
+    match protocol with
+    | s, false when Set.is_empty s ->
+      printf "P";
+      None
+    | protocol ->
+      let filtered_rules =
+        List.filter ~f:(function
+          | _, (Ir.Protocol _, _) ->
+            false
+          | protocol', _ when can_match protocol protocol' ->
+            printf "p";
+            false
+          | _ -> true
+        ) rules
+      in
+      let protocol' = get_protocol filtered_rules in
+      let rules = List.map ~f:snd rules in
+      let result =
+        match calculate_protocol protocol protocol' with
+        | None ->
+          List.iter ~f:(function
+            | Ir.Protocol _,_ -> printf "p";
+            | _ -> ()
+          ) rules;
+          rules
+        | Some (s, neg) ->
+          (Ir.Protocol s, neg) :: rules
+      in
+      Some result
   in
   let filter (rules, effect_, target) =
-    let protocols = get_protocols rules in
-    if (is_empty protocols) then printf "P";
-    Some (rules, effect_, target)
-    |> Option.filter ~f:(fun _ -> not (is_empty protocols))
-    |> Option.map ~f:(remove_reduntant_protocol protocols)
+    filter_rules rules
+    |> Option.map ~f:(fun rules -> (rules, effect_, target))
   in
   List.filter_map ~f:filter chain
+
+(* We should do the same for address family *)
+
 
 (** Inline chains that satifies p *)
 let rec inline cost_f chains =

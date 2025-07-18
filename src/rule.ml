@@ -16,6 +16,21 @@ let reject_of_string_opt = function
   | Some id -> Ir.Reject.of_string id
   | None -> Ir.Reject.PortUnreachable
 
+let id_to_address_family (id, pos) =
+  match id with
+  | "ipv4" -> Ir.Ipv4
+  | "ipv6" -> Ir.Ipv6
+  | s -> parse_errorf ~pos "Unknown address family: %s" s
+
+let id_to_protocol (id, pos) =
+  match id with
+  | "udp" -> Ir.Udp
+  | "tcp" -> Ir.Tcp
+  | "icmpv4" -> Ir.Icmpv4
+  | "icmpv6" -> Ir.Icmpv6
+  | "6in4" -> Ir.Ipv6in4
+  | s -> parse_errorf ~pos "Unknown protocol: %s" s
+
 let gen_target (effects, target) = function
   | F.Counter -> (Ir.Counter :: effects, target)
   | F.Log prefix -> (Ir.Log prefix :: effects, target)
@@ -91,9 +106,13 @@ let process_rule _table (rules, targets') =
     | F.Filter(dir, F.FZone(ids), neg) :: xs ->
         gen_op targets ((Ir.Zone(Ir.Direction.of_string dir,
                                  list2ids ids |> List.map ~f:fst |> Set.of_list), neg) :: acc) xs
-    | F.Protocol (p, neg) :: xs ->
-        let protocols = list2ints p |> Set.of_list in
-        gen_op targets ((Ir.Protocol protocols, neg) :: acc) xs
+    | F.Protocol (data, neg) :: xs ->
+      let set =
+        list2ids data
+        |> List.map ~f:id_to_protocol
+        |> Set.of_list
+      in
+      gen_op targets ((Ir.Protocol set, neg) :: acc) xs
     | F.Icmp6 (types, neg) :: xs ->
         let types = list2ints types |> Set.of_list in
         gen_op targets ((Ir.Icmp6 types, neg) :: acc) xs
@@ -127,7 +146,7 @@ let process_rule _table (rules, targets') =
     | F.Address_family (data, neg) :: xs ->
       let set =
         list2ids data
-        |> List.map ~f:(function "ipv4", _ -> Ir.Ipv4 | "ipv6", _ -> Ir.Ipv6 | s, pos -> parse_errorf ~pos "Unknown address family: %s" s)
+        |> List.map ~f:id_to_address_family
         |> Set.of_list
       in
       gen_op targets ((Ir.Address_family set, neg) :: acc) xs
