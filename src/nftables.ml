@@ -97,8 +97,8 @@ let gen_cond neg cond =
   | Ir.Interface (dir, interfaces) ->
     let interfaces = Set.to_list interfaces |> List.map ~f:(sprintf "\"%s\"") |> String.concat ~sep:", " in
     let classifier = match dir with
-      | Ir.Direction.Source -> "iif"
-      | Ir.Direction.Destination -> "oif"
+      | Ir.Direction.Source -> "iifname"
+      | Ir.Direction.Destination -> "oifname"
     in
     sprintf "%s %s { %s }" classifier neg_str interfaces, None
   | Ir.If_group (dir, if_groups) ->
@@ -198,13 +198,11 @@ let gen_cond neg cond =
     in rule, None
   | Ir.Address_family a ->
     let proto = match Set.to_list a with
-      | [Ir.Ipv4] when not neg -> "ip"
-      | [Ir.Ipv6] when neg -> "ip"
-      | [Ir.Ipv6] when not neg -> "ip6"
-      | [Ir.Ipv4] when neg -> "ip6"
+      | [Ir.Ipv4] -> "ipv4"
+      | [Ir.Ipv6] -> "ipv6"
       | _ -> failwith "Address family must be either ipv4 or ipv6"
     in
-    sprintf "meta protocol %s" proto, None
+    sprintf "meta nfproto %s%s" neg_str proto, None
   | Ir.True when neg ->
     (* Any false statement *)
     "meta mark | 0x1 == 0x0", None
