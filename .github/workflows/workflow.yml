@@ -26,7 +26,7 @@ jobs:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
           dune-cache: true
       - name: Install dependencies
-        run: sudo apt update && sudo apt install xsltproc nft --yes
+        run: sudo apt update && sudo apt install xsltproc nftables --yes
 
       - name: Opam dependencies
         run: opam install . --deps-only --with-test
