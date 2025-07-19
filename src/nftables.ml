@@ -13,6 +13,19 @@ let zone_mask = 1 lsl zone_bits - 1
 
 let zones = Hashtbl.Poly.create ~size:100 ()
 
+let sets = ref []
+let create_set ipv4 ipv6 =
+  let set_id = match !sets with
+    | [] -> 0
+    | (id, _, _, _) :: _ -> id + 1
+  in
+  let set_name = sprintf "bl_set_%d" set_id in
+  sets := (set_id, set_name, ipv4, ipv6) :: !sets;
+  set_name
+
+(* create set is currently not in use *)
+let _ = create_set
+
 let get_zone_id zone =
   match Hashtbl.find zones zone with
   | Some id -> id
@@ -64,12 +77,6 @@ let string_of_tcpflag = function
   | Ir.Tcp_flags.Psh -> "psh"
   | Ir.Tcp_flags.Ecn -> "ecn"
   | Ir.Tcp_flags.Cwr -> "cwr"
-
-let string_of_layer = function
-  | Ir.Ipv4 -> "ip"
-  | Ir.Ipv6 -> "ip6"
-
-let string_of_protocol l = l
 
 let string_of_state state = match state with
   | State.New -> "new"
@@ -147,8 +154,6 @@ let gen_cond neg cond =
     in
     sprintf "%s %s%s { %s }" classifier neg_str cond (string_of_int_set ports), None
   | Ir.Ip6Set (dir, ips) ->
-    (* Should define a true ip set. these sets can become very large. *)
-
     let classifier = match dir with
       | Ir.Direction.Source -> "saddr"
       | Ir.Direction.Destination  -> "daddr"
@@ -157,7 +162,7 @@ let gen_cond neg cond =
               |> Ip6.reduce
               |> List.map ~f:Ipaddr.V6.Prefix.to_string
               |> String.concat ~sep:", "
-    in
+       in
     sprintf "ip6 %s %s{ %s }" classifier neg_str ips, None
   | Ir.Ip4Set (dir, ips) ->
     let classifier = match dir with
@@ -171,9 +176,6 @@ let gen_cond neg cond =
     in
     sprintf "ip %s %s{ %s }" classifier neg_str ips, None
   | Ir.Protocol p ->
-    (* This is not easy. *)
-    (* We cannot match everything, so we may need to create subchains and use return *)
-
     let set = Set.to_list p |> List.map ~f:Int.to_string |> String.concat ~sep:"," in
     sprintf "meta l4proto %s{ %s }" neg_str set, None
   | Ir.Icmp6 types ->
@@ -263,6 +265,7 @@ let gen_rule = function
     sprintf "%s %s %s %s;" conds effects target comments
 
 (* Why do we have ipv4 set and ipv6 set? Those should be unified *)
+(* Ahh. This is needed as we need both ipv4 and ipv6 match *)
 let expand_rule (rls, effects, target) =
   let rec split (rules, (ip4, neg4), (ip6, neg6)) = function
     | (Ir.Ip4Set _, n) as r :: xs -> split (rules, (r :: ip4, neg4 && n), (ip6, neg6)) xs
@@ -282,7 +285,6 @@ let expand_rule (rls, effects, target) =
                                  (ip6 @ rules, effects, target) ] (* Cannot both be an ipv4 and a ipv6 address *)
 
 let emit_chain { Ir.id; rules; comment } =
-
   let rules =
     List.concat_map ~f:expand_rule rules
     |> List.map ~f:gen_rule
@@ -304,6 +306,48 @@ let emit_nat_rules rules =
   { Ir.id = Ir.Chain_id.Builtin Ir.Chain_type.Post_routing; rules; comment = "Nat" }
   |> emit_chain
 
+let emit_ip_sets () =
+  let ip_sets = !sets in
+  (* New sets must not overlap with existing sets *)
+  sets := (
+    match !sets with
+    | [] -> []
+    | (id, _, _, _) :: _ -> [ (id, "placeholder", Ir.Ip4.empty, Ir.Ip6.empty) ]
+  );
+
+  List.concat_map ~f:(fun (_id, set_name, ipv4, ipv6) ->
+    let set_type = match Ir.Ip4.is_empty ipv4, Ir.Ip6.is_empty ipv6 with
+      | true, true -> None
+      | false, true -> Some "type ipv4_addr"
+      | true, false -> Some "type ipv6_addr"
+      | false, false -> Some "typeof ip saddr" (* ip saddr derived the type based on the match, which can be both ipv4 and ipv6 *)
+    in
+    match set_type with
+    | None -> []
+    | Some set_type ->
+      let addresses =
+        []
+        |> (fun acc ->
+          Ip4.to_list ipv4
+          |> Ip4.reduce
+          |> List.fold ~init:acc ~f:(fun acc ip4 -> Ipaddr.V4.Prefix.to_string ip4 :: acc)
+        )
+        |> (fun acc ->
+          Ip6.to_list ipv6
+          |> Ip6.reduce
+          |> List.fold ~init:acc ~f:(fun acc ip4 -> Ipaddr.V6.Prefix.to_string ip4 :: acc)
+        )
+        |> String.concat ~sep:", "
+      in
+      (sprintf "set %s {" set_name) ::
+      (sprintf "  %s;" set_type) ::
+      (sprintf "  flags interval;") ::
+      (sprintf "  elements = { %s }" addresses) ::
+      (sprintf "}") ::
+      []
+  ) (List.rev ip_sets)
+
+
 let emit rules =
   let zones =
     Hashtbl.to_alist zones
@@ -312,8 +356,10 @@ let emit rules =
       sprintf "   iifname \"%s\" meta mark 0x%04x comment \"Zone %s\"" zone id zone)
   in
   "table inet borderline {" ::
+  (emit_ip_sets ()) @
   "  chain zones { " ::
   "    comment \"zone ids\"" :: zones @
-  ["  }"] @
-  rules @
+  "  }" :: rules @
   [ "}" ]
+
+(* And we could really do with some smarter indentation *)
