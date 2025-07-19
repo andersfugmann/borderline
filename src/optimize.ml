@@ -452,17 +452,17 @@ let address_family_of_cond cond =
   in
   Ir.Address_family s, n
 
-
-let filter_protocol chain =
-  let calculate_protocol ~total inferred =
+(* Lets see if we can generalize this *)
+let filter_derived ~init ~of_cond chain =
+  let calculate ~total inferred =
     let merged = merge_oper total inferred in
     match Ir.eq_cond (merged |> Option.value_exn) inferred with
     | true -> None
     | false -> merged
   in
 
-  let merge_protocols f conds =
-    List.fold ~init:(Ir.Protocol Set.empty, true) ~f:(fun acc p ->
+  let merge f conds =
+    List.fold ~init ~f:(fun acc p ->
       merge_oper acc (f p) |> Option.value_exn
     ) conds
   in
@@ -470,8 +470,8 @@ let filter_protocol chain =
   let filter (conds, effects, target) =
     (* We may have an empty rule set. That not the same as possible to match *)
     (* So we need to understand if the *)
-    let conds = List.map ~f:(fun rule -> protocol_of_cond rule, rule) conds in
-    let total = merge_protocols fst conds in
+    let conds = List.map ~f:(fun cond -> of_cond cond, cond) conds in
+    let total = merge fst conds in
 
     match is_always false total with
     | true ->
@@ -481,22 +481,23 @@ let filter_protocol chain =
     | false ->
       let filtered_conds =
         List.filter ~f:(function
-          | _, (Ir.Protocol _, _) -> false
+          | cond, cond' when eq_cond cond cond' -> false
           | _ -> true
         ) conds
       in
-      let inferred = merge_protocols fst filtered_conds in
+      let inferred = merge fst filtered_conds in
       let filtered_conds = List.map ~f:snd filtered_conds in
       let conds =
-        match calculate_protocol ~total inferred with
+        match calculate ~total inferred with
         | None ->
           filtered_conds
-        | Some protocol ->
-          protocol :: filtered_conds
+        | Some cond ->
+          cond :: filtered_conds
       in
       Some (conds, effects, target)
   in
   List.filter_map ~f:filter chain
+
 
 (** Inline chains that satifies p *)
 let rec inline cost_f chains =
@@ -610,7 +611,6 @@ let conds chains =
       List.length cl + List.length ef + acc) ) chains
 
 (** Remove unsatisfiable rules recursively. Loop over all chains, and follow the chains. *)
-
 let filter_exclusive_rules acc cond =
   let is_unsatisfiable conds cond =
     List.exists conds ~f:(fun cond' ->
@@ -681,6 +681,10 @@ let remove_unsatisfiable_rules_recursive filter chains =
     | _ -> chains
   )
 
+let filter_protocol = filter_derived ~init:(Ir.Protocol Set.empty, true) ~of_cond:protocol_of_cond
+
+let filter_address_family = filter_derived ~init:(Ir.Address_family Set.empty, true) ~of_cond:address_family_of_cond
+
 let optimize_pass chains =
   printf "#Optim: (%d, %d) %!" (count_rules chains) (conds chains);
   let chains = fold_return_statements chains in
@@ -689,6 +693,7 @@ let optimize_pass chains =
     map_chain_rules eliminate_dead_rules;
     remove_duplicate_chains;
     map_chain_rules filter_protocol;
+    map_chain_rules filter_address_family;
     map_chain_rules remove_unsatisfiable_rules;
     map_chain_rules remove_true_rules;
     map_chain_rules remove_empty_rules;

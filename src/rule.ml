@@ -85,6 +85,7 @@ let process_rule _table (rules, targets') =
         let chain = gen_op targets acc xs in
         (* Neg in this case needs to be chained *)
         Chain.create [
+          (* Dont need this, if we can create sets. And I think we can *)
           [Ir.Ip6Set (Ir.Direction.of_string dir, Ipset.Ip6.of_list ip6), neg], [], Ir.Jump chain.Ir.id;
           [Ir.Ip4Set (Ir.Direction.of_string dir, Ipset.Ip4.of_list ip4), neg], [], Ir.Jump chain.Ir.id;
         ] "Rule"

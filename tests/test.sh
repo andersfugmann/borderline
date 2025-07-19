@@ -5,8 +5,7 @@ SUCCESS=0
 WARN=0
 
 if [ ! -x "${BORDERLINE}" ]; then
-    echo "Borderline not found"
-    exit -1
+    BORDERLINE="dune exec borderline -- "
 fi
 
 function execute () {
