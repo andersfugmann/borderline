@@ -365,38 +365,9 @@ let reorder rules =
   in
   reorder_rules [] rules
 
-type protocol_state = {
-  neg: bool;
-  l4: int Set.t;
-}
-type protocol_states = {
-  ipv4 : protocol_state;
-  ipv6 : protocol_state;
-}
 
-let merge_protocol state state' =
-  let inner state state' =
-    match state, state' with
-    | { neg = false; l4 }, { neg = false; l4 = l4' } ->
-      { neg = false; l4 = Set.inter l4 l4'}
-    | { neg = false; l4 }, { neg = true; l4 = l4' } ->
-      { neg = false; l4 = Set.diff l4 l4' }
-    | { neg = true; l4 }, { neg = false; l4 = l4' } ->
-      { neg = false; l4 = Set.diff l4' l4 }
-    | { neg = true; l4 }, { neg = true; l4 = l4' } ->
-      { neg = true; l4 = Set.union l4 l4' }
-  in
-  let ipv4 = inner state.ipv4 state'.ipv4 in
-  let ipv6 = inner state.ipv6 state'.ipv6 in
-  { ipv4; ipv6 }
-
-let make_protocol_state ~ipv4 ~ipv6 =
-  let ip4, neg4 = ipv4 in
-  let ip6, neg6 = ipv6 in
-  {
-    ipv4 = { neg = neg4; l4 = Set.of_list ip4 };
-    ipv6 = { neg = neg6; l4 = Set.of_list ip6 }
-  }
+(** TODO: make address_family of cond *)
+(* And should use the name pred instead of cond *)
 
 let icmp = 1
 let igmp  = 2
@@ -404,17 +375,19 @@ let tcp = 6
 let udp = 17
 let icmp6 = 58
 
-let filter_protocol chain =
-  let protocol_of_rule = function
+let protocol_of_cond cond =
+  let s, n =
+    match cond with
     | Ir.Protocol p, neg -> p, neg
     | Ir.True, _
     | Ir.Interface (_,_), _
     | Ir.If_group (_,_), _
     | Ir.Zone (_,_), _
     | Ir.State _, _
-    | Ir.Hoplimit _, _
     | Ir.Mark (_,_), _ ->
       Set.empty, true
+    | Ir.Hoplimit _, _ ->
+      Set.of_list [ icmp; igmp ], true
     | Ir.Ip6Set (_,_), _ ->
       Set.of_list [ icmp; igmp ], true
     | Ir.Ip4Set (_,_), _ ->
@@ -444,100 +417,53 @@ let filter_protocol chain =
       | [Ir.Ipv4; Ir.Ipv6], true
       | [Ir.Ipv6; Ir.Ipv4], true
       | [ ], false ->
-          Set.empty, false
+        Set.empty, false
       | _ :: _ :: _ , _ -> failwith "This cannot be reached and will cause a compilation error"
   in
+  Ir.Protocol s, n
 
-  let merge_protocol (s, n) (s', n') =
-    match (s, n), (s', n') with
-    | (s, false), (s', false) -> Set.inter s s', false (* Take the intersection of the two lists *)
-    | (s, false), (s', true)
-    | (s', true), (s, false) -> Set.diff s s', false
-    | (s, true), (s', true) -> Set.union s s', true
+let filter_protocol chain =
+  let calculate_protocol ~total inferred =
+    let merged = merge_oper total inferred in
+    match Ir.eq_cond (merged |> Option.value_exn) inferred with
+    | true -> None
+    | false -> merged
   in
 
-  let can_match p p' =
-    match p, p' with
-    | (s, false), (s', false) -> Set.are_disjoint s s' |> not
-    | (_s, true), (_s', true) -> true
-    | (s, false), (s', true)
-    | (s', true), (s, false) ->
-      Set.is_subset s ~of_:s' |> not
+  let merge_protocols f conds =
+    List.fold ~init:(Ir.Protocol Set.empty, true) ~f:(fun acc p ->
+      merge_oper acc (f p) |> Option.value_exn
+    ) conds
   in
 
-  let get_protocol rules =
-    List.fold ~init:(Set.empty, true) ~f:(fun acc (protocol, _) ->
-      merge_protocol acc protocol
-    ) rules
-  in
-
-  let calculate_protocol protocol protocol' =
-    (* Protocol is used to reduce even further. *)
-    let protocol =
-      match protocol, protocol' with
-      | (s, false), (s', false) ->
-        (Set.inter s s', false)
-      | (s, true), (s', false) ->
-        (* We dont accept some protcols. We already require some protocols *)
-        (* For those we require, filter those that we dont accept *)
-        (Set.diff s' s, false)
-      | (s, false), (s', true) ->
-        (* We only accept some protcols, but not s' protocols. *)
-        (Set.diff s s', false)
-      | (s, true), (s', true) ->
-        (* We already dont accept s'
-           Now we dont accept some additional ones.
-           We only need to add those *)
-        (Set.diff s s', true)
-    in
-    match protocol, protocol' with
-    | (s, neg), (s', neg') when Set.equal s s' && Bool.equal neg neg' ->
-      None
-    | (s, true), _ when Set.is_empty s ->
-      None
-    | protocol, _ ->
-      Some protocol
-  in
-
-  let filter_rules rules =
+  let filter (conds, effects, target) =
     (* We may have an empty rule set. That not the same as possible to match *)
     (* So we need to understand if the *)
-    let rules = List.map ~f:(fun rule -> protocol_of_rule rule, rule) rules in
-    let protocol = get_protocol rules in
+    let conds = List.map ~f:(fun rule -> protocol_of_cond rule, rule) conds in
+    let total = merge_protocols fst conds in
 
-    match protocol with
-    | s, false when Set.is_empty s ->
+    match is_always false total with
+    | true ->
+      (* Unsatisfiable *)
       printf "P";
       None
-    | protocol ->
-      let filtered_rules =
+    | false ->
+      let filtered_conds =
         List.filter ~f:(function
-          | _, (Ir.Protocol _, _) ->
-            false
-          | protocol', _ when can_match protocol protocol' ->
-            printf "p";
-            false
+          | _, (Ir.Protocol _, _) -> false
           | _ -> true
-        ) rules
+        ) conds
       in
-      let protocol' = get_protocol filtered_rules in
-      let rules = List.map ~f:snd rules in
-      let result =
-        match calculate_protocol protocol protocol' with
+      let inferred = merge_protocols fst filtered_conds in
+      let filtered_conds = List.map ~f:snd filtered_conds in
+      let conds =
+        match calculate_protocol ~total inferred with
         | None ->
-          List.iter ~f:(function
-            | Ir.Protocol _,_ -> printf "p";
-            | _ -> ()
-          ) rules;
-          rules
-        | Some (s, neg) ->
-          (Ir.Protocol s, neg) :: rules
+          filtered_conds
+        | Some protocol ->
+          protocol :: filtered_conds
       in
-      Some result
-  in
-  let filter (rules, effect_, target) =
-    filter_rules rules
-    |> Option.map ~f:(fun rules -> (rules, effect_, target))
+      Some (conds, effects, target)
   in
   List.filter_map ~f:filter chain
 
@@ -653,22 +579,43 @@ let conds chains =
       List.length cl + List.length ef + acc) ) chains
 
 (** Remove unsatisfiable rules recursively. Loop over all chains, and follow the chains. *)
-let remove_unsatisfiable_rules_recursive chains =
+
+let filter_exclusive_rules acc cond =
   let is_unsatisfiable conds cond =
-    (* Can I print this??? *)
     List.exists conds ~f:(fun cond' ->
       match merge_oper cond cond' with
       | Some oper when is_always false oper ->
-        (* printf "!(%s,%b + %s,%b)" (string_of_condition (fst cond)) (snd cond) (string_of_condition (fst cond')) (snd cond'); *)
         true
       | Some _
       | None -> false
     )
   in
+  match acc with
+  | None -> `Satisfiable (Some [cond])
+  | Some conds ->
+    match is_unsatisfiable conds cond with
+    | true -> `Unsatisfiable
+    | false -> `Satisfiable (Some (cond :: conds))
+
+let filter_unsatisfiable_protocol acc cond =
+  (* Acc is a protocol *)
+  let cond = protocol_of_cond cond in
+  match acc with
+  | None -> `Satisfiable (Some cond)
+  | Some acc ->
+    let acc = merge_oper acc cond in
+    match is_always false (acc |> Option.value_exn) with
+    | true -> `Unsatisfiable
+    | false -> `Satisfiable acc
+
+
+let remove_unsatisfiable_rules_recursive filter chains =
   let rec conds_satisfiable acc = function
-    | [] -> true
-    | cond :: _ when is_unsatisfiable acc cond -> false
-    | cond :: conds -> conds_satisfiable (cond :: acc) conds
+    | [] -> `Satisfiable acc
+    | cond :: conds ->
+      match filter acc cond with
+      | `Satisfiable acc -> conds_satisfiable acc conds
+      | `Unsatisfiable -> `Unsatisfiable
   in
   (* Do we have a list of top_level chains? I guess we do! *)
   (* Its a map. Not an imperative structure. Which means that we need to replace before we descend! *)
@@ -679,14 +626,15 @@ let remove_unsatisfiable_rules_recursive chains =
     | Some ({ rules ; _ } as chain) ->
       let chains, rules =
         List.fold_left ~init:(chains, []) ~f:(fun (chains, rules) (conds, effects, target) ->
+          (* If we encounter a filtered rule, then stop *)
           match conds_satisfiable acc conds with
-          | false ->
+          | `Unsatisfiable ->
             printf "U";
             chains, rules
-          | true ->
+          | `Satisfiable acc ->
             let chains =
               match target with
-              | Jump chain_id -> process_chain chains chain_id (acc @ conds)
+              | Jump chain_id -> process_chain chains chain_id acc
               | _ -> chains
             in
             let rule = (conds, effects, target) in
@@ -698,7 +646,7 @@ let remove_unsatisfiable_rules_recursive chains =
   (* Loop over all built_in rules *)
   Map.keys chains
   |> List.fold ~init:chains ~f:(fun chains -> function
-    | Ir.Chain_id.Builtin _ as chain_id -> process_chain chains chain_id []
+    | Ir.Chain_id.Builtin _ as chain_id -> process_chain chains chain_id None
     | _ -> chains
   )
 
@@ -719,7 +667,8 @@ let optimize_pass chains =
     merge_adjecent_rules;
     inline inline_cost;
     map_chain_rules (fun rls -> Common.map_filter_exceptions (fun (opers, effect_, tg) -> (merge_opers opers, effect_, tg)) rls);
-    remove_unsatisfiable_rules_recursive;
+    remove_unsatisfiable_rules_recursive filter_exclusive_rules;
+    remove_unsatisfiable_rules_recursive filter_unsatisfiable_protocol;
     remove_unreferenced_chains;
   ] in
   let chains' = List.fold_left ~f:(fun chains' optim_func -> optim_func chains') ~init:chains optimize_functions in
@@ -732,6 +681,8 @@ let rec optimize chains =
   | true -> printf "#Optimization done\n";
     chains'
   | false -> optimize chains'
+
+
 
 module Test = struct
   open OUnit2
@@ -776,37 +727,5 @@ module Test = struct
         assert_bool "c b must be a subset" (is_subset c b);
         ()
       end;
-      "merge_protocol" >:: begin fun _ ->
-        let any = ([], true) in
-        let none = ([], false) in
-        let equal { ipv4; ipv6 } { ipv4 = ipv4' ; ipv6 = ipv6' } =
-          let equal { neg; l4} { neg = neg'; l4 = l4' } =
-            neg = neg' && Set.equal l4 l4'
-          in
-          equal ipv4 ipv4' && equal ipv6 ipv6'
-        in
-        let printer { ipv4 = { neg = neg4; l4 = l44 }; ipv6 = { neg = neg6; l4 = l46 } } =
-          Printf.sprintf "(([ %s ], %b), ([ %s ], %b))"
-            (Set.to_list l44 |> List.map ~f:Int.to_string |> String.concat ~sep:"; ") neg4
-            (Set.to_list l46 |> List.map ~f:Int.to_string |> String.concat ~sep:"; ") neg6
-        in
-        let any_p = make_protocol_state ~ipv4:any ~ipv6:any in
-        let none_p = make_protocol_state ~ipv4:none ~ipv6:none in
-        let assert_equal = assert_equal ~cmp:equal ~printer in
-        assert_equal any_p any_p;
-        assert_equal none_p none_p;
-        assert_equal (merge_protocol any_p none_p) none_p;
-        assert_equal (merge_protocol any_p any_p) any_p;
-        assert_equal (merge_protocol none_p none_p) none_p;
-
-        let ipv4_udp = make_protocol_state ~ipv4:([udp], false) ~ipv6:none in
-        let ipv4_udp' =
-          any_p
-          |> merge_protocol ipv4_udp
-          |> merge_protocol any_p
-        in
-        assert_equal ipv4_udp ipv4_udp';
-        ()
-      end
     ]
 end
