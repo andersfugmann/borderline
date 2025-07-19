@@ -422,6 +422,37 @@ let protocol_of_cond cond =
   in
   Ir.Protocol s, n
 
+let address_family_of_cond cond =
+  let ipv4_protocols = Set.of_list [ icmp; igmp ] in
+  let ipv6_protocols = Set.of_list [ icmp6 ] in
+  let s, n =
+    match cond with
+    | Ir.Hoplimit _, _
+    | Ir.Ip6Set (_,_), _
+    | Ir.Icmp6 _, _ ->
+      Set.singleton Ir.Ipv6, false
+    | Ir.Ip4Set (_,_), _
+    | Ir.Icmp4 _, _ ->
+      Set.singleton Ir.Ipv4, false
+    | Ir.Protocol p, false when Set.is_subset p ~of_:ipv6_protocols ->
+      Set.singleton Ir.Ipv6, false
+    | Ir.Protocol p, false when Set.is_subset p ~of_:ipv4_protocols ->
+      Set.singleton Ir.Ipv4, false
+    | Ir.Protocol _, _
+    | Ir.True, _
+    | Ir.Interface (_,_), _
+    | Ir.If_group (_,_), _
+    | Ir.Zone (_,_), _
+    | Ir.State _, _
+    | Ir.Mark (_,_), _
+    | Ir.Ports _, _
+    | Ir.TcpFlags (_,_), _ ->
+      Set.empty, true
+    | Ir.Address_family af, neg -> af, neg
+  in
+  Ir.Address_family s, n
+
+
 let filter_protocol chain =
   let calculate_protocol ~total inferred =
     let merged = merge_oper total inferred in
@@ -597,9 +628,9 @@ let filter_exclusive_rules acc cond =
     | true -> `Unsatisfiable
     | false -> `Satisfiable (Some (cond :: conds))
 
-let filter_unsatisfiable_protocol acc cond =
+let filter_unsatisfiable f acc cond =
   (* Acc is a protocol *)
-  let cond = protocol_of_cond cond in
+  let cond = f cond in
   match acc with
   | None -> `Satisfiable (Some cond)
   | Some acc ->
@@ -668,7 +699,8 @@ let optimize_pass chains =
     inline inline_cost;
     map_chain_rules (fun rls -> Common.map_filter_exceptions (fun (opers, effect_, tg) -> (merge_opers opers, effect_, tg)) rls);
     remove_unsatisfiable_rules_recursive filter_exclusive_rules;
-    remove_unsatisfiable_rules_recursive filter_unsatisfiable_protocol;
+    remove_unsatisfiable_rules_recursive (filter_unsatisfiable protocol_of_cond);
+    remove_unsatisfiable_rules_recursive (filter_unsatisfiable address_family_of_cond);
     remove_unreferenced_chains;
   ] in
   let chains' = List.fold_left ~f:(fun chains' optim_func -> optim_func chains') ~init:chains optimize_functions in
