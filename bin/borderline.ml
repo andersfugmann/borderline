@@ -41,7 +41,12 @@ let _ =
     in
 
     List.iter ~f:(fun l -> print_endline l) lines;
-    Printf.printf "\n#Lines: %d\n" (List.length lines)
+
+    Printf.printf "\n";
+    Printf.printf "#Chains: %d\n" (Chain.count_chains ());
+    Printf.printf "#Rules: %d\n" (Chain.count_rules ());
+    Printf.printf "#Conditons: %d\n" (Chain.count_conditions ());
+    Printf.printf "#Lines: %d\n" (List.length lines);
 
   with
   | ParseError err ->
