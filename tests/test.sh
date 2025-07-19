@@ -16,7 +16,7 @@ function execute () {
     EXPECTED=$(grep -o '"OK[^"]*"' ${TEST_FILE} | sort -u | wc -l)
     COUNT=$(grep -o '"OK[^"]*"' ${TEST_FILE} | wc -l)
     if (( EXPECTED < COUNT )); then
-        echo "Error in test ${TEST_FILE}: All ok results must be distinct"
+        echo "Error in test ${TEST_FILE}: All OK results must be distinct"
         echo "Found duplicate values: $(grep -o '"OK[^"]*"' ${TEST_FILE} | sort | uniq -d)"
         exit 2
     fi
