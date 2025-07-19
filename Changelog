@@ -9,7 +9,7 @@ Version 1.0.0 (UNRELEASED)
 * Add "address family = { ipv4, ipv6 }" to match address family
 * Add 'check' to init.d script
 * Better checking for redundant rules
-* Update nft rule generation to be more ideomatic
+* Update nft rule generation to be more idiomatic
 * Dont dump stacktrace on syntax errors
 *
 
