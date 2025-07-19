@@ -24,7 +24,7 @@ let create_set ipv4 ipv6 =
   set_name
 
 (* create set is currently not in use *)
-let _ = create_set
+let () = ignore create_set
 
 let get_zone_id zone =
   match Hashtbl.find zones zone with
@@ -95,12 +95,12 @@ let string_or_int_set s =
     | `String s -> Printf.sprintf "\"%s\"" s :: acc) s
   |> String.concat ~sep:", "
 
-let gen_cond neg cond =
+let gen_pred neg pred =
   let neg_str = match neg with
     | true -> "!= "
     | false -> ""
   in
-  match cond with
+  match pred with
   | Ir.Interface (dir, interfaces) ->
     let interfaces = Set.to_list interfaces |> List.map ~f:(sprintf "\"%s\"") |> String.concat ~sep:", " in
     let classifier = match dir with
@@ -144,7 +144,7 @@ let gen_cond neg cond =
     in
     sprintf "ct state %s{ %s }" neg_str states, None
   | Ir.Ports (dir, port_type, ports) ->
-    let cond = match dir with
+    let pred = match dir with
       | Ir.Direction.Source -> "sport"
       | Ir.Direction.Destination -> "dport"
     in
@@ -152,7 +152,7 @@ let gen_cond neg cond =
       | Ir.Port_type.Tcp -> "tcp"
       | Ir.Port_type.Udp -> "udp"
     in
-    sprintf "%s %s%s { %s }" classifier neg_str cond (string_of_int_set ports), None
+    sprintf "%s %s%s { %s }" classifier neg_str pred (string_of_int_set ports), None
   | Ir.Ip6Set (dir, ips) ->
     let classifier = match dir with
       | Ir.Direction.Source -> "saddr"
@@ -246,10 +246,10 @@ let gen_target = function
 
 let gen_rule = function
   | ([], [], Ir.Pass) -> "# Empty rule"
-  | (conds, effects, target) ->
-    let conds, comments =
-      let conds, comments =
-        List.map ~f:(fun (op, neg) -> gen_cond neg op) conds
+  | (preds, effects, target) ->
+    let preds, comments =
+      let preds, comments =
+        List.map ~f:(fun (op, neg) -> gen_pred neg op) preds
         |> List.unzip
       in
       let comments =
@@ -258,11 +258,11 @@ let gen_rule = function
                   | cs -> String.concat ~sep:" " cs
                           |> sprintf "comment \"%s\""
       in
-      String.concat ~sep:" " conds, comments
+      String.concat ~sep:" " preds, comments
     in
     let effects = List.map ~f:gen_effect effects |> String.concat ~sep:" " in
     let target = gen_target target in
-    sprintf "%s %s %s %s;" conds effects target comments
+    sprintf "%s %s %s %s;" preds effects target comments
 
 (* Why do we have ipv4 set and ipv6 set? Those should be unified *)
 (* Ahh. This is needed as we need both ipv4 and ipv6 match *)
@@ -348,7 +348,7 @@ let emit_ip_sets () =
   ) (List.rev ip_sets)
 
 
-let rec indent_rules ?(acc = []) ?(indent = "") ?(indent_level = "    ")= function
+let rec pp_rules ?(acc = []) ?(indent = "") ?(indent_level = "    ")= function
   | [] -> List.rev acc
   | line :: lines ->
     let line = String.strip line in
@@ -363,9 +363,7 @@ let rec indent_rules ?(acc = []) ?(indent = "") ?(indent_level = "    ")= functi
         indent ^ line, indent
       | _ -> indent ^ line, indent
     in
-    (* But now I need to remove also *)
-
-    indent_rules ~acc:(line :: acc) ~indent lines
+    pp_rules ~acc:(line :: acc) ~indent ~indent_level lines
 
 let emit rules =
   let zones =
@@ -380,7 +378,4 @@ let emit rules =
   "    comment \"zone ids\"" :: zones @
   "  }" :: rules @
   [ "}" ]
-
-  |> indent_rules
-
-(* And we could really do with some smarter indentation *)
+  |> pp_rules

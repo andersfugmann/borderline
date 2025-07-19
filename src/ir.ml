@@ -82,7 +82,7 @@ module Reject = struct
 end
 
 
-type condition = Interface of Direction.t * id Set.t
+type predicate = Interface of Direction.t * id Set.t
                | If_group of Direction.t * [`Int of int | `String of string] Set.t
                | Zone of Direction.t * zone Set.t
                | State of State.t
@@ -98,7 +98,7 @@ type condition = Interface of Direction.t * id Set.t
                | Address_family of address_family Set.t
                | True
 
-let string_of_condition = function
+let string_of_predicate = function
   | Interface (_, _) -> "Interface"
   | If_group (_, _) -> "If_group"
   | Zone (_, _) -> "Zone"
@@ -130,12 +130,12 @@ type target = Jump of Chain_id.t
             | Reject of Reject.t
             | Pass (* Not terminal *)
 
-type oper = (condition * bool) list * effect_ list * target
+type oper = (predicate * bool) list * effect_ list * target
 
 type chain = { id: Chain_id.t; rules : oper list; comment: string; }
 
-(** Test if two conditions are idential *)
-let eq_cond (x, n) (y, m) =
+(** Test if two predicates are idential *)
+let eq_pred (x, n) (y, m) =
   let (=) = Poly.equal in
   let eq = function
     | Interface (d, s) -> (function Interface (d', s') -> d = d' && Set.equal s s' | _ -> false)
@@ -156,12 +156,12 @@ let eq_cond (x, n) (y, m) =
   in
   Bool.equal n m && eq x y
 
-let eq_conds a b =
-  List.equal eq_cond a b
+let eq_preds a b =
+  List.equal eq_pred a b
 
-let eq_oper (conds, effects, action) (conds', effects', action') =
+let eq_oper (preds, effects, action) (preds', effects', action') =
   let open Poly in
-  action = action' && effects = effects' && eq_conds conds conds'
+  action = action' && effects = effects' && eq_preds preds preds'
 
 let eq_rules a b =
   List.equal eq_oper a b
@@ -203,7 +203,7 @@ let get_dir = function
   | True -> None
   | Address_family _ -> None
 
-let enumerate_cond = function
+let enumerate_pred = function
   | Interface _ -> 1
   | If_group _ -> 1
   | Zone _ -> 2
@@ -220,11 +220,11 @@ let enumerate_cond = function
   | Hoplimit _ -> 13
   | True -> 14
 
-let cond_type_identical cond1 cond2 =
-  (enumerate_cond cond1) = (enumerate_cond cond2)
+let pred_type_identical pred1 pred2 =
+  (enumerate_pred pred1) = (enumerate_pred pred2)
 
-let compare (cond1, neg1) (cond2, neg2) =
-  let res = compare (enumerate_cond cond1) (enumerate_cond cond2) in
+let compare (pred1, neg1) (pred2, neg2) =
+  let res = compare (enumerate_pred pred1) (enumerate_pred pred2) in
     if res = 0 then compare neg1 neg2 else res
 
 (** Test if expr always evaluates to value *)

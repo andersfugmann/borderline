@@ -63,7 +63,7 @@ let create_zone_chain direction (id, nodes) =
 
   in
   let create_interface_rule chain interfaces =
-    let cond = match interfaces with
+    let pred = match interfaces with
       | [] -> []
       | is ->
           let ifaces =
@@ -76,10 +76,10 @@ let create_zone_chain direction (id, nodes) =
           in
           [(Ir.Interface(direction, Set.of_list ifaces), false)]
     in
-    [ (cond, [], Ir.Jump chain.Ir.id) ]
+    [ (pred, [], Ir.Jump chain.Ir.id) ]
   in
   let create_group_rule chain if_groups =
-    let cond = match if_groups with
+    let pred = match if_groups with
       | [] -> []
       | gs ->
           let if_groups =
@@ -92,7 +92,7 @@ let create_zone_chain direction (id, nodes) =
           in
           [(Ir.If_group(direction, Set.of_list if_groups), false)]
     in
-    [ (cond, [], Ir.Jump chain.Ir.id) ]
+    [ (pred, [], Ir.Jump chain.Ir.id) ]
   in
   let { networks; interfaces; groups; } = init nodes in
   Chain.create [([], [Ir.MarkZone(direction, id)], Ir.Pass)] ("Mark zone " ^ id)

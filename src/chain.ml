@@ -77,9 +77,9 @@ let count_chains chains =
 let count_rules chains =
   Map.fold ~init:0 ~f:(fun ~key:_ ~data:{ rules; _ } acc -> acc + (List.length rules)) chains
 
-let count_conditions chains =
+let count_predicates chains =
   Map.fold ~init:0 ~f:(fun ~key:_ ~data:{ rules; _ } acc ->
-    List.fold_left ~init:acc ~f:(fun acc (conds, _effects, _targets) ->
-      acc + List.length conds
+    List.fold_left ~init:acc ~f:(fun acc (preds, _effects, _targets) ->
+      acc + List.length preds
     ) rules
   ) chains

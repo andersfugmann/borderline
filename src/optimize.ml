@@ -7,7 +7,7 @@ module Ip6 = Ipset.Ip6
 module Ip4 = Ipset.Ip4
 
 (*
-   1. Extend all condition with their protocol counterpart.
+   1. Extend all predicates with their protocol counterpart.
    2. Recurcive Filter all counterparts that has no effect.
       - We have a merge optimization that merged all identical rules into one
       - So at this point, we only have one rule
@@ -17,7 +17,7 @@ module Ip4 = Ipset.Ip4
       - Maybe we need a specific pass that has an
 
    - An accumulator.
-      - a merge function acc -> oper -> acc, oper option (* None means delete the op *)
+      - a merge function acc -> oper -> acc, oper option (None means delete the op)
       - The function should map over all rules in two passes.
       - An implicit map would never change non-matching rules, but maintain an 'non' matched?
       - Only for the mapped ones? Would that work? No.
@@ -25,21 +25,11 @@ module Ip4 = Ipset.Ip4
 *)
 
 
-
-      - How do we express this more genericly?
-
-
-
-
-*)
-
-
-
-(** Define the saving in conditions when inlining. *)
+(** Define the saving in predicates when inlining. *)
 let max_inline_cost = 1
 
-let is_satisfiable conds =
-  not (List.exists ~f:(is_always false) conds)
+let is_satisfiable preds =
+  not (List.exists ~f:(is_always false) preds)
 
 let is_subset_eq a b =
   List.for_all ~f:(fun a -> List.exists b ~f:((=) a)) a
@@ -54,18 +44,13 @@ let chain_reference_count id chains =
   Map.fold ~f:(fun ~key:_ ~data:chn acc -> acc + (count_references chn.rules)) chains ~init:0
 
 let get_referring_rules chain chains =
-  let test (_conds, _effects, target) = target = Jump (chain.id) in
+  let test (_preds, _effects, target) = target = Jump (chain.id) in
   let referring_chains = Chain.filter (fun chn -> List.exists ~f:test chn.rules) chains in
   List.fold_left ~f:(fun acc chn -> (List.filter ~f:test chn.rules) @ acc) ~init:[] referring_chains
 
 (** Optimize rules in each chain. No chain insertion or removal is possible *)
 let map_chain_rules ~f chains =
   Map.map ~f:(fun chn -> { chn with rules = f chn.rules }) chains
-
-let _map_conditions ~f chains =
-  map_chain_rules ~f:(fun rules ->
-    List.map ~f:(fun (conds, effects, target) -> (f conds, effects, target)) rules
-  ) chains
 
 let merge_oper ?(tpe=`Inter) a b =
   (* !A => !B => X   =>  !(A | B) => X
@@ -238,37 +223,37 @@ let is_terminal = function
   | Accept | Drop | Return | Reject _ -> true
 
 let join chains =
-  let has_cond cond = function
-    | (conds, _effects, _target) ->
-      List.exists ~f:(Ir.eq_cond cond) conds
+  let has_pred pred = function
+    | (preds, _effects, _target) ->
+      List.exists ~f:(Ir.eq_pred pred) preds
   in
-  let filter_cond cond (conds, effects, target) =
-    (List.filter ~f:(fun c -> not (Ir.eq_cond cond c)) conds, effects, target)
+  let filter_pred pred (preds, effects, target) =
+    (List.filter ~f:(fun c -> not (Ir.eq_pred pred c)) preds, effects, target)
   in
-  let rec count_conds cond = function
-    | x :: xs when has_cond cond x ->
-      1 + count_conds cond xs
+  let rec count_preds pred = function
+    | x :: xs when has_pred pred x ->
+      1 + count_preds pred xs
     | _ -> 0
   in
-  let partition cond rules =
-    List.partition_tf ~f:(has_cond cond) rules
+  let partition pred rules =
+    List.partition_tf ~f:(has_pred pred) rules
   in
   let new_chains = ref [] in
   let rec inner acc = function
-    | (conds, _effects, _target) as rule :: xs -> begin
-        let x = List.map ~f:(fun cond -> (cond, count_conds cond acc, count_conds cond xs)) conds in
+    | (preds, _effects, _target) as rule :: xs -> begin
+        let x = List.map ~f:(fun pred -> (pred, count_preds pred acc, count_preds pred xs)) preds in
         let choose =
           List.reduce x ~f:(fun (c, p, n) (c', p', n') -> if p+n>=p'+n' then (c, p, n) else (c', p', n'))
         in
         match choose with
-        | Some (cond, prev, next) when next = 0 && prev >= 3 ->
+        | Some (pred, prev, next) when next = 0 && prev >= 3 ->
           printf "J";
-          let (to_inline, rest) = partition cond (rule :: acc) in
-          let chain_rules = List.map ~f:(filter_cond cond) to_inline in
-          let chain = Chain.create chain_rules "Condition moved" in
+          let (to_inline, rest) = partition pred (rule :: acc) in
+          let chain_rules = List.map ~f:(filter_pred pred) to_inline in
+          let chain = Chain.create chain_rules "Predicate moved" in
           new_chains := chain :: !new_chains;
           (* Replace with a jump to the chain *)
-          let acc = ([cond], [], Ir.Jump chain.id) :: rest in
+          let acc = ([pred], [], Ir.Jump chain.id) :: rest in
           (List.rev acc) @ inner [] xs
         | _ -> inner (rule :: acc) xs
       end
@@ -280,7 +265,7 @@ let join chains =
 (** Remove all return statements, by creating new chains for each
     return statement. Add an empty rule to the new chain to do the effects *)
 let fold_return_statements chains =
-  let neg tg conds = List.map ~f:(fun (x, a) -> [(x, not a)], [], tg) conds in
+  let neg tg preds = List.map ~f:(fun (x, a) -> [(x, not a)], [], tg) preds in
   let rec fold_return acc = function
     | (cl, _ef, Return) :: xs ->
       printf "F";
@@ -359,19 +344,15 @@ let reorder rules =
   in
   reorder_rules [] rules
 
-
-(** TODO: make address_family of cond *)
-(* And should use the name pred instead of cond *)
-
 let icmp = 1
 let igmp  = 2
 let tcp = 6
 let udp = 17
 let icmp6 = 58
 
-let protocol_of_cond cond =
+let protocol_of_pred pred =
   let s, n =
-    match cond with
+    match pred with
     | Ir.Protocol p, neg -> p, neg
     | Ir.True, _
     | Ir.Interface (_,_), _
@@ -416,11 +397,11 @@ let protocol_of_cond cond =
   in
   Ir.Protocol s, n
 
-let address_family_of_cond cond =
+let address_family_of_pred pred =
   let ipv4_protocols = Set.of_list [ icmp; igmp ] in
   let ipv6_protocols = Set.of_list [ icmp6 ] in
   let s, n =
-    match cond with
+    match pred with
     | Ir.Hoplimit _, _
     | Ir.Ip6Set (_,_), _
     | Ir.Icmp6 _, _ ->
@@ -447,25 +428,25 @@ let address_family_of_cond cond =
   Ir.Address_family s, n
 
 (* Lets see if we can generalize this *)
-let filter_derived ~init ~of_cond chain =
+let filter_derived ~init ~of_pred chain =
   let calculate ~total inferred =
     let merged = merge_oper total inferred in
-    match Ir.eq_cond (merged |> Option.value_exn) inferred with
+    match Ir.eq_pred (merged |> Option.value_exn) inferred with
     | true -> None
     | false -> merged
   in
 
-  let merge f conds =
+  let merge f preds =
     List.fold ~init ~f:(fun acc p ->
       merge_oper acc (f p) |> Option.value_exn
-    ) conds
+    ) preds
   in
 
-  let filter (conds, effects, target) =
+  let filter (preds, effects, target) =
     (* We may have an empty rule set. That not the same as possible to match *)
     (* So we need to understand if the *)
-    let conds = List.map ~f:(fun cond -> of_cond cond, cond) conds in
-    let total = merge fst conds in
+    let preds = List.map ~f:(fun pred -> of_pred pred, pred) preds in
+    let total = merge fst preds in
 
     match is_always false total with
     | true ->
@@ -473,22 +454,22 @@ let filter_derived ~init ~of_cond chain =
       printf "P";
       None
     | false ->
-      let filtered_conds =
+      let filtered_preds =
         List.filter ~f:(function
-          | cond, cond' when eq_cond cond cond' -> false
+          | pred, pred' when eq_pred pred pred' -> false
           | _ -> true
-        ) conds
+        ) preds
       in
-      let inferred = merge fst filtered_conds in
-      let filtered_conds = List.map ~f:snd filtered_conds in
-      let conds =
+      let inferred = merge fst filtered_preds in
+      let filtered_preds = List.map ~f:snd filtered_preds in
+      let preds =
         match calculate ~total inferred with
         | None ->
-          filtered_conds
-        | Some cond ->
-          cond :: filtered_conds
+          filtered_preds
+        | Some pred ->
+          pred :: filtered_preds
       in
-      Some (conds, effects, target)
+      Some (preds, effects, target)
   in
   List.filter_map ~f:filter chain
 
@@ -496,12 +477,12 @@ let filter_derived ~init ~of_cond chain =
 (** Inline chains that satifies p *)
 let rec inline cost_f chains =
   let rec inline_chain chain = function
-    | (conds, effects, target) :: xs when target = Jump(chain.id) && (Chain.is_temp chain.id)-> begin
-        let rec inline_rules (conds, effects) = function
-          | (c, e, t) :: xs -> ( conds @ c, effects @ e, t ) :: inline_rules (conds, effects) xs
+    | (preds, effects, target) :: xs when target = Jump(chain.id) && (Chain.is_temp chain.id)-> begin
+        let rec inline_rules (preds, effects) = function
+          | (c, e, t) :: xs -> ( preds @ c, effects @ e, t ) :: inline_rules (preds, effects) xs
           | [] -> []
         in
-        (inline_rules (conds, effects) chain.rules) @ (inline_chain chain xs)
+        (inline_rules (preds, effects) chain.rules) @ (inline_chain chain xs)
       end
     | x :: xs -> x :: inline_chain chain xs
     | [] -> []
@@ -546,12 +527,12 @@ let rec eliminate_duplicate_rules = function
   | rle :: xs -> rle :: eliminate_duplicate_rules xs
   | [] -> []
 
-(** For each rule in a chain, tests is the conditions are satisfiable.
+(** For each rule in a chain, tests is the predicates are satisfiable.
     All rules which contains an unsatisfiable rule are removed
     (including its target)
 *)
 let remove_unsatisfiable_rules rules =
-  List.filter ~f:(fun (conds, _, _) -> is_satisfiable conds) rules
+  List.filter ~f:(fun (preds, _, _) -> is_satisfiable preds) rules
 
 let remove_empty_rules rules =
   List.filter ~f:(function (_, [], Ir.Pass) -> false | _ -> true) rules
@@ -559,7 +540,7 @@ let remove_empty_rules rules =
 let merge_adjecent_rules chains =
   let new_chains = ref [] in
   let rec merge = function
-    | ([rule], effects, target) :: ([rule'], effects', target') :: xs when Ir.eq_cond rule rule' -> begin
+    | ([rule], effects, target) :: ([rule'], effects', target') :: xs when Ir.eq_pred rule rule' -> begin
         let chain = Chain.create [ ([], effects, target); ([], effects', target') ] "rule merged" in
         new_chains := chain :: !new_chains;
         merge (([rule], [], Jump chain.id) :: xs)
@@ -579,28 +560,28 @@ let merge_adjecent_rules chains =
   let chains = Map.map ~f:(fun c -> { c with rules = merge c.rules }) chains in
   List.fold_left ~init:chains ~f:(fun acc chain -> Map.add_exn acc ~key:chain.id ~data:chain) !new_chains
 
-(** All conditions which is always true are removed *)
+(** All predicates which is always true are removed *)
 let remove_true_rules rules =
-  List.map ~f:(fun (conds, effects, target) ->
-    (List.filter ~f:(fun cond -> not (is_always true cond)) conds, effects,target)) rules
+  List.map ~f:(fun (preds, effects, target) ->
+    (List.filter ~f:(fun pred -> not (is_always true pred)) preds, effects,target)) rules
 
 (** Determine the cost of inlining. *)
 let inline_cost cs c =
-  (* Number of conditions in the chain to be inlined *)
-  let chain_conds = List.fold_left ~f:(fun acc (cl, _ef, _t) -> acc + List.length cl) ~init:0 c.rules in
-  (* Number of conditions for each reference to the chain to be inlined. *)
-  let rule_conds = List.map ~f:(fun (cl, _ef, _t) -> List.length cl) (get_referring_rules c cs) in
-  (* Current count of conditions + targets *)
-  let old_conds = (List.fold_left ~f:(+) ~init:0 rule_conds) + chain_conds + List.length rule_conds + List.length c.rules in
-  (* Inlined count of conditions + targets *)
-  let new_conds = List.fold_left ~f:(fun acc n -> acc + n * List.length c.rules + chain_conds) ~init:0 rule_conds + (List.length rule_conds * List.length c.rules) in
-  new_conds - old_conds
+  (* Number of predicates in the chain to be inlined *)
+  let chain_preds = List.fold_left ~f:(fun acc (cl, _ef, _t) -> acc + List.length cl) ~init:0 c.rules in
+  (* Number of predicates for each reference to the chain to be inlined. *)
+  let rule_preds = List.map ~f:(fun (cl, _ef, _t) -> List.length cl) (get_referring_rules c cs) in
+  (* Current count of predicates + targets *)
+  let old_preds = (List.fold_left ~f:(+) ~init:0 rule_preds) + chain_preds + List.length rule_preds + List.length c.rules in
+  (* Inlined count of predicates + targets *)
+  let new_preds = List.fold_left ~f:(fun acc n -> acc + n * List.length c.rules + chain_preds) ~init:0 rule_preds + (List.length rule_preds * List.length c.rules) in
+  new_preds - old_preds
 
 (** Remove unsatisfiable rules recursively. Loop over all chains, and follow the chains. *)
-let filter_exclusive_rules acc cond =
-  let is_unsatisfiable conds cond =
-    List.exists conds ~f:(fun cond' ->
-      match merge_oper cond cond' with
+let filter_exclusive_rules acc pred =
+  let is_unsatisfiable preds pred =
+    List.exists preds ~f:(fun pred' ->
+      match merge_oper pred pred' with
       | Some oper when is_always false oper ->
         true
       | Some _
@@ -608,19 +589,19 @@ let filter_exclusive_rules acc cond =
     )
   in
   match acc with
-  | None -> `Satisfiable (Some [cond])
-  | Some conds ->
-    match is_unsatisfiable conds cond with
+  | None -> `Satisfiable (Some [pred])
+  | Some preds ->
+    match is_unsatisfiable preds pred with
     | true -> `Unsatisfiable
-    | false -> `Satisfiable (Some (cond :: conds))
+    | false -> `Satisfiable (Some (pred :: preds))
 
-let filter_unsatisfiable f acc cond =
+let filter_unsatisfiable f acc pred =
   (* Acc is a protocol *)
-  let cond = f cond in
+  let pred = f pred in
   match acc with
-  | None -> `Satisfiable (Some cond)
+  | None -> `Satisfiable (Some pred)
   | Some acc ->
-    let acc = merge_oper acc cond in
+    let acc = merge_oper acc pred in
     match is_always false (acc |> Option.value_exn) with
     | true -> `Unsatisfiable
     | false -> `Satisfiable acc
@@ -636,21 +617,21 @@ let reduce_recursive ~init chains =
     | Some ({ rules ; _ } as chain) ->
       let chains, rules =
         (* Iterate over rules *)
-        List.fold_left ~init:(chains, []) ~f:(fun (chains, rules) (conds, effects, target) ->
-          let acc, conds =
-            (* Iterate over conditions. *)
-            List.fold_left ~init:(acc, []) ~f:(fun (acc, conds) cond ->
-              match merge_oper acc cond with
-              | None -> (acc, cond :: conds)
-              | Some cond when eq_cond cond acc ->
-                (* Condition had no effect *)
+        List.fold_left ~init:(chains, []) ~f:(fun (chains, rules) (preds, effects, target) ->
+          let acc, preds =
+            (* Iterate over predicates. *)
+            List.fold_left ~init:(acc, []) ~f:(fun (acc, preds) pred ->
+              match merge_oper acc pred with
+              | None -> (acc, pred :: preds)
+              | Some pred when eq_pred pred acc ->
+                (* Predicate had no effect *)
                 printf "R";
-                (acc, conds)
-              | Some cond' ->
-                (cond', cond' :: conds)
-            ) conds
+                (acc, preds)
+              | Some pred' ->
+                (pred', pred' :: preds)
+            ) preds
           in
-          let rule = (List.rev conds, effects, target) in
+          let rule = (List.rev preds, effects, target) in
           let chains =
             match target with
             | Jump chain_id ->
@@ -669,11 +650,11 @@ let reduce_recursive ~init chains =
   )
 
 let remove_unsatisfiable_rules_recursive filter chains =
-  let rec conds_satisfiable acc = function
+  let rec preds_satisfiable acc = function
     | [] -> `Satisfiable acc
-    | cond :: conds ->
-      match filter acc cond with
-      | `Satisfiable acc -> conds_satisfiable acc conds
+    | pred :: preds ->
+      match filter acc pred with
+      | `Satisfiable acc -> preds_satisfiable acc preds
       | `Unsatisfiable -> `Unsatisfiable
   in
   (* Do we have a list of top_level chains? I guess we do! *)
@@ -684,9 +665,9 @@ let remove_unsatisfiable_rules_recursive filter chains =
     | None -> failwith "Chain could not be found"
     | Some ({ rules ; _ } as chain) ->
       let chains, rules =
-        List.fold_left ~init:(chains, []) ~f:(fun (chains, rules) (conds, effects, target) ->
+        List.fold_left ~init:(chains, []) ~f:(fun (chains, rules) (preds, effects, target) ->
           (* If we encounter a filtered rule, then stop *)
-          match conds_satisfiable acc conds with
+          match preds_satisfiable acc preds with
           | `Unsatisfiable ->
             printf "U";
             chains, rules
@@ -696,7 +677,7 @@ let remove_unsatisfiable_rules_recursive filter chains =
               | Jump chain_id -> process_chain chains chain_id acc
               | _ -> chains
             in
-            let rule = (conds, effects, target) in
+            let rule = (preds, effects, target) in
             chains, rule :: rules
         ) rules
       in
@@ -709,17 +690,12 @@ let remove_unsatisfiable_rules_recursive filter chains =
     | _ -> chains
   )
 
-let filter_protocol = filter_derived ~init:(Ir.Protocol Set.empty, true) ~of_cond:protocol_of_cond
-let filter_address_family = filter_derived ~init:(Ir.Address_family Set.empty, true) ~of_cond:address_family_of_cond
+let filter_protocol = filter_derived ~init:(Ir.Protocol Set.empty, true) ~of_pred:protocol_of_pred
+let filter_address_family = filter_derived ~init:(Ir.Address_family Set.empty, true) ~of_pred:address_family_of_pred
 
 let optimize_pass chains =
-  printf "#Optim: (%d, %d) %!" (Chain.count_rules chains) (Chain.count_conditions chains);
+  printf "#Optim: (%d, %d) %!" (Chain.count_rules chains) (Chain.count_predicates chains);
   let chains = fold_return_statements chains in
-  let _ =
-    remove_duplicate_chains,
-    filter_unsatisfiable,
-    reduce_recursive
-  in
   let optimize_functions = [
     map_chain_rules ~f:eliminate_dead_rules;
     remove_duplicate_chains;
@@ -736,17 +712,17 @@ let optimize_pass chains =
     map_chain_rules ~f:(fun rls -> Common.map_filter_exceptions (fun (opers, effect_, tg) -> (merge_opers opers, effect_, tg)) rls);
     reduce_recursive ~init:(Ir.Protocol Set.empty, true);
     remove_unsatisfiable_rules_recursive filter_exclusive_rules;
-    remove_unsatisfiable_rules_recursive (filter_unsatisfiable protocol_of_cond);
-    remove_unsatisfiable_rules_recursive (filter_unsatisfiable address_family_of_cond);
+    remove_unsatisfiable_rules_recursive (filter_unsatisfiable protocol_of_pred);
+    remove_unsatisfiable_rules_recursive (filter_unsatisfiable address_family_of_pred);
     remove_unreferenced_chains;
   ] in
   let chains' = List.fold_left ~f:(fun chains' optim_func -> optim_func chains') ~init:chains optimize_functions in
-  printf " (%d, %d)\n" (Chain.count_rules chains') (Chain.count_conditions chains');
+  printf " (%d, %d)\n" (Chain.count_rules chains') (Chain.count_predicates chains');
   chains'
 
 let rec optimize chains =
   let chains' = optimize_pass chains in
-  match (Chain.count_rules chains = Chain.count_rules chains' && Chain.count_conditions chains = Chain.count_conditions chains') with
+  match (Chain.count_rules chains = Chain.count_rules chains' && Chain.count_predicates chains = Chain.count_predicates chains') with
   | true -> printf "#Optimization done\n";
     chains'
   | false -> optimize chains'
@@ -755,9 +731,9 @@ let rec optimize chains =
 
 module Test = struct
   open OUnit2
-  let eq_cond_opt = function
+  let eq_pred_opt = function
     | Some m -> begin
-        function Some n -> Ir.eq_cond m n
+        function Some n -> Ir.eq_pred m n
                | None -> false
       end
     | None -> begin
@@ -772,7 +748,7 @@ module Test = struct
         let b = Ir.Zone (Ir.Direction.Source, ["ext"; "other"] |> Set.of_list), false in
         let res = merge_oper ~tpe:`Diff a b
         in
-        assert_equal ~cmp:eq_cond_opt ~msg:"Wrong result" res (Some expect);
+        assert_equal ~cmp:eq_pred_opt ~msg:"Wrong result" res (Some expect);
       end;
 
       "merge_inter" >:: begin fun _ ->
@@ -781,7 +757,7 @@ module Test = struct
         let b = Ir.Zone (Ir.Direction.Source, ["ext"; "other"] |> Set.of_list), false in
         let res = merge_oper ~tpe:`Inter a b
         in
-        assert_equal ~cmp:eq_cond_opt ~msg:"Wrong result" res (Some expect);
+        assert_equal ~cmp:eq_pred_opt ~msg:"Wrong result" res (Some expect);
       end;
 
       "subset" >:: begin fun _ ->
