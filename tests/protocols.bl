@@ -4,7 +4,34 @@ import "../configuration/generic/l4proto.bl"
 process filter {
         rule {
              protocol = ipv6;
+             #address family = ipv4;
+        } policy { log "OK: Protocol 41 (ipv6) is allowed for ipv4" };
+
+        rule {
              address family = ipv6;
              address family = ipv4;
-        } policy allow;
+        } policy { log "ERROR: cannot be both ipv4 and ipv6" };
+
+        rule {
+             address family = ipv6;
+             protocol = [ ipv6-icmp ];
+             rule {
+                  icmp6 = [ 1,2 ];
+                  hoplimit != 255;
+              } policy { log "OK2" };
+             rule { source address = 1.1.1.1 } policy { log "ERROR: ipv4 kept" };
+             rule { source address = 1::1 } policy { log "OK: ipv6 kept" };
+        } policy { log "OK: No conflict on rules ipv6" };
+
+        rule {
+             address family = ipv4;
+             rule {
+                  hoplimit != 255;
+              } policy { log "ERROR: Hoplimit is ipv6" };
+
+             rule { source address = 1.1.1.1 } policy { log "OK: ipv4 kept" };
+             rule { source address = 1::1 } policy { log "ERROR: ipv6 kept" };
+         } policy { log "OK: No conflict on rules ipv4" };
+
+
 } policy deny

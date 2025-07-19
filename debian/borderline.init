@@ -87,6 +87,16 @@ EOF
     return $?
 }
 
+function check () {
+    ${NFT} -c -o -f <(${BORDERLINE} ${MAIN})
+    if [ "$?" -eq "0" ]; then
+	echo Configuration ok
+    else
+	echo Configuration error!
+	exit 1
+    fi
+}
+
 case $1 in
     "start" | "restart" | "reload")
         echo "Starting borderline"
@@ -107,6 +117,9 @@ case $1 in
     "stop")
         echo "Not stopping. Use flush or panic."
         ;;
+    "check")
+	check
+	;;
     *)
-        echo "Use $0 <start|restart|reload|panic|flush|status>"
+        echo "Use $0 <start|restart|reload|panic|flush|check|status>"
 esac

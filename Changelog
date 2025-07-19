@@ -7,6 +7,11 @@ Version 1.0.0 (UNRELEASED)
 * Add 'protocol = [ "s1", "s2" ]' to match l4 protocols (udp, tcp, ipv6 etc).
 * Improve rule optimization to remove redundant flags
 * Add "address family = { ipv4, ipv6 }" to match address family
+* Add 'check' to init.d script
+* Better checking for redundant rules
+* Update nft rule generation to be more idiomatic
+* Don't dump stacktrace on syntax errors
+*
 
 Version 0.99 (2016-01-16)
 * Add IPv4 support!
