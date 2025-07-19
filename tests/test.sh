@@ -54,9 +54,9 @@ done
 
 echo
 echo "tests: $(( SUCCESS + WARN + FAILED ))"
-echo "- success: ${SUCCESS}"
-echo "- warnings: ${WARN}"
-echo "- fail: ${FAILED}"
+echo "* success: ${SUCCESS}"
+echo "* warnings: ${WARN}"
+echo "* fail: ${FAILED}"
 
 if (( FAILED != 0 )); then
     exit 1

@@ -71,15 +71,15 @@ let emit emitter =
 let optimize opt =
   chains := opt !chains
 
-let count_chains () =
-  Map.length (!chains)
+let count_chains chains =
+  Map.length (chains)
 
-let count_rules () =
-  Map.fold ~init:0 ~f:(fun ~key:_ ~data:{ rules; _ } acc -> acc + (List.length rules)) !chains
+let count_rules chains =
+  Map.fold ~init:0 ~f:(fun ~key:_ ~data:{ rules; _ } acc -> acc + (List.length rules)) chains
 
-let count_conditions () =
+let count_conditions chains =
   Map.fold ~init:0 ~f:(fun ~key:_ ~data:{ rules; _ } acc ->
     List.fold_left ~init:acc ~f:(fun acc (conds, _effects, _targets) ->
       acc + List.length conds
     ) rules
-  ) !chains
+  ) chains

@@ -43,9 +43,9 @@ let _ =
     List.iter ~f:(fun l -> print_endline l) lines;
 
     Printf.printf "\n";
-    Printf.printf "#Chains: %d\n" (Chain.count_chains ());
-    Printf.printf "#Rules: %d\n" (Chain.count_rules ());
-    Printf.printf "#Conditons: %d\n" (Chain.count_conditions ());
+    Printf.printf "#Chains: %d\n" (Chain.count_chains !Chain.chains);
+    Printf.printf "#Rules: %d\n" (Chain.count_rules !Chain.chains);
+    Printf.printf "#Conditons: %d\n" (Chain.count_conditions !Chain.chains);
     Printf.printf "#Lines: %d\n" (List.length lines);
 
   with

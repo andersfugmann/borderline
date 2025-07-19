@@ -348,6 +348,25 @@ let emit_ip_sets () =
   ) (List.rev ip_sets)
 
 
+let rec indent_rules ?(acc = []) ?(indent = "") ?(indent_level = "    ")= function
+  | [] -> List.rev acc
+  | line :: lines ->
+    let line = String.strip line in
+    let line = match String.chop_suffix ~suffix:";" line with
+      | Some line -> (String.strip line) ^ ";"
+      | None -> line
+    in
+    let line, indent = match line.[String.length line - 1] with
+      | '{' -> indent ^ line, indent_level ^ indent
+      | '}' ->
+        let indent = String.chop_prefix_if_exists ~prefix:indent_level indent in
+        indent ^ line, indent
+      | _ -> indent ^ line, indent
+    in
+    (* But now I need to remove also *)
+
+    indent_rules ~acc:(line :: acc) ~indent lines
+
 let emit rules =
   let zones =
     Hashtbl.to_alist zones
@@ -361,5 +380,7 @@ let emit rules =
   "    comment \"zone ids\"" :: zones @
   "  }" :: rules @
   [ "}" ]
+
+  |> indent_rules
 
 (* And we could really do with some smarter indentation *)

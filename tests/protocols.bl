@@ -3,8 +3,8 @@ import "../configuration/generic/l4proto.bl"
 
 process filter {
         rule {
-             protocol = ipv6;
-             #address family = ipv4;
+             protocol = ipv6; #41
+             address family = ipv4;
         } policy { log "OK: Protocol 41 (ipv6) is allowed for ipv4" };
 
         rule {
@@ -13,7 +13,7 @@ process filter {
         } policy { log "ERROR: cannot be both ipv4 and ipv6" };
 
         rule {
-             address family = ipv6;
+             address family = ipv6; #58
              protocol = [ ipv6-icmp ];
              rule {
                   icmp6 = [ 1,2 ];
