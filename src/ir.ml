@@ -159,12 +159,12 @@ let eq_pred (x, n) (y, m) =
 let eq_preds a b =
   List.equal eq_pred a b
 
-let eq_oper (preds, effects, action) (preds', effects', action') =
+let eq_rule (preds, effects, action) (preds', effects', action') =
   let open Poly in
   action = action' && effects = effects' && eq_preds preds preds'
 
 let eq_rules a b =
-  List.equal eq_oper a b
+  List.equal eq_rule a b
 
 let eq_effect =
   let (=) = Poly.equal in
@@ -223,9 +223,9 @@ let enumerate_pred = function
 let pred_type_identical pred1 pred2 =
   (enumerate_pred pred1) = (enumerate_pred pred2)
 
-let compare (pred1, neg1) (pred2, neg2) =
+let compare_predicate (pred1, neg1) (pred2, neg2) =
   let res = compare (enumerate_pred pred1) (enumerate_pred pred2) in
-    if res = 0 then compare neg1 neg2 else res
+    if res = 0 then Bool.compare neg1 neg2 else res
 
 (** Test if expr always evaluates to value *)
 let is_always value =
@@ -252,6 +252,7 @@ let is_always value =
   | Mark (_, 0), neg -> neg = value
   | Mark _, _ -> false
   | Address_family a, neg ->
-    match value with
-    | true -> (Set.length a = 2 && not neg) || Set.is_empty a && neg
-    | false -> (Set.length a = 2 && neg) || Set.is_empty a && not neg
+    match Set.length a with
+    | 2 -> neg <> value
+    | 0 -> neg = value
+    | _ -> false
