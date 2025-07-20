@@ -210,18 +210,25 @@ let merge_pred ?(tpe=`Inter) a b =
   in
   merge b
 
-let merge_opers rle =
-  let rec merge_siblings acc = function
-    | x :: xs ->
-      let (x', xs') = List.fold_left ~f:(
-        fun (m, rest) op -> match merge_pred m op with
-          | Some m' -> (m', rest)
-          | None -> (m, op :: rest)
-      ) ~init:(x, []) xs in
-      merge_siblings (x' :: acc) xs'
-    | [] -> acc
+let sort_predicates predicates =
+  List.stable_sort ~compare:Ir.compare_predicate predicates
+
+let merge_predicates predicates =
+  let reduce predicates =
+    let rec inner = function
+      | [] -> failwith "Cannot merge empty groups"
+      | p1 :: [] -> [p1]
+      | p1 :: p2 :: xs ->
+        match merge_pred p1 p2 with
+        | Some p -> inner (p :: xs)
+        | None -> predicates
+    in
+    inner predicates
   in
-  merge_siblings [] rle
+  predicates
+  |> sort_predicates
+  |> List.group ~break:(fun (p1, _) (p2, _) -> Ir.enumerate_pred p1 <> Ir.enumerate_pred p2)
+  |> List.concat_map ~f:reduce
 
 let is_subset a b =
   match merge_pred ~tpe:`Diff a b with
@@ -242,18 +249,23 @@ let join chains =
   let filter_pred pred (preds, effects, target) =
     (List.filter ~f:(fun c -> not (Ir.eq_pred pred c)) preds, effects, target)
   in
-  let rec count_preds pred = function
+
+  (* Count consecutive predicates *)
+  let rec count_cont_preds pred = function
     | x :: xs when has_pred pred x ->
-      1 + count_preds pred xs
+      1 + count_cont_preds pred xs
     | _ -> 0
   in
+
+
   let partition pred rules =
     List.partition_tf ~f:(has_pred pred) rules
   in
   let new_chains = ref [] in
+
   let rec inner acc = function
     | (preds, _effects, _target) as rule :: xs -> begin
-        let x = List.map ~f:(fun pred -> (pred, count_preds pred acc, count_preds pred xs)) preds in
+        let x = List.map ~f:(fun pred -> (pred, count_cont_preds pred acc, count_cont_preds pred xs)) preds in
         let choose =
           List.reduce x ~f:(fun (c, p, n) (c', p', n') -> if p+n>=p'+n' then (c, p, n) else (c', p', n'))
         in
@@ -328,7 +340,7 @@ let remove_duplicate_chains chains =
     elimination, and helps reduce *)
 let reorder rules =
   let can_reorder (cl1, ef1, act1) (cl2, ef2, act2) =
-    (is_eq ef1 ef2 && act1 = act2) || not (is_satisfiable (merge_opers (cl1 @ cl2)))
+    (is_eq ef1 ef2 && act1 = act2) || not (is_satisfiable (merge_predicates (cl1 @ cl2)))
   in
 
   let order = function
@@ -503,7 +515,6 @@ let remove_unsatisfiable_rules rules =
 let remove_empty_rules rules =
   List.filter ~f:(function (_, [], Ir.Pass) -> false | _ -> true) rules
 
-(* This can be done much simpler *)
 let merge_adjecent_rules chains =
   let new_chains = ref [] in
   let rec merge = function
@@ -661,41 +672,44 @@ let filter_predicates_derived ~init ~of_pred inputs predicates =
   in
   output, List.rev predicates
 
-let sort_predicates rules =
-  List.map ~f:(fun (predicates, effects, target) ->
-    let predicates = List.stable_sort ~compare:Ir.compare_predicate predicates in
-    (predicates, effects, target)
-  ) rules
-
 let reduce_all_predicates chains =
   List.fold_left ~init:chains ~f:(fun chains init ->
     reduce_recursive ~f:(filter_predicates ~init) chains
   ) true_predicates
 
+let map_predicates ~f rules =
+  List.map ~f:(fun (predicates, effects, target) ->
+    (f predicates, effects, target)
+  ) rules
+
 let optimize_pass chains =
   printf "#Optim: (%d, %d) %!" (Chain.count_rules chains) (Chain.count_predicates chains);
   let chains = fold_return_statements chains in
-  let optimize_functions = [
-    map_chain_rules ~f:eliminate_dead_rules;
-    remove_duplicate_chains;
-    map_chain_rules ~f:remove_unsatisfiable_rules;
-    map_chain_rules ~f:remove_true_predicates;
-    map_chain_rules ~f:remove_empty_rules;
-    map_chain_rules ~f:eliminate_duplicate_rules;
-    map_chain_rules ~f:reorder;
-    join;
-    merge_adjecent_rules;
-    inline inline_cost;
-    map_chain_rules ~f:(fun rls -> Common.map_filter_exceptions (fun (opers, effect_, tg) -> (merge_opers opers, effect_, tg)) rls);
-    reduce_all_predicates;
-    reduce_recursive ~f:(filter_predicates_derived ~init:(Ir.Protocol Set.empty, true) ~of_pred:protocol_of_pred);
-    reduce_recursive ~f:(filter_predicates_derived ~init:(Ir.Address_family Set.empty, true) ~of_pred:address_family_of_pred);
-    remove_unreferenced_chains;
-  ] in
+  let optimize_functions =
+    let (@@) a b = a ~f:b in
+    [
+      map_chain_rules @@ eliminate_dead_rules;
+      remove_duplicate_chains;
+      map_chain_rules @@ map_predicates @@ merge_predicates;
+      map_chain_rules @@ remove_unsatisfiable_rules;
+      map_chain_rules @@ remove_true_predicates;
+      map_chain_rules @@ remove_empty_rules;
+      map_chain_rules @@ eliminate_duplicate_rules;
+      map_chain_rules @@ reorder;
+      join;
+      merge_adjecent_rules;
+      inline inline_cost;
+      map_chain_rules ~f:(fun rls -> Common.map_filter_exceptions (fun (preds, effect_, tg) -> (merge_predicates preds, effect_, tg)) rls);
+      reduce_all_predicates;
+      reduce_recursive ~f:(filter_predicates_derived ~init:(Ir.Protocol Set.empty, true) ~of_pred:protocol_of_pred);
+      reduce_recursive ~f:(filter_predicates_derived ~init:(Ir.Address_family Set.empty, true) ~of_pred:address_family_of_pred);
+      remove_unreferenced_chains;
+    ]
+  in
   let chains' = List.fold_left ~f:(fun chains' optim_func -> optim_func chains') ~init:chains optimize_functions in
   printf " (%d, %d)\n" (Chain.count_rules chains') (Chain.count_predicates chains');
   chains'
-  |> map_chain_rules ~f:sort_predicates
+  |> map_chain_rules ~f:(map_predicates ~f:sort_predicates)
 
 let rec optimize chains =
   let chains' = optimize_pass chains in

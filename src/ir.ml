@@ -224,8 +224,13 @@ let pred_type_identical pred1 pred2 =
   (enumerate_pred pred1) = (enumerate_pred pred2)
 
 let compare_predicate (pred1, neg1) (pred2, neg2) =
-  let res = compare (enumerate_pred pred1) (enumerate_pred pred2) in
-    if res = 0 then Bool.compare neg1 neg2 else res
+  match compare (enumerate_pred pred1) (enumerate_pred pred2) with
+  | 0 -> begin
+      match Bool.compare neg1 neg2 with
+      | 0 -> Poly.compare pred1 pred2
+      | n -> n
+    end
+  | n -> n
 
 (** Test if expr always evaluates to value *)
 let is_always value =
