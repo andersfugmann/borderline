@@ -451,10 +451,14 @@ let rec inline cost_f chains =
     inline cost_f chains
   | None -> chains
 
+let preds_all_true preds =
+  List.for_all ~f:(is_always true) preds
+
 let rec eliminate_dead_rules = function
-  | ([], effects, target) :: xs when is_terminal target ->
+  | (preds, _, target) as rule :: xs when
+      is_terminal target && preds_all_true preds->
     List.iter ~f:(fun _ -> printf "D") xs;
-    [ ([], effects, target) ]
+    [ rule ]
   | rle :: xs -> rle :: eliminate_dead_rules xs
   | [] -> []
 
