@@ -6,15 +6,26 @@ open Common
 module Ip6 = Ipset.Ip6
 module Ip4 = Ipset.Ip4
 
-type id = string (* New addition *)
-type zone = id
-type mask = int
-type prefix = string
+
+module Ipaddr = struct
+  include Ipaddr
+  module V4 = struct
+    include V4
+    let equal a b = compare a b = 1
+  end
+end
+
+type id = string [@@deriving compare, equal]
+type zone = id [@@deriving compare, equal]
+type mask = int [@@deriving compare, equal]
+type prefix = string [@@deriving compare, equal]
 
 type address_family = Ipv4 | Ipv6
 
 module Chain_type = struct
-  type t = Input | Output | Forward | Pre_routing | Post_routing [@@deriving compare, sexp]
+  type t = Input | Output | Forward | Pre_routing | Post_routing
+  [@@deriving compare, sexp, equal]
+
   include Comparator.Make(struct type nonrec t = t let compare = compare let sexp_of_t = sexp_of_t end)
 end
 
@@ -22,7 +33,7 @@ module Chain_id = struct
   type t = Temporary of int
          | Builtin of Chain_type.t
          | Named of string
-  [@@deriving compare, sexp]
+  [@@deriving compare, sexp, equal]
   include Comparator.Make(struct type nonrec t = t let compare = compare let sexp_of_t = sexp_of_t end)
 end
 
@@ -58,7 +69,7 @@ end
 
 module Direction = struct
   type t = Source | Destination
-  [@@deriving compare, sexp]
+  [@@deriving compare, sexp, equal]
   include Comparator.Make(struct type nonrec t = t let compare = compare let sexp_of_t = sexp_of_t end)
   let of_string (s, pos) =
     match String.lowercase s with
@@ -69,7 +80,8 @@ end
 
 module Reject = struct
   type t = HostUnreachable | NoRoute | AdminProhibited | PortUnreachable | TcpReset
-  [@@deriving compare, sexp]
+  [@@deriving compare, sexp, equal]
+
   include Comparator.Make(struct type nonrec t = t let compare = compare let sexp_of_t = sexp_of_t end)
   let of_string (id, pos) =
     match String.lowercase id with
@@ -80,7 +92,6 @@ module Reject = struct
     | "tcp-reset" -> TcpReset
     | _ -> parse_error ~id ~pos "Unknown reject type"
 end
-
 
 type predicate = Interface of Direction.t * id Set.t
                | If_group of Direction.t * [`Int of int | `String of string] Set.t
@@ -121,7 +132,11 @@ type effect_ = MarkZone of Direction.t * zone
              | Counter
              | Notrack
              | Log of prefix
-             | Snat of Ipaddr.V4.t
+             | Snat of Ipaddr.V4.t (* Could actually be a set *)
+[@@deriving equal]
+
+type effects = effect_ list [@@driving equal]
+let equal_effects = List.equal equal_effect_
 
 type target = Jump of Chain_id.t
             | Accept
@@ -129,8 +144,9 @@ type target = Jump of Chain_id.t
             | Return
             | Reject of Reject.t
             | Pass (* Not terminal *)
+              [@@deriving equal]
 
-type oper = (predicate * bool) list * effect_ list * target
+type oper = (predicate * bool) list * effects * target
 
 type chain = { id: Chain_id.t; rules : oper list; comment: string; }
 
@@ -169,11 +185,11 @@ let eq_rules a b =
 let eq_effect =
   let (=) = Poly.equal in
   function
-  | MarkZone (dir, zone) -> begin function MarkZone (dir', zone') -> dir = dir' && zone = zone' | _ -> false end
-  | Counter -> begin function Counter -> true | _ -> false end
-  | Notrack -> begin function Notrack -> true | _ -> false end
-  | Log prefix -> begin function Log prefix' -> prefix = prefix' | _ -> false end
-  | Snat ip -> begin function Snat ip' -> Ipaddr.V4.compare ip ip' = 0 | _ -> false end
+  | MarkZone (dir, zone) -> (function MarkZone (dir', zone') -> dir = dir' && zone = zone' | _ -> false)
+  | Counter -> (function Counter -> true | _ -> false)
+  | Notrack -> (function Notrack -> true | _ -> false)
+  | Log prefix -> (function Log prefix' -> prefix = prefix' | _ -> false)
+  | Snat ip -> (function Snat ip' -> Ipaddr.V4.compare ip ip' = 0 | _ -> false)
 
 let eq_effects a b =
   let order = function
@@ -261,3 +277,8 @@ let is_always value =
     | 2 -> neg <> value
     | 0 -> neg = value
     | _ -> false
+
+
+type string = id [@@ocaml.warning "-34"]
+type int = mask [@@ocaml.warning "-34"]
+type bool = pol [@@ocaml.warning "-34"]

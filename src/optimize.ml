@@ -7,10 +7,6 @@ module Ip6 = Ipset.Ip6
 module Ip4 = Ipset.Ip4
 
 (* Undo type aliases *)
-type string = id [@@ocaml.warning "-34"]
-type int = mask [@@ocaml.warning "-34"]
-type bool = pol [@@ocaml.warning "-34"]
-
 
 (* List of predicates that always results in true *)
 let true_predicates =
@@ -109,106 +105,67 @@ let merge_pred ?(tpe=`Inter) a b =
   let merge_ip4sets = merge Ip4.intersect Ip4.union Ip4.diff in
   let merge_sets a b = merge Set.inter Set.union Set.diff a b in
 
-  let merge = match a with
-    | (Interface (dir, is), neg) -> begin
-        function
-        | (Interface (dir', is'), neg') when dir = dir' ->
-          let (is'', neg'') = merge_sets (is, neg) (is', neg') in
-          (Interface (dir, is''), neg'') |> Option.some
-        | _ -> None
-      end
-    | (State s, neg) -> begin
-        function
-        | (State s', neg') ->
-          let (s'', neg'') = merge_states (s, neg) (s', neg') in
-          (State s'', neg'') |> Option.some
-        | _ -> None
-      end
-    | (Ports (dir, pt, ports), neg) -> begin
-        function
-        | (Ports (dir', pt', ports'), neg') when dir = dir' && pt = pt' ->
-          let (ports'', neg'') = merge_sets (ports, neg) (ports', neg') in
-          (Ports (dir, pt, ports''), neg'') |> Option.some
-        | _ -> None
-      end
-    | (Protocol (p), neg) -> begin
-        function (Protocol (p'), neg') ->
-          let (p'', neg'') = merge_sets (p, neg) (p', neg') in
-          (Protocol (p''), neg'') |> Option.some
-               | _ -> None
-      end
-    | (Icmp6 types, neg) -> begin
-        function
-        | (Icmp6 types', neg') ->
-          let (types'', neg'') = merge_sets (types, neg) (types', neg') in
-          (Icmp6 types'', neg'') |> Option.some
-        | _ -> None
-      end
-    | (Icmp4 types, neg) -> begin
-        function
-        | (Icmp4 types', neg') ->
-          let (types'', neg'') = merge_sets (types, neg) (types', neg') in
-          (Icmp4 types'', neg'') |> Option.some
-        | _ -> None
-      end
-    | (Ip6Set (dir, set), neg) -> begin
-        function
-        | (Ip6Set (dir', set'), neg') when dir = dir' ->
-          let (set'', neg'') = merge_ip6sets (set, neg) (set', neg') in
-          (Ip6Set (dir, set''), neg'') |> Option.some
-        | _ -> None
-      end
-    | (Ip4Set (dir, set), neg) -> begin
-        function
-        | (Ip4Set (dir', set'), neg') when dir = dir' ->
-          let (set'', neg'') = merge_ip4sets (set, neg) (set', neg') in
-          Some (Ip4Set (dir, set''), neg'')
-        | _ -> None
-      end
-    | (Zone (dir, zones), neg) -> begin
-        function
-        | (Zone (dir', zones'), neg') when dir = dir' ->
-          let (zones'', neg'') = merge_sets (zones, neg) (zones', neg') in
-          Some (Zone (dir, zones''), neg'')
-        | _ -> None
-      end
-    | (TcpFlags (f, m), neg) -> begin
-        function
-        | (TcpFlags (f', m'), false) when not neg ->
-          begin
-            let set_flags = Set.union f f' in
-            let unset_flags = Set.union (Set.diff m f) (Set.diff m' f') in
-            match Set.inter set_flags unset_flags |> Set.is_empty with
-            | true ->
-              Some (TcpFlags (set_flags, Set.union m m'), false)
-            | false -> Some (True, true)
-          end
-        | _ -> None
-      end
-    | (True, neg) -> begin
-        function
-        | (True, neg') -> Some (True, neg || neg')
-        | _ -> None
-      end
-    | If_group (_, _), _neg -> fun _ -> None
-    | Mark (_, _), _neg -> fun _ -> None
-    | Hoplimit limits, neg -> begin
-        function
-        | Hoplimit limits', neg' ->
-          let (limits, neg) = merge_sets (limits, neg) (limits', neg') in
-          (Hoplimit limits, neg) |> Option.some
-        | _ -> None
-      end
-    | Address_family af, neg -> begin
-        function
-        | Address_family af', neg' ->
-          let (af'', neg'') = merge_sets (af, neg) (af', neg') in
-          (* printf "merged: %d,%b + %d,%b -> %d,%b\n" (Set.length af) neg (Set.length af') neg' (Set.length af'') neg''; *)
-          (Address_family af'', neg'') |> Option.some
-        | _ -> None
-      end
-  in
-  merge b
+  match a, b with
+  | (Interface (dir, is), neg), (Interface (dir', is'), neg') when dir = dir' ->
+    let (is'', neg'') = merge_sets (is, neg) (is', neg') in
+    (Interface (dir, is''), neg'') |> Option.some
+  | (Interface _, _), _ -> None
+  | (State s, neg), (State s', neg') ->
+    let (s'', neg'') = merge_states (s, neg) (s', neg') in
+    (State s'', neg'') |> Option.some
+  | (State _, _), _ -> None
+  | (Ports (dir, pt, ports), neg), (Ports (dir', pt', ports'), neg') when dir = dir' && pt = pt' ->
+    let (ports'', neg'') = merge_sets (ports, neg) (ports', neg') in
+    (Ports (dir, pt, ports''), neg'') |> Option.some
+  | (Ports _, _), _ -> None
+  | (Protocol p, neg), (Protocol p', neg') ->
+    let (p'', neg'') = merge_sets (p, neg) (p', neg') in
+    (Protocol (p''), neg'') |> Option.some
+  | (Protocol _, _), _ -> None
+  | (Icmp6 types, neg), (Icmp6 types', neg') ->
+    let (types'', neg'') = merge_sets (types, neg) (types', neg') in
+    (Icmp6 types'', neg'') |> Option.some
+  | (Icmp6 _, _), _ -> None
+  | (Icmp4 types, neg), (Icmp4 types', neg') ->
+    let (types'', neg'') = merge_sets (types, neg) (types', neg') in
+    (Icmp4 types'', neg'') |> Option.some
+  | (Icmp4 _, _), _ -> None
+  | (Ip6Set (dir, set), neg), (Ip6Set (dir', set'), neg') when dir = dir' ->
+    let (set'', neg'') = merge_ip6sets (set, neg) (set', neg') in
+    (Ip6Set (dir, set''), neg'') |> Option.some
+  | (Ip6Set _, _), _ -> None
+  | (Ip4Set (dir, set), neg), (Ip4Set (dir', set'), neg') when dir = dir' ->
+    let (set'', neg'') = merge_ip4sets (set, neg) (set', neg') in
+    Some (Ip4Set (dir, set''), neg'')
+  | (Ip4Set _, _), _ -> None
+  | (Zone (dir, zones), neg), (Zone (dir', zones'), neg') when dir = dir' ->
+    let (zones'', neg'') = merge_sets (zones, neg) (zones', neg') in
+    Some (Zone (dir, zones''), neg'')
+  | (Zone _, _), _ -> None
+  (* Wonder if I could do better here. Well. Could reverse the flags at least *)
+  | (TcpFlags (f, m), false), (TcpFlags (f', m'), false) ->
+    begin
+      let set_flags = Set.union f f' in
+      let unset_flags = Set.union (Set.diff m f) (Set.diff m' f') in
+      match Set.inter set_flags unset_flags |> Set.is_empty with
+      | true ->
+        Some (TcpFlags (set_flags, Set.union m m'), false)
+      | false -> Some (True, true)
+    end
+  | (TcpFlags _, _), _ -> None
+  | (True, neg), (True, neg') -> Some (True, neg || neg')
+  | (True, _), _  -> None
+  | (If_group _, _), _  -> None
+  | (Mark _, _), _ -> None
+  | (Hoplimit limits, neg), (Hoplimit limits', neg') ->
+    let (limits, neg) = merge_sets (limits, neg) (limits', neg') in
+    (Hoplimit limits, neg) |> Option.some
+  | (Hoplimit _, _), _ -> None
+  | (Address_family af, neg), (Address_family af', neg') ->
+    let (af'', neg'') = merge_sets (af, neg) (af', neg') in
+    (* printf "merged: %d,%b + %d,%b -> %d,%b\n" (Set.length af) neg (Set.length af') neg' (Set.length af'') neg''; *)
+    (Address_family af'', neg'') |> Option.some
+  | (Address_family _, _), _ -> None
 
 let sort_predicates predicates =
   List.stable_sort ~compare:Ir.compare_predicate predicates
@@ -230,12 +187,20 @@ let merge_predicates predicates =
   |> List.group ~break:(fun (p1, _) (p2, _) -> Ir.enumerate_pred p1 <> Ir.enumerate_pred p2)
   |> List.concat_map ~f:reduce
 
-let is_subset a b =
-  match merge_pred ~tpe:`Diff a b with
-  | Some r ->
-    (* if b - a is still satisfiable, then b covers more that a. *)
-    is_always false r
-  | None -> false
+let is_subset b ~of_:a =
+  let is_satisfiable a b =
+    merge_pred ~tpe:`Diff a b
+    |> Option.map ~f:(fun p -> is_always false p |> not)
+  in
+  match is_satisfiable b a with
+  | Some false -> true
+  | _ -> false
+
+let equal_predicate a b =
+  is_subset a ~of_:b && is_subset b ~of_:a
+
+
+
 
 let is_terminal = function
   | Pass | Jump _ -> false
@@ -515,6 +480,28 @@ let remove_unsatisfiable_rules rules =
 let remove_empty_rules rules =
   List.filter ~f:(function (_, [], Ir.Pass) -> false | _ -> true) rules
 
+let rec merge_adjecent_rules2 =
+  (* What ever predicates are in ps must be in ps', and ps' is more restrictive *)
+  let is_subset ps' ~of_:ps =
+    let rec inner = function
+      | p :: ps, p' :: ps' when is_subset p' ~of_:p ->
+        inner (ps, ps')
+      | [], _ -> true
+      | _, _ -> false
+    in
+    let ps = List.sort ~compare:compare_predicate ps in
+    let ps' = List.sort ~compare:compare_predicate ps' in
+    inner (ps, ps')
+  in
+  function
+  | (preds, effects, target) as r :: (preds', effects', target') :: rs when Ir.equal_target  target target' && Ir.equal_effects effects effects' && is_subset ~of_:preds preds' ->
+    merge_adjecent_rules2 (r :: rs)
+  | (preds, effects, target) :: ((preds', effects', target') as r') :: rs when Ir.equal_target  target target' && Ir.equal_effects effects effects' && is_subset ~of_:preds' preds ->
+    merge_adjecent_rules2 (r' :: rs)
+  | r :: rs ->
+    r :: merge_adjecent_rules2 rs
+  | [] -> []
+
 let merge_adjecent_rules chains =
   let new_chains = ref [] in
   let rec merge = function
@@ -530,7 +517,7 @@ let merge_adjecent_rules chains =
       let r = merge_pred ~tpe:`Union pred pred' in
       merge (([Option.value_exn r], effects, target) :: xs)
     | ([pred], effects, target) :: ([pred'], _, _) :: xs
-      when is_terminal target && is_subset pred' pred ->
+      when is_terminal target && is_subset ~of_:pred pred' ->
       merge (([pred], effects, target) :: xs)
     | x :: xs -> x :: merge xs
     | [] -> []
@@ -682,6 +669,8 @@ let map_predicates ~f rules =
     (f predicates, effects, target)
   ) rules
 
+let _ = merge_adjecent_rules2
+
 let optimize_pass chains =
   printf "#Optim: (%d, %d) %!" (Chain.count_rules chains) (Chain.count_predicates chains);
   let chains = fold_return_statements chains in
@@ -694,6 +683,7 @@ let optimize_pass chains =
       map_chain_rules @@ remove_unsatisfiable_rules;
       map_chain_rules @@ remove_true_predicates;
       map_chain_rules @@ remove_empty_rules;
+      map_chain_rules @@ merge_adjecent_rules2;
       map_chain_rules @@ eliminate_duplicate_rules;
       map_chain_rules @@ reorder;
       join;
@@ -751,18 +741,26 @@ module Test = struct
         assert_equal ~cmp:eq_pred_opt ~msg:"Wrong result" res (Some expect);
       end;
 
-      "subset" >:: begin fun _ ->
-        let a = (Ir.State ([State.New] |> State.of_list), false) in
-        let b = (Ir.State ([State.New; State.Established] |> State.of_list), false) in
-        let c = (Ir.State ([State.Established] |> State.of_list), false) in
+      "subset|equal" >:: begin fun _ ->
+        let a = (Ir.State State.([New] |> of_list), false) in
+        let b = (Ir.State State.([New; Established] |> of_list), false) in
+        let c = (Ir.State State.([Established] |> of_list), false) in
 
-        assert_bool "a b must be a subset" (is_subset a b);
-        assert_bool "b a must not be a subset" (not (is_subset b a));
-        assert_bool "a c must not be a subset" (not (is_subset a c));
-        assert_bool "c a must not be a subset" (not (is_subset c a));
-        assert_bool "c b must be a subset" (is_subset c b);
+        assert_bool "'a' is equal to 'a'" (equal_predicate a a);
+        assert_bool "'a' is not equal to 'b'" (equal_predicate a b |> not);
+        assert_bool "'a' is not equal to 'c'" (equal_predicate a c |> not);
+
+        assert_bool "'a' is a subset of 'b'" (is_subset ~of_:b a);
+        assert_bool "'b' is not a subset of 'a'" (not (is_subset ~of_:a b));
+        assert_bool "'a' is not a subset of 'c'" (not (is_subset ~of_:c a));
+        assert_bool "'c' is not a subset of 'a'" (not (is_subset ~of_:a c));
+        assert_bool "'c' is a subset of 'b'" (is_subset ~of_:b c);
+        assert_bool "'b' is a subset of 'b'" (is_subset ~of_:b b);
+
+
         ()
       end;
+
 
       "is_true" >:: begin fun _ ->
         List.iteri ~f:(fun i pred ->
