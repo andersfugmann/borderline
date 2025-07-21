@@ -1,7 +1,6 @@
 # Rules for all zones.
 define common = {
     rule {
-        source address != 0.0.0.0;
         # Drop any martian packets
         rule { source zone = mars; } policy log_martian;
         rule { destination zone = mars; } policy log_martian;

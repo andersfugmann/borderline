@@ -45,7 +45,7 @@ let _ =
     Printf.printf "\n";
     Printf.printf "#Chains: %d\n" (Chain.count_chains !Chain.chains);
     Printf.printf "#Rules: %d\n" (Chain.count_rules !Chain.chains);
-    Printf.printf "#Conditons: %d\n" (Chain.count_predicates !Chain.chains);
+    Printf.printf "#Predicates: %d\n" (Chain.count_predicates !Chain.chains);
     Printf.printf "#Lines: %d\n" (List.length lines);
 
   with

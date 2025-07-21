@@ -24,7 +24,7 @@ type address_family = Ipv4 | Ipv6
 
 module Chain_type = struct
   type t = Input | Output | Forward | Pre_routing | Post_routing
-  [@@deriving compare, sexp, equal]
+  [@@deriving compare, sexp, equal, show]
 
   include Comparator.Make(struct type nonrec t = t let compare = compare let sexp_of_t = sexp_of_t end)
 end
@@ -33,7 +33,7 @@ module Chain_id = struct
   type t = Temporary of int
          | Builtin of Chain_type.t
          | Named of string
-  [@@deriving compare, sexp, equal]
+  [@@deriving compare, sexp, equal, show]
   include Comparator.Make(struct type nonrec t = t let compare = compare let sexp_of_t = sexp_of_t end)
 end
 
@@ -80,7 +80,7 @@ end
 
 module Reject = struct
   type t = HostUnreachable | NoRoute | AdminProhibited | PortUnreachable | TcpReset
-  [@@deriving compare, sexp, equal]
+  [@@deriving compare, sexp, equal, show]
 
   include Comparator.Make(struct type nonrec t = t let compare = compare let sexp_of_t = sexp_of_t end)
   let of_string (id, pos) =
@@ -109,7 +109,14 @@ type predicate = Interface of Direction.t * id Set.t
                | Address_family of address_family Set.t
                | True
 
-let string_of_predicate = function
+let string_of_predicate =
+  let int_set_to_list l =
+    Set.to_list l
+    |> List.map ~f:Int.to_string
+    |> String.concat ~sep:";"
+    |> Printf.sprintf "[ %s ]"
+  in
+  function
   | Interface (_, _) -> "Interface"
   | If_group (_, _) -> "If_group"
   | Zone (_, _) -> "Zone"
@@ -118,15 +125,22 @@ let string_of_predicate = function
   | Ip6Set (_, _) -> "Ip6Set"
   | Ip4Set (_, _) -> "Ip4Set"
   | Protocol s ->
-    Set.to_list s |> List.map ~f:Int.to_string |> String.concat ~sep:";" |> Printf.sprintf "Protocol [ %s ]"
+    Printf.sprintf "Protocol %s" (int_set_to_list s)
   | Icmp6 _ -> "Icmp6"
   | Icmp4 _ -> "Icmp4"
   | Mark (_, _) -> "Mark"
   | TcpFlags (_, _) -> "TcpFlags"
-  | Hoplimit _ -> "Hoplimit"
+  | Hoplimit l ->
+    Printf.sprintf "Hoplimit %s" (int_set_to_list l)
   | Address_family _ -> "Address_family"
   | True -> "True"
 
+(* Union - really? *)
+
+let string_of_predicates preds =
+  List.map ~f:(fun (p, n) -> Printf.sprintf "(%s,%b)" (string_of_predicate p) n) preds
+  |> String.concat ~sep:"; "
+  |> Printf.sprintf "[ %s ]"
 
 type effect_ = MarkZone of Direction.t * zone
              | Counter
@@ -144,7 +158,7 @@ type target = Jump of Chain_id.t
             | Return
             | Reject of Reject.t
             | Pass (* Not terminal *)
-              [@@deriving equal]
+              [@@deriving equal, show]
 
 type oper = (predicate * bool) list * effects * target
 

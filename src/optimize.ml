@@ -199,9 +199,6 @@ let is_subset b ~of_:a =
 let equal_predicate a b =
   is_subset a ~of_:b && is_subset b ~of_:a
 
-
-
-
 let is_terminal = function
   | Pass | Jump _ -> false
   | Accept | Drop | Return | Reject _ -> true
@@ -221,7 +218,6 @@ let join chains =
       1 + count_cont_preds pred xs
     | _ -> 0
   in
-
 
   let partition pred rules =
     List.partition_tf ~f:(has_pred pred) rules
@@ -480,8 +476,24 @@ let remove_unsatisfiable_rules rules =
 let remove_empty_rules rules =
   List.filter ~f:(function (_, [], Ir.Pass) -> false | _ -> true) rules
 
-let rec merge_adjecent_rules2 =
-  (* What ever predicates are in ps must be in ps', and ps' is more restrictive *)
+let union_preds ps ps' =
+  let ps = sort_predicates ps in
+  let ps' = sort_predicates ps' in
+  match List.map2 ~f:(merge_pred ~tpe:`Union) ps ps' with
+  | Ok l when List.for_all ~f:Option.is_some l ->
+    (* Lets print everything to see whats going on *)
+    let r = List.filter_opt l in
+    Some r
+  | _ -> None
+[@@warning "-32"]
+
+
+let preds_equal ps ps' =
+  let ps = sort_predicates ps in
+  let ps' = sort_predicates ps' in
+  List.equal equal_predicate ps ps'
+
+let merge_adjecent_rules chains =
   let is_subset ps' ~of_:ps =
     let rec inner = function
       | p :: ps, p' :: ps' when is_subset p' ~of_:p ->
@@ -489,36 +501,53 @@ let rec merge_adjecent_rules2 =
       | [], _ -> true
       | _, _ -> false
     in
-    let ps = List.sort ~compare:compare_predicate ps in
-    let ps' = List.sort ~compare:compare_predicate ps' in
+    let ps = sort_predicates ps in
+    let ps' = sort_predicates ps' in
     inner (ps, ps')
   in
-  function
-  | (preds, effects, target) as r :: (preds', effects', target') :: rs when Ir.equal_target  target target' && Ir.equal_effects effects effects' && is_subset ~of_:preds preds' ->
-    merge_adjecent_rules2 (r :: rs)
-  | (preds, effects, target) :: ((preds', effects', target') as r') :: rs when Ir.equal_target  target target' && Ir.equal_effects effects effects' && is_subset ~of_:preds' preds ->
-    merge_adjecent_rules2 (r' :: rs)
-  | r :: rs ->
-    r :: merge_adjecent_rules2 rs
-  | [] -> []
 
-let merge_adjecent_rules chains =
   let new_chains = ref [] in
   let rec merge = function
-    | ([pred], effects, target) :: ([pred'], effects', target') :: xs when Ir.eq_pred pred pred' -> begin
-        let chain = Chain.create [ ([], effects, target); ([], effects', target') ] "rule merged" in
-        new_chains := chain :: !new_chains;
-        merge (([pred], [], Jump chain.id) :: xs)
-      end
+    | ([pred], effects, target) :: ([pred'], effects', target') :: xs
+      when Ir.eq_pred pred pred' ->
+      printf "s";
+      let chain = Chain.create [ ([], effects, target); ([], effects', target') ] "rule merged" in
+      new_chains := chain :: !new_chains;
+      merge (([pred], [], Jump chain.id) :: xs)
+    | (preds, effects, target) :: (preds', effects', target') :: xs
+      when preds_equal preds preds'
+        && List.length preds = 1 ->
+      printf "S";
+      let chain = Chain.create [ ([], effects, target); ([], effects', target') ] "rule merged" in
+      new_chains := chain :: !new_chains;
+      merge ((preds, [], Jump chain.id) :: xs)
     | ([pred], effects, target) :: ([pred'], effects', target') :: xs
       when Ir.eq_effects effects effects'
-        && target = target'
-        && merge_pred ~tpe:`Union pred pred' <> None ->
-      let r = merge_pred ~tpe:`Union pred pred' in
-      merge (([Option.value_exn r], effects, target) :: xs)
-    | ([pred], effects, target) :: ([pred'], _, _) :: xs
-      when is_terminal target && is_subset ~of_:pred pred' ->
+        && Ir.equal_target target target'
+        && merge_pred ~tpe:`Union pred pred' |> Option.is_some ->
+      printf "j";
+      let pred =
+        merge_pred ~tpe:`Union pred pred' |> Option.value_exn
+      in
       merge (([pred], effects, target) :: xs)
+    | (preds, effects, target) :: (preds', _, _) :: xs
+      when is_terminal target
+        && is_subset ~of_:preds preds' ->
+      printf "t";
+      merge ((preds, effects, target) :: xs)
+    | (preds, effects, target) :: (preds', effects', target') :: xs
+      when Ir.equal_target  target target'
+        && Ir.equal_effects effects effects'
+        && is_subset ~of_:preds' preds ->
+      printf "m";
+      merge ((preds', effects, target) :: xs)
+    | (preds, effects, target) :: (preds', effects', target') :: xs
+      when Ir.equal_target  target target'
+        && Ir.equal_effects effects effects'
+        && is_subset ~of_:preds preds' ->
+      printf "m";
+      merge ((preds, effects, target) :: xs)
+
     | x :: xs -> x :: merge xs
     | [] -> []
   in
@@ -669,8 +698,6 @@ let map_predicates ~f rules =
     (f predicates, effects, target)
   ) rules
 
-let _ = merge_adjecent_rules2
-
 let optimize_pass chains =
   printf "#Optim: (%d, %d) %!" (Chain.count_rules chains) (Chain.count_predicates chains);
   let chains = fold_return_statements chains in
@@ -683,7 +710,6 @@ let optimize_pass chains =
       map_chain_rules @@ remove_unsatisfiable_rules;
       map_chain_rules @@ remove_true_predicates;
       map_chain_rules @@ remove_empty_rules;
-      map_chain_rules @@ merge_adjecent_rules2;
       map_chain_rules @@ eliminate_duplicate_rules;
       map_chain_rules @@ reorder;
       join;
