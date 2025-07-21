@@ -30,11 +30,18 @@ define public_udp_ports = [ domain ]
 # Allow outbond traffic on all interfaces defined in the alias external
 # bl_configure will automatically set this on interfaces with a default router:
 # To add zones as external use alias append:
-# e.g. define external += zone_name
+# e.g. define external += zone_name or add it here
 define allow_outbound = false
+define external += []
 
 # Obtain dhcp address for external interfaces
 define external_dhcp = true
+
+# To act as a dhcp server,
+# add 0.0.0.0 as an address for the zones where the dhcp server is running,
+# and add the zone name to dhcp_server_zones,
+# e.g. define dhcp_server_zones += int, or add it here
+define dhcp_server_zones += []
 
 # Further configuration is best made in the zone files, where zone inbound
 # traffic can be defined on a per zone basis.

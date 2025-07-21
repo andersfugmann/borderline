@@ -120,5 +120,27 @@ define common = {
             use allow_outbound; #if
             destination zone = external;
         } policy allow;
+
+        # Dhcp server
+        rule {
+             # Requests
+             rule {
+                 address family = ipv4;
+                 protocol = [ udp ];
+                 source udp port = bootpc;
+                 destination udp port = bootps;
+                 source zone = dhcp_server_zones;
+                 destination zone = self;
+             } policy log_allow;
+             # Replies
+             rule {
+                 address family = ipv4;
+                 protocol = [ udp ];
+                 source udp port = bootps;
+                 destination udp port = bootpc;
+                 destination zone = dhcp_server_zones;
+                 source zone = self;
+             } policy log_allow;
+         };
     };
 }

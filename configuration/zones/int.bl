@@ -13,3 +13,4 @@ zone int {
 
     } policy deny;
 }
+define dhcp_server_zones += int
