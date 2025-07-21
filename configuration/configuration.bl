@@ -33,7 +33,7 @@ define public_udp_ports = [ domain ]
 # e.g. define external += zone_name
 define allow_outbound = false
 
-# Allow dhcp requests on external interfaces
+# Obtain dhcp address for external interfaces
 define external_dhcp = true
 
 # Further configuration is best made in the zone files, where zone inbound

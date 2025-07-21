@@ -1,7 +1,80 @@
 # Rules for all zones.
 define common = {
+
+    # Dhcp rules. Must apprear before dropping martian packets
     rule {
-        # Drop any martian packets
+        use external_dhcp; #if
+
+        # Dhcp ipv4.
+        rule {
+            # Requests to the DHCP server
+            # The DHCP server will always use its ip address
+            source zone = self;
+
+            address family = ipv4;
+            protocol = [ udp ];
+            source udp port = bootpc;
+            destination udp port = bootps;
+
+            rule {
+                 destination zone = external;
+            } policy accept;
+            rule {
+                destination address = 255.255.255.255
+            } policy accept;
+        };
+
+        rule {
+            # Replies from the DHCP server
+            # The DHCP server will always use its ip address
+            destination zone = self;
+            source zone = external;
+
+            address family = ipv4;
+            protocol = [ udp ];
+            source udp port = bootps;
+            destination udp port = bootpc;
+        } policy log_allow;
+
+        # Ipv6
+        rule { # Solicit / Request / Renew
+            # Initial request goes to ff02::1:2
+            address family = ipv6;
+            protocol = [ udp ];
+            source udp port = dhcpv6-client;
+            destination udp port = dhcpv6-server;
+
+            # Solicit from ff02::1:
+            # Request from link-local
+            # Renew from assigned global ip
+            # These will all be from the local server,
+            source zone = self;
+
+            rule { destination zone = external; } policy log_allow;
+            rule { destination address = [ ff02::1:2, local ]; } policy log_allow;
+        };
+        rule {
+            # Replies comes from the global ip address or link local
+            address family = ipv6;
+            protocol = [ udp ];
+            destination udp port = dhcpv6-client;
+            source udp port = dhcpv6-server;
+
+            rule {
+                 source zone = external;
+                 rule { destination zone = self; } policy log_allow;
+                 rule { destination address = [ local ]; } policy log_allow;
+            };
+            rule {
+                 source address = local;
+                 rule { destination zone = self; } policy log_allow;
+                 rule { destination address = [ local ]; } policy log_allow;
+            }
+        };
+    };
+
+    rule {
+        # Drop any martian packets. Martians defined as packets from unallocated networks
         rule { source zone = mars; } policy log_martian;
         rule { destination zone = mars; } policy log_martian;
     };
@@ -47,26 +120,5 @@ define common = {
             use allow_outbound; #if
             destination zone = external;
         } policy allow;
-
-        # Dhcp on external interfaces. This should not be needed.
-        rule {
-            use external_dhcp; #if
-            rule {
-                address family = ipv6;
-                protocol = [ udp ];
-                source address = local;
-	        destination address = local;
-                destination zone = self;
-		source udp port = dhcpv6-server;
-		destination udp port = dhcpv6-client;
-            } policy log_allow;
-            rule {
-                address family = ipv4;
-                protocol = [ udp ];
-                destination zone = self;
-		source udp port = bootps;
-		destination udp port = bootpc;
-            } policy log_allow;
-        };
     };
 }
