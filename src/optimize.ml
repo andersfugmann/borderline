@@ -6,8 +6,6 @@ open Poly
 module Ip6 = Ipset.Ip6
 module Ip4 = Ipset.Ip4
 
-(* Undo type aliases *)
-
 (* List of predicates that always results in true *)
 let true_predicates =
   let true_predicates direction =
@@ -455,7 +453,7 @@ let preds_all_true preds =
   List.for_all ~f:(is_always true) preds
 
 let rec eliminate_dead_rules = function
-  | (preds, _, target) as rule :: xs when
+  | (preds, _effects, target) as rule :: xs when
       is_terminal target && preds_all_true preds->
     List.iter ~f:(fun _ -> printf "D") xs;
     [ rule ]
@@ -653,9 +651,9 @@ let filter_predicates ~init inputs predicates =
         (* Predicate had no effect *)
         printf "R";
         input, preds
-      | Some pred ->
-        printf "U";
-        pred, (pred :: preds)
+      | Some pred' ->
+        if (equal_predicate pred pred' |> not) then printf "U";
+        pred', (pred' :: preds)
       | None -> input, (pred :: preds)
     ) predicates
   in
@@ -710,6 +708,7 @@ let optimize_pass chains =
     [
       map_chain_rules @@ eliminate_dead_rules;
       remove_duplicate_chains;
+      reduce_all_predicates;
       map_chain_rules @@ map_predicates @@ merge_predicates;
       map_chain_rules @@ remove_unsatisfiable_rules;
       map_chain_rules @@ remove_true_predicates;
@@ -720,7 +719,6 @@ let optimize_pass chains =
       merge_adjecent_rules;
       inline inline_cost;
       map_chain_rules ~f:(fun rls -> Common.map_filter_exceptions (fun (preds, effect_, tg) -> (merge_predicates preds, effect_, tg)) rls);
-      reduce_all_predicates;
       reduce_recursive ~f:(filter_predicates_derived ~init:(Ir.Protocol Set.empty, true) ~of_pred:protocol_of_pred);
       reduce_recursive ~f:(filter_predicates_derived ~init:(Ir.Address_family Set.empty, true) ~of_pred:address_family_of_pred);
       remove_unreferenced_chains;
