@@ -18,10 +18,10 @@ define common = {
 
             rule {
                  destination zone = external;
-            } policy accept;
+            } policy log_allow;
             rule {
                 destination address = 255.255.255.255
-            } policy accept;
+            } policy log_allow;
         };
 
         rule {
