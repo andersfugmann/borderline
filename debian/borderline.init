@@ -88,8 +88,15 @@ EOF
 }
 
 function check () {
-    ${NFT} -c -o -f <(${BORDERLINE} ${MAIN})
-    if [ "$?" -eq "0" ]; then
+    FILE=$(mktemp -t borderline.XXXXXX)
+    ${BORDERLINE} ${MAIN} > $FILE
+    ERROR=$?
+    if (( ERROR == 0 )); then
+        ${NFT} -c -f ${FILE}
+	ERROR=$?
+    fi
+    rm -f ${FILE}
+    if (( ERROR == 0 )); then
 	echo Configuration ok
     else
 	echo Configuration error!
