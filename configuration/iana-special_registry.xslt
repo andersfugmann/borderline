@@ -14,7 +14,7 @@
   <xsl:template name="snake-case">
     <xsl:param name="text" />
     <xsl:variable name="lower" select="translate($text, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz')" />
-    <xsl:variable name="clean" select="translate($lower, ' &quot;-()', '___')" />
+    <xsl:variable name="clean" select="translate($lower, ' /&quot;-()', '____')" />
     <xsl:value-of select="normalize-space($clean)" />
   </xsl:template>
 
@@ -72,12 +72,12 @@
       <!-- Main define line -->
       <xsl:choose>
         <xsl:when test="$name_raw = 'Private-Use'">
-          <xsl:value-of select="concat('define ', $prefix, '_', $snake_case_name, ' += ',
-                                iana:address, ' # ', $name_raw, '&#10;')" />
+          <xsl:value-of select="concat('define ', $prefix, '_', $snake_case_name, ' += [',
+                                iana:address, '] # ', $name_raw, '&#10;')" />
         </xsl:when>
         <xsl:otherwise>
-          <xsl:value-of select="concat('define ', $alias, ' = ',
-                                iana:address, ' # ', $name_raw, '&#10;')" />
+          <xsl:value-of select="concat('define ', $alias, ' = [',
+                                iana:address, '] # ', $name_raw, '&#10;')" />
 
           <!-- Always add to all -->
           <xsl:call-template name="append-network">
