@@ -1,5 +1,7 @@
 allocated6.bl
-bogon6.bl
 bogon4.bl
+bogon6.bl
 protocols.bl
 services.bl
+iana-ipv4-special-registry.bl
+iana-ipv6-special-registry.bl
