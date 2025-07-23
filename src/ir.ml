@@ -146,7 +146,7 @@ type effect_ = MarkZone of Direction.t * zone
              | Counter
              | Notrack
              | Log of prefix
-             | Snat of Ipaddr.V4.t (* Could actually be a set *)
+             | Snat of Ipaddr.V4.t option
 [@@deriving equal]
 
 type effects = effect_ list [@@driving equal]
@@ -196,14 +196,20 @@ let eq_rule (preds, effects, action) (preds', effects', action') =
 let eq_rules a b =
   List.equal eq_rule a b
 
-let eq_effect =
+let eq_effect a b =
   let (=) = Poly.equal in
-  function
-  | MarkZone (dir, zone) -> (function MarkZone (dir', zone') -> dir = dir' && zone = zone' | _ -> false)
-  | Counter -> (function Counter -> true | _ -> false)
-  | Notrack -> (function Notrack -> true | _ -> false)
-  | Log prefix -> (function Log prefix' -> prefix = prefix' | _ -> false)
-  | Snat ip -> (function Snat ip' -> Ipaddr.V4.compare ip ip' = 0 | _ -> false)
+  match a, b with
+  | MarkZone (dir, zone), MarkZone (dir', zone') -> dir = dir' && zone = zone'
+  | MarkZone _, _ -> false
+  | Counter, Counter -> true
+  | Counter, _ -> false
+  | Notrack, Notrack -> true
+  | Notrack, _ -> false
+  | Log prefix, Log prefix' -> String.equal prefix prefix'
+  | Log _, _ -> false
+  | Snat (Some ip), Snat (Some ip') -> Ipaddr.V4.equal ip ip'
+  | Snat None, Snat None -> true
+  | Snat _, _ -> false
 
 let eq_effects a b =
   let order = function

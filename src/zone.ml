@@ -53,9 +53,9 @@ let create_zone_chain direction (id, nodes) =
             ~f:(fun (ip4, ip6) -> function
                 | F.Ip (F.Ipv4 i, _) -> ( i :: ip4, ip6)
                 | F.Ip (F.Ipv6 i, _) -> (ip4, i :: ip6)
-                | F.Number (_, pos) -> parse_error ~pos "Expected ip address, got number"
-                | F.Id (_, pos) -> parse_error ~pos "Expected ip address, got id"
-                | F.String (_, pos) -> parse_error ~pos "Expected ip address, got string"
+                | F.Number (i, pos) -> parse_errorf ~pos "Expected ip address, got number '%d'" i
+                | F.Id (id, pos) -> parse_errorf ~pos "Expected ip address, got un-expanded id: %s" id
+                | F.String (s, pos) -> parse_errorf ~pos "Expected ip address, got string '%s'" s
               ) ~init:([], []) ips
         in
         [ ([(Ir.Ip6Set(direction, Ip6.of_list ip6), false)], [], Ir.Jump chain.Ir.id);
@@ -146,11 +146,14 @@ let emit_filter zones =
 let emit_nat (zones : (string * F.zone_stm list) list) : Ir.oper list =
   let gen (zone : string) = function
     | F.ZoneSnat (src_zones, ip) ->
-        if (Ipaddr.V4.Prefix.bits ip < 32) then (parse_error "Snat not not work with network ranges");
-        ((Ir.Zone (Ir.Direction.Source, Rule.list2ids src_zones |> List.map ~f:fst |> Set.of_list), false) ::
-         (Ir.Zone (Ir.Direction.Destination, zone |> Set.singleton), false) :: [],
-         [Ir.Snat (Ipaddr.V4.Prefix.network ip)],
-         Ir.Pass) |> Option.some
+      let () = match ip with
+        | Some ip when Ipaddr.V4.Prefix.bits ip < 32 -> parse_error "Snat not not work with network ranges"
+        | _ -> ()
+      in
+      ((Ir.Zone (Ir.Direction.Source, Rule.list2ids src_zones |> List.map ~f:fst |> Set.of_list), false) ::
+       (Ir.Zone (Ir.Direction.Destination, zone |> Set.singleton), false) :: [],
+       [Ir.Snat (Option.map ~f:Ipaddr.V4.Prefix.network ip)],
+       Ir.Pass) |> Option.some
     | F.Interface _
     | F.If_group _
     | F.Network _

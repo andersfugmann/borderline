@@ -25,7 +25,7 @@ type policytype = Counter
                 | Reject of (string * Lexing.position) option
                 | Log of prefix
                 | Ref of id
-                | Snat of Ip4.elt
+                | Snat of Ip4.elt option
                 | User_chain of id
 
 and node = Import of id
@@ -40,7 +40,7 @@ and zone_stm = Interface of data list
              | If_group of data list
              | Network of data list
              | ZoneRules of id * rule_stm list * policytype list
-             | ZoneSnat of data list * Ip4.elt
+             | ZoneSnat of data list * Ip4.elt option
 
 and filter_stm = Address of data list
                | Ports of id * data list

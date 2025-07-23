@@ -47,11 +47,11 @@ rule_seq:
 
 zone_stm:
   | NETWORK EQ data=data_list                          { Frontend.Network (data) }
-  | INTERFACE EQ data=data_list                        { Frontend.Interface(data)}
-  | GROUP EQ data=data_list                            { Frontend.If_group(data)}
-  | IF_GROUP EQ data=data_list                         { Frontend.If_group(data)}
+  | INTERFACE EQ data=data_list                        { Frontend.Interface (data)}
+  | GROUP EQ data=data_list                            { Frontend.If_group (data)}
+  | IF_GROUP EQ data=data_list                         { Frontend.If_group (data)}
   | PROCESS t=id r=rule_seq p=policy_opt               { Frontend.ZoneRules (t,r,p) }
-  | SNAT zones=data_list ip=ipv4                       { Frontend.ZoneSnat(zones, fst ip) }
+  | SNAT zones=data_list ip=option(ipv4)               { Frontend.ZoneSnat (zones, Option.map fst ip) }
 
 policy_opt:
   | { [] }

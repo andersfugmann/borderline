@@ -234,7 +234,8 @@ let gen_effect = function
   | Ir.Counter -> "counter"
   | Ir.Notrack -> ""
   | Ir.Log prefix -> sprintf "log prefix \"%s: \" level info" prefix
-  | Ir.Snat ip -> sprintf "snat ip to %s" (Ipaddr.V4.to_string ip)
+  | Ir.Snat (Some ip) -> sprintf "snat ip to %s" (Ipaddr.V4.to_string ip)
+  | Ir.Snat None -> sprintf "ip masquerade"
 
 let gen_target = function
   | Ir.Accept -> "accept"

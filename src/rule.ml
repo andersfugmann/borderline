@@ -21,8 +21,13 @@ let gen_target (effects, target) = function
   | F.Log prefix -> (Ir.Log prefix :: effects, target)
   | F.Ref (id, pos) -> parse_error ~id ~pos "Not all ids have been expanded"
   | F.Snat ip ->
-      if (Ipaddr.V4.Prefix.bits ip < 32) then (parse_error "Snat not not work with network ranges");
-      (Ir.Snat (Ipaddr.V4.Prefix.network ip) :: effects, target)
+    let ip =
+      Option.map ~f:(fun ip ->
+        if (Ipaddr.V4.Prefix.bits ip < 32) then (parse_error "Snat not not work with network ranges");
+        Ipaddr.V4.Prefix.network ip
+      ) ip
+    in
+    Ir.Snat ip :: effects, target
   | F.Allow -> (effects, Ir.Accept)
   | F.Deny -> (effects, Ir.Drop)
   | F.Reject s -> (effects, Ir.Reject (reject_of_string_opt s))
