@@ -4,6 +4,7 @@ install: release
 	mkdir -p $(DESTDIR)/etc/default/
 	mkdir -p $(DESTDIR)/etc/init.d/
 	mkdir -p $(DESTDIR)/usr/sbin/
+	make -C configuration clean
 	make -C configuration install
 	cp _build/default/bin/borderline.exe $(DESTDIR)/usr/sbin/borderline
 	cp _build/default/bin/bl_configure.exe $(DESTDIR)/usr/sbin/bl_configure
