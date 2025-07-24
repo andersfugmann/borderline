@@ -4,7 +4,7 @@
 %token ZONE PROCESS RULE IMPORT
 %token DEFINE
 %token NETWORK INTERFACE GROUP SNAT IF_GROUP
-%token ALLOW DENY REJECT LOG COUNTER USER_CHAIN
+%token ALLOW DENY REJECT LOG COUNTER USER_CHAIN COMMENT
 %token POLICY
 %token ADDRESS FAMILY STATE USE
 %token SEMI PROTOCOL
@@ -88,6 +88,7 @@ string:
 
 policy:
   | USER_CHAIN s=string                                { Frontend.User_chain s }
+  | COMMENT s=string                                   { Frontend.Comment s }
   | COUNTER                                            { Frontend.Counter }
   | ALLOW                                              { Frontend.Allow }
   | DENY                                               { Frontend.Deny }

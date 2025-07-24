@@ -142,6 +142,7 @@ let string_of_predicates preds =
 
 type effect_ = MarkZone of Direction.t * zone
              | Counter
+             | Comment of string
              | Notrack
              | Log of prefix
              | Snat of Ipaddr.V4.t option
@@ -201,6 +202,8 @@ let eq_effect a b =
   | MarkZone _, _ -> false
   | Counter, Counter -> true
   | Counter, _ -> false
+  | Comment c, Comment c' -> String.equal c c'
+  | Comment _, _ -> false
   | Notrack, Notrack -> true
   | Notrack, _ -> false
   | Log prefix, Log prefix' -> String.equal prefix prefix'
@@ -216,6 +219,7 @@ let eq_effects a b =
     | Notrack -> 3
     | Log _ -> 4
     | Snat _ -> 5
+    | Comment _ -> 6
   in
   let sort = List.sort ~compare:(fun x y -> compare (order x) (order y)) in
   List.equal eq_effect (sort a) (sort b)

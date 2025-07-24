@@ -18,6 +18,7 @@ let reject_of_string_opt = function
 
 let gen_target (effects, target) = function
   | F.Counter -> (Ir.Counter :: effects, target)
+  | F.Comment (comment, _pos) -> (Ir.Comment comment :: effects, target)
   | F.Log prefix -> (Ir.Log prefix :: effects, target)
   | F.Ref (id, pos) -> parse_error ~id ~pos "Not all ids have been expanded"
   | F.Snat ip ->

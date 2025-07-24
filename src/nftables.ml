@@ -232,6 +232,7 @@ let gen_effect = function
     let mask = zone_mask lsl (zone_bits - shift) in
     sprintf "meta mark set mark & 0x%08x or 0x%08x" mask ((get_zone_id id) lsl shift)
   | Ir.Counter -> "counter"
+  | Ir.Comment _ -> failwith "Illegal comment at this point. Comments must be added to the end of the rule"
   | Ir.Notrack -> ""
   | Ir.Log prefix -> sprintf "log prefix \"%s: \" level info" prefix
   | Ir.Snat (Some ip) -> sprintf "snat ip to %s" (Ipaddr.V4.to_string ip)
@@ -253,17 +254,20 @@ let gen_rule = function
         List.map ~f:(fun (op, neg) -> gen_pred neg op) preds
         |> List.unzip
       in
-      let comments =
-        List.filter_map ~f:Fn.id comments
-        |> function [] -> ""
-                  | cs -> String.concat ~sep:" " cs
-                          |> sprintf "comment \"%s\""
-      in
+      let comments = List.filter_opt comments in
       String.concat ~sep:" " preds, comments
+    in
+    let comments', effects = List.partition_map ~f:(function Ir.Comment c -> Either.First c | effect_ -> Either.Second effect_ ) effects in
+    let comments = comments @ comments' in
+    (* Need to filter out comments, and place them at the end *)
+    let comment_string =
+      match comments @ comments' |> List.stable_dedup ~compare:String.compare with
+      | [] -> ""
+      | comments -> sprintf " comment \"%s\"" (String.concat ~sep:" && " comments)
     in
     let effects = List.map ~f:gen_effect effects |> String.concat ~sep:" " in
     let target = gen_target target in
-    sprintf "%s %s %s %s;" preds effects target comments
+    sprintf "%s %s %s%s;" preds effects target comment_string
 
 (* Expand, as we cannot match both ipv6 and ipv6 rules in the same rule. *)
 (* The expansion contains a bug, so we rewrite it *)

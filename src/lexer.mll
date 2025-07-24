@@ -39,6 +39,7 @@ rule token = parse
   | "log"          { Parser.LOG }
   | "counter"      { Parser.COUNTER }
   | "user-chain"   { Parser.USER_CHAIN }
+  | "comment"      { Parser.COMMENT }
 
 (* filters *)
   | "port"         { Parser.PORT }
