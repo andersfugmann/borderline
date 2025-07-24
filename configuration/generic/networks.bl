@@ -1,11 +1,80 @@
-define link_local = [ fe80::/10 ]
-define neighbor_discovery = [ ff02:0:0:0:0:1:ff00::/104, ff02::1, ff02::2 ]
-define local = [ link_local, neighbor_discovery ]
-define rfc1918_addr = [ 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 ]
-define ip4_multicast = 224.0.0.0/3
-define ip6_multicast = ff00::/8
-define unspecified_address = ::
-define all_snoopers_multicast = ff02:0:0:0:0:0:0:6a
-define all_nodes_multicast = ff02::1
-define all_routers_multicast = ff02::2
-define mldv2_capable_routers = ff02:0:0:0:0:0:0:16
+# These does not cover all ip addresses - only the special iana networks
+
+# Allow dhcp messages
+define ipv4_iana_destination += [ 255.255.255.255/32 ]
+define ipv4_iana_source      += [ 0.0.0.0/32 ]
+
+define ipv6_global_unicast           = 2000::/3
+define ipv6_link_local               = fe80::/10
+
+# Refine at a later point - use iana specifications
+define ipv4_global_networks = 0.0.0.0/0
+define ipv6_global_networks = [ ::/0 ]
+define ipv4_local_networks = [ 0.0.0.0, ipv4_multicast ]
+define ipv6_local_networks = [ ipv6_multicast, ipv6_link_local ]
+
+# Multicast addresses
+define ipv6_all_routers = ff02::1:2
+
+define ipv4_global = [ local_host_network, 255.255.255.255 ]
+define ipv4_local = [ ipv4_global, ipv4_multicast, broadcast ]
+
+define ipv4_private_networks = ipv4_iana_private_use
+
+define ipv4_multicast                = 224.0.0.0/4
+
+# https://en.wikipedia.org/wiki/Multicast_address
+# I dont think I care enough about this.
+
+define ipv4_multicast_routable = [
+       ipv4_mulicast_internetwork_control,
+       ipv4_multicast_adhoc,
+       ipv4_multicast_sdp_sap,
+       ipv4_multicast_adhoc,
+       ipv4_multicast_source_specific,
+       ipv4_multicast_glop,
+       ipv4_multicast_unicast,
+       ipv4_multicast_administratively_scoped ]
+
+define ipv4_multicast_local = 224.0.0.0/24
+define ipv4_mulicast_internetwork_control = 224.0.1.0/24 # routable
+define ipv4_multicast_adhoc += [ 224.0.2.0/23, 224.0.4.0/22,
+                                 224.0.8.0/21, 224.0.16.0/20,
+                                 224.0.32.0/19, 224.0.64.0/18,
+                                 224.0.128.0/17 ] #  224.0.2.0 - 224.0.255.255 - routable
+define ipv4_multicast_reserved += 224.1.0.0/16
+define ipv4_multicast_sdp_sap = 224.2.0.0/16 # Yes
+define ipv4_multicast_adhoc += [ 224.3.0.0/16, 224.4.0.0/16 ] # Yes
+define ipv4_multicast_reserved +=  224.5.0.0/16
+define ipv4_multicast_reserved += [ 225.0.0.0/8, 226.0.0.0/7,
+                                    228.0.0.0/6 ] # 225.0.0.0 to 231.255.255.255
+define ipv4_multicast_source_specific = 232.0.0.0/8	# Source-specific multicast[3]	Yes
+define ipv4_multicast_glop = [ 233.0.0.0/9, 233.128.0.0/10,
+                               233.192.0.0/11, 233.224.0.0/12,
+                               233.240.0.0/13, 233.248.0.0/14 ]  # 233.0.0.0 to 233.251.255.255	GLOP addressing[8]	Yes
+define ipv4_multicast_adhoc += [  233.252.0.0/14 ] # 233.252.0.0 to 233.255.255.255	AD-HOC block 3[9]	Yes
+define ipv4_multicast_unicast =  234.0.0.0/8 # Unicast-prefix–based[10]	Yes
+define ipv4_multicast_reserved += [ 235.0.0.0/8, 236.0.0.0/7, 238.0.0.0/8 ] # 235.0.0.0 - 238.255.255.255
+define ipv4_multicast_administratively_scoped = 239.0.0.0/8 # Yes
+
+define ipv6_multicast_routable = [ ipv6_mcast_site, ipv6_mcast_org, ipv6_mcast_global ]
+define ipv6_multicast_global = [ ipv6_mcast_global ]
+
+define ipv6_multicast                = ff00::/8
+define ipv6_mcast_local              = ff02::/16 # link-local scope
+define ipv6_mcast_site               = ff05::/16 # site-local scope
+define ipv6_mcast_org                = ff08::/16 # org-local scope
+define ipv6_mcast_global             = ff0e::/16 # global scope
+
+
+# ADDED: Needed for SLAAC and NLD
+define ipv6_all_nodes_multicast      = ff02::1
+define ipv6_all_routers_multicast    = ff02::2
+define ipv6_all_snoopers_multicast   = ff02:0:0:0:0:0:0:6a
+define ipv6_multicast_discovery      = ff02:0:0:0:0:0:0:16
+define ipv6_solicited_node_multicast = ff02:0:0:0:0:1:ff00::/104
+define ipv6_neighbor_discovery       = [
+      ipv6_solicited_node_multicast,
+      ipv6_all_nodes_multicast,
+      ipv6_all_routers_multicast
+  ]

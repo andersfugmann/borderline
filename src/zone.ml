@@ -1,4 +1,5 @@
-open Base
+open! Base
+open! Stdio
 module Set = Set.Poly
 open Common
 module Ip6 = Ipset.Ip6
@@ -11,6 +12,9 @@ module F = Frontend
 (** The self zone is the machine it self. *)
 let self = "self"
 
+(** loopback interface to identify self zone *)
+let loopback = "lo"
+
 (** The martian zone. Networks packets that have no zone are declared
     martian, which is identified by this build in zone *)
 let mars = "mars"
@@ -21,6 +25,16 @@ let all_zones = "zones"
 
 (** List of built in zones. *)
 let builtin_zones = [ mars ]
+
+(* Aliases to which zones are added *)
+let external_zone_alias = "global_zones"
+let internal_zone_alias = "local_zones"
+
+(* Networks automatically added to network definitions *)
+let ipv4_global_networks = "ipv4_global_networks"
+let ipv6_global_networks = "ipv6_global_networks"
+let ipv4_local_networks  = "ipv4_local_networks"
+let ipv6_local_networks  = "ipv6_local_networks"
 
 type t = {
   interfaces: F.data list;
@@ -38,8 +52,46 @@ let init stms =
   in
   List.fold_left ~init:{ interfaces = []; groups = []; networks = []; } ~f:inner stms
 
+let is_loopback zone_stmts =
+  List.exists ~f:(function
+    | F.Interface [F.Id (iface, _)] -> String.Caseless.equal iface loopback
+    | F.Interface [F.String (iface, _)] -> String.Caseless.equal iface loopback
+    | _ -> false
+  ) zone_stmts
+
+(** Get the zone alias to add to *)
+let get_zone_alias zone_stmts =
+  match is_loopback zone_stmts with
+  | true -> None
+  | false ->
+    match List.exists ~f:(function F.Network _ -> true | _ -> false) zone_stmts with
+    | true -> Some external_zone_alias
+    | false -> Some internal_zone_alias
+
+(** Get the aliases to include for the zone *)
+let get_extra_network_aliases zone_stmts =
+  let get_networks zone_stmts =
+    List.fold ~init:(false, false) ~f:(fun acc -> function
+      | F.Network networks ->
+        List.fold ~init:acc ~f:(fun (has_ipv4, has_ipv6) -> function
+          | F.Ip (F.Ipv4 _, _)-> (true, has_ipv6)
+          | F.Ip (F.Ipv6 _, _)-> (has_ipv4, true)
+          | _ -> (has_ipv4, has_ipv6)
+        ) networks
+      | _ -> acc
+    ) zone_stmts
+  in
+  match is_loopback zone_stmts with
+  | true -> []
+  | false -> match get_networks zone_stmts with
+    | (true, true)   -> [ ipv4_local_networks; ipv6_local_networks ]
+    | (true, false)  -> [ ipv4_local_networks ]
+    | (false, true)  -> [ ipv6_local_networks ]
+    | (false, false) -> [ ipv4_global_networks; ipv6_global_networks ]
+
+
 let rec filter_zonerules table = function
-  | F.ZoneRules (t, r, p) :: xs when Poly.((fst t) = (fst table)) -> (r, p) :: filter_zonerules table xs
+  | F.ZoneRules (t, r, p) :: xs when String.((fst t) = (fst table)) -> (r, p) :: filter_zonerules table xs
   | _ :: xs -> filter_zonerules table xs
   | [] -> []
 
@@ -58,6 +110,7 @@ let create_zone_chain direction (id, nodes) =
                 | F.String (s, pos) -> parse_errorf ~pos "Expected ip address, got string '%s'" s
               ) ~init:([], []) ips
         in
+        (* Best place to expand with additional networks. But I need access to aliases! *)
         [ ([(Ir.Ip6Set(direction, Ip6.of_list ip6), false)], [], Ir.Jump chain.Ir.id);
           ([(Ir.Ip4Set(direction, Ip4.of_list ip4), false)], [], Ir.Jump chain.Ir.id) ]
 

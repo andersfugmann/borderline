@@ -1,7 +1,19 @@
+# Define an globally reachable zone.
+# Because the zone definition does not contain any
+# network statements, its added to the alias 'global_zones'.
+# Zone expansion will automatically add accepted networks
+# based on zone definitions.
+# See generic/networks.bl for more information
+
 zone ext {
      interface = eth0;
      process filter {
      } policy deny;
-     snat [ int, guest ] 1.2.3.4;
+
+     # Use explicity snat address if known
+     snat [ int, guest ]; # Allows optional ipv4 address to use explicit natting
+
 }
-define external += ext
+
+# Mark the zone to get ip address from a dhcp server
+define dhcp_client_zones += ext

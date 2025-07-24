@@ -48,29 +48,38 @@ let extend_id_to_map (id, pos) lst map =
     | Some F.DefineStms (_,_)
     | Some F.AppendList (_,_)
     | Some F.DefinePolicy (_,_)
-    | Some F.Process (_,_,_) -> parse_error ~id ~pos "Can only append to prevous list definition"
+    | Some F.Process (_,_,_) -> parse_error ~id ~pos "Only list definitions can be extended"
   in
   Map.Poly.change map id ~f:create
 
-let rec create_define_map_rec acc = function
-  | F.DefineStms (id, _) as def :: xs -> create_define_map_rec (add_id_to_map id def acc) xs
-  | F.DefineList (id, _) as def :: xs -> create_define_map_rec (add_id_to_map id def acc) xs
-  | F.DefinePolicy (id, _) as def :: xs -> create_define_map_rec (add_id_to_map id def acc) xs
-  | F.AppendList (id, lst) :: xs -> create_define_map_rec (extend_id_to_map id lst acc) xs
-  | F.Import _ :: xs
-  | F.Zone (_,_) :: xs
-  | F.Process (_,_,_) :: xs -> create_define_map_rec acc xs
-  | [] -> acc
+let update_define_map id_map = function
+  | F.DefineStms (id, _) as def -> add_id_to_map id def id_map
+  | F.DefineList (id, _) as def -> add_id_to_map id def id_map
+  | F.DefinePolicy (id, _) as def -> add_id_to_map id def id_map
+  | F.AppendList (id, lst) -> extend_id_to_map id lst id_map
+  | F.Import _
+  | F.Process (_,_,_) -> id_map
+  | F.Zone (id, zone_stmts) ->
+    (** Auto-extend relevant zone aliases *)
+    match Zone.get_zone_alias zone_stmts with
+    | Some zone_alias ->
+      extend_id_to_map (zone_alias, Lexing.dummy_pos) [ F.Id id ] id_map
+    | None -> id_map
+
 
 (** As the recursive version of the fuction needs an accumulator, add
     a function to hide this to users. *)
-let create_define_map = create_define_map_rec Map.Poly.empty
+let create_define_map nodes =
+  List.fold ~init:Map.Poly.empty ~f:update_define_map nodes
 
 (** Expand and validation is the same problem, and should be solved as
     such.  We need to have a system that eases the task of describing
     the allowed constructs. *)
 let expand nodes =
+  (* List of actual zones *)
   let zones = Zone.create_zone_set nodes in
+
+  (* Set of defines *)
   let defines = create_define_map nodes in
 
   let expand_rules (id, pos) =
@@ -169,27 +178,34 @@ let expand nodes =
     | [] -> []
   in
 
-  let expand network = expand_list [] network in
+  let expand_network network = expand_list [] network in
 
   (* When expanding zone definitions, there is no need to carry a
      seen list, as zone stems are not recursive types. *)
-  let rec expand_zone_stms = function
-    | F.Interface _ as i :: xs -> i :: expand_zone_stms xs
-    | F.If_group _ as i :: xs -> i :: expand_zone_stms xs
-    | F.Network l :: xs -> F.Network (expand l) :: expand_zone_stms xs
-    | F.ZoneSnat _ as i :: xs -> i :: expand_zone_stms xs
-    | F.ZoneRules (t, rules, policies) :: xs ->
-        F.ZoneRules (t, expand_rule_list [] rules, expand_policy_list [] policies) :: expand_zone_stms xs
-    | [] -> []
+  let expand_zone_stm = function
+    | F.Interface _ as i -> i
+    | F.If_group _ as i -> i
+    | F.Network l  -> F.Network (expand_network l)
+    | F.ZoneSnat _ as i -> i
+    | F.ZoneRules (t, rules, policies)  ->
+        F.ZoneRules (t, expand_rule_list [] rules, expand_policy_list [] policies)
   in
-  let rec expand_nodes = function
-    | F.DefineStms (_, _) :: xs
-    | F.DefineList (_, _) :: xs
-    | F.AppendList (_, _) :: xs
-    | F.DefinePolicy (_, _) :: xs -> expand_nodes xs
-    | F.Process (t, rules, policies) :: xs -> F.Process (t, expand_rule_list [] rules, expand_policy_list [] policies) :: expand_nodes xs
-    | F.Import _ :: _ -> assert false
-    | F.Zone (id, zone_stms) :: xs -> F.Zone(id, expand_zone_stms zone_stms) :: expand_nodes xs
-    | [] -> []
+  let expand_nodes = function
+    | F.DefineStms (_, _)
+    | F.DefineList (_, _)
+    | F.AppendList (_, _)
+    | F.DefinePolicy (_, _) ->
+      None
+    | F.Process (t, rules, policies) ->
+      F.Process (t, expand_rule_list [] rules, expand_policy_list [] policies)
+      |> Option.some
+    | F.Import _ -> failwith "Internal error: Import statement not expanded correctly"
+    | F.Zone (id, zone_stms) ->
+      let zone_stmts = List.map ~f:expand_zone_stm zone_stms in
+      let additional_networks_aliases = Zone.get_extra_network_aliases zone_stmts in
+      let aliases : F.data list = List.map ~f:(fun id -> F.Id (id, Lexing.dummy_pos)) additional_networks_aliases in
+      let network = F.Network (expand_network aliases) in
+      F.Zone(id, network :: zone_stmts)
+      |> Option.some
   in
-  expand_nodes nodes
+  List.filter_map ~f:expand_nodes nodes

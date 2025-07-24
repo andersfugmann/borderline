@@ -265,9 +265,13 @@ let gen_rule = function
     let target = gen_target target in
     sprintf "%s %s %s %s;" preds effects target comments
 
-(* Why do we have ipv4 set and ipv6 set? Those should be unified *)
-(* Ahh. This is needed as we need both ipv4 and ipv6 match *)
+(* Expand, as we cannot match both ipv6 and ipv6 rules in the same rule. *)
+(* The expansion contains a bug, so we rewrite it *)
+
 let expand_rule (rls, effects, target) =
+  (* Lets just split naively *)
+  (* Want to capture that they are all so n is true. I think thats what is does *)
+  (* So when we have both neg and positive rules, we merge wrongly *)
   let rec split (rules, (ip4, neg4), (ip6, neg6)) = function
     | (Ir.Ip4Set _, n) as r :: xs -> split (rules, (r :: ip4, neg4 && n), (ip6, neg6)) xs
     | (Ir.Ip6Set _, n) as r :: xs -> split (rules, (ip4, neg4), (r :: ip6, neg6 && n)) xs
@@ -283,7 +287,7 @@ let expand_rule (rls, effects, target) =
   | (ip4, false), (_, true) -> [(ip4 @ rules, effects, target)]
   | (_, false), (_, false) -> [] (* Cannot both be an ipv4 and a ipv6 address *)
   | (ip4, true), (ip6, true) -> [(ip4 @ rules, effects, target);
-                                 (ip6 @ rules, effects, target) ] (* Cannot both be an ipv4 and a ipv6 address *)
+                                 (ip6 @ rules, effects, target) ]
 
 let emit_chain { Ir.id; rules; comment } =
   let rules =

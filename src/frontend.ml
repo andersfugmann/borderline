@@ -1,6 +1,5 @@
 (** Type and utility function for the frontend *)
 open Base
-open Common
 module Ip6 = Ipset.Ip6
 module Ip4 = Ipset.Ip4
 
@@ -9,12 +8,6 @@ type id = string * Lexing.position
 
 module Process = struct
   type t = Mangle | Filter | Nat
-  let of_stringy (id, pos) =
-    match String.lowercase id with
-    | "mangle" -> Mangle
-    | "filter" -> Filter
-    | "nat" -> Nat
-    | _ -> parse_error ~id ~pos "Unknown process type"
 end
 
 type ip = Ipv6 of Ip6.elt | Ipv4 of Ip4.elt
@@ -66,14 +59,6 @@ and data = Number of int * Lexing.position
          | Id of id
          | Ip of ip * Lexing.position
          | String of string * Lexing.position
-
-let node_type id = function
-  | Zone _ -> 1 = id
-  | Process _ -> 2 = id
-  | DefineStms _ -> 3 = id
-  | DefineList _ -> 4 = id
-  | AppendList _ -> 5 = id
-  | _ -> false
 
 let rec fold_rules func acc = function
   | Rule (rules, _) as x :: xs -> fold_rules func (fold_rules func rules (func acc x)) xs

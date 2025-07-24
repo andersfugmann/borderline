@@ -4,3 +4,5 @@ zone guest {
      network = 10.0.1.0/24;
      process filter { } policy log_allow;
 }
+# Mark that the system will be handling dhcp requests from this zone
+define dhcp_server_zones += guest

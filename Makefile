@@ -23,13 +23,13 @@ integration:
 	make -C configuration
 	#$(RM) configuration/zones/wlan* configuration/zones/eth* configuration/zones/ext*
 	#_build/bl_configure.opt --output configuration/zones --force
-	echo "#!/usr/sbin/nft -f" > test.nft
-	echo "flush ruleset" >> test.nft
-	dune exec bin/borderline.exe -- configuration/borderline.bl >> test.nft
-	sed -i 's/ifgroup/ifname/g' test.nft
-	sed -i 's/if[ ]* {/ifname {/g' test.nft
-	sudo /usr/sbin/nft -c -o -n -f test.nft
-	tail -n4 test.nft
+	@echo "#!/usr/sbin/nft -f" > test.nft
+	@echo "flush ruleset" >> test.nft
+	dune exec bin/borderline.exe -- configuration/borderline.bl > test.nft
+	@tail -n4 test.nft
+	@cat test.nft | sed 's/if[ ]* {/ifname {/g' | sed -i 's/if[ ]* {/ifname {/g' test.nft > integration.nft
+	@[ "$${INSIDE_EMACS}" != "" ] || sudo /usr/sbin/nft -c -o -n -f integration.nft
+
 
 .PHONY: build
 build:

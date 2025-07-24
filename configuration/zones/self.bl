@@ -3,11 +3,7 @@
 zone self {
      interface = lo;
      process filter {
-         rule { source interface = [ "guest" ];
-                source address = 0.0.0.0;
-                source udp port = bootpc;
-                destination udp port = bootps;
-         } policy { log "dhcp"; log_allow; };
+         # Allow all communication from the internal network
          rule { source zone = [ int ] } policy log_allow;
      } policy deny;
 }

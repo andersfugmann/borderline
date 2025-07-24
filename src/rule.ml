@@ -23,7 +23,7 @@ let gen_target (effects, target) = function
   | F.Snat ip ->
     let ip =
       Option.map ~f:(fun ip ->
-        if (Ipaddr.V4.Prefix.bits ip < 32) then (parse_error "Snat not not work with network ranges");
+        if (Ipaddr.V4.Prefix.bits ip < 32) then (parse_error "Snat does not work with network ranges");
         Ipaddr.V4.Prefix.network ip
       ) ip
     in
@@ -90,10 +90,9 @@ let process_rule _table (rules, targets') =
         let chain = gen_op targets acc xs in
         (* Neg in this case needs to be chained *)
         Chain.create [
-          (* Dont need this, if we can create sets. And I think we can *)
-          [Ir.Ip6Set (Ir.Direction.of_string dir, Ipset.Ip6.of_list ip6), neg], [], Ir.Jump chain.Ir.id;
-          [Ir.Ip4Set (Ir.Direction.of_string dir, Ipset.Ip4.of_list ip4), neg], [], Ir.Jump chain.Ir.id;
-        ] "Rule"
+          [Ir.Address_family (Set.singleton Ir.Ipv6), false; Ir.Ip6Set (Ir.Direction.of_string dir, Ipset.Ip6.of_list ip6), neg], [], Ir.Jump chain.Ir.id;
+          [Ir.Address_family (Set.singleton Ir.Ipv4), false; Ir.Ip4Set (Ir.Direction.of_string dir, Ipset.Ip4.of_list ip4), neg], [], Ir.Jump chain.Ir.id;
+        ] "Expanded ipset match"
     | F.Filter(dir, F.FZone(ids), neg) :: xs ->
         gen_op targets ((Ir.Zone(Ir.Direction.of_string dir,
                                  list2ids ids |> List.map ~f:fst |> Set.of_list), neg) :: acc) xs

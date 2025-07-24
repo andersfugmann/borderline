@@ -1,4 +1,4 @@
-(** Intermidiate representation. *)
+(** Intermediate representation. *)
 open Base
 module Set = Set.Poly
 
@@ -20,7 +20,7 @@ type zone = id [@@deriving compare, equal]
 type mask = int [@@deriving compare, equal]
 type prefix = string [@@deriving compare, equal]
 
-type address_family = Ipv4 | Ipv6
+type address_family = Ipv4 | Ipv6 [@@deriving show]
 
 module Chain_type = struct
   type t = Input | Output | Forward | Pre_routing | Post_routing
@@ -122,7 +122,7 @@ let string_of_predicate =
   | Zone (_, _) -> "Zone"
   | State _ -> "State"
   | Ports (_, _, _) -> "Ports"
-  | Ip6Set (_, _) -> "Ip6Set"
+  | Ip6Set (_, s) -> Printf.sprintf "Ip6Set(%d)" (Ip6.IpSet.length s)
   | Ip4Set (_, _) -> "Ip4Set"
   | Protocol s ->
     Printf.sprintf "Protocol %s" (int_set_to_list s)
@@ -132,10 +132,8 @@ let string_of_predicate =
   | TcpFlags (_, _) -> "TcpFlags"
   | Hoplimit l ->
     Printf.sprintf "Hoplimit %s" (int_set_to_list l)
-  | Address_family _ -> "Address_family"
+  | Address_family s -> Printf.sprintf "Address_family [%s] "(Set.to_list s |> List.map ~f:show_address_family |> String.concat ~sep:";")
   | True -> "True"
-
-(* Union - really? *)
 
 let string_of_predicates preds =
   List.map ~f:(fun (p, n) -> Printf.sprintf "(%s,%b)" (string_of_predicate p) n) preds

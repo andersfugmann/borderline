@@ -1,10 +1,17 @@
+# Define a local zone.
+# A zone is defined as local, because it contains
+# network statments, and is automatically added to
+# the alias 'local_zones'
+
+# Zone expansion will automatically add accepted networks
+# based on zone definitions.
+# See generic/networks.bl for more information
+
 zone int {
      interface = eth1;
-     network = fe80::/64;
-     network = ff00::/8;
      network = 1111:2222:3333:1::/64;
-     network = 10.0.0.0/24;
-     network = 224.0.0.0/3;
+     network = 192.168.1.0/24;
+
      # Process any packets going into this zone (i.e. leaving the network interface)
      process filter {
 
