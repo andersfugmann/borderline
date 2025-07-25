@@ -538,13 +538,13 @@ let merge_adjecent_rules chains =
       printf "t";
       merge ((preds, effects, target) :: xs)
     | (preds, effects, target) :: (preds', effects', target') :: xs
-      when Ir.equal_target  target target'
+      when Ir.equal_target target target'
         && Ir.equal_effects effects effects'
         && is_subset ~of_:preds' preds ->
       printf "m";
       merge ((preds', effects, target) :: xs)
     | (preds, effects, target) :: (preds', effects', target') :: xs
-      when Ir.equal_target  target target'
+      when Ir.equal_target target target'
         && Ir.equal_effects effects effects'
         && is_subset ~of_:preds preds' ->
       printf "m";

@@ -53,14 +53,14 @@ let chain_premable chain comment =
   | Builtin Ir.Chain_type.Post_routing ->
     [ sprintf "chain %s {" name;
       sprintf "  comment \"%s\"" comment;
-      sprintf "  type nat hook %s priority 0;" name;
+      sprintf "  type nat hook %s priority srcnat;" name;
       sprintf "  policy accept;" ]
   | Builtin Ir.Chain_type.Input
   | Builtin Ir.Chain_type.Output
   | Builtin Ir.Chain_type.Forward ->
     [ sprintf "chain %s {" name;
       sprintf "  comment \"%s\"" comment;
-      sprintf "  type filter hook %s priority 0;" name;
+      sprintf "  type filter hook %s priority filter;" name;
       sprintf "  policy drop;" ]
   | Temporary _
   | Named _ ->
@@ -258,7 +258,6 @@ let gen_rule = function
       String.concat ~sep:" " preds, comments
     in
     let comments', effects = List.partition_map ~f:(function Ir.Comment c -> Either.First c | effect_ -> Either.Second effect_ ) effects in
-    let comments = comments @ comments' in
     (* Need to filter out comments, and place them at the end *)
     let comment_string =
       match comments @ comments' |> List.stable_dedup ~compare:String.compare with
