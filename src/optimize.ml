@@ -6,6 +6,23 @@ open Poly
 module Ip6 = Ipset.Ip6
 module Ip4 = Ipset.Ip4
 
+(** Bugs:
+    Reducing indegree does not work as intended
+    - It ought not to introduce bugs though. But we need to verify that though
+
+    Implement verification
+*)
+
+
+(* Percentage for predicates are pushed down to called chains *)
+let min_push = 1
+
+(* Make sure that no chains have an indegree more than N,
+   so that 'for all chains | chain_reference_count <= N' holds
+*)
+let max_chain_indegree = 3
+
+
 (* List of predicates that always results in true *)
 let true_predicates =
   let true_predicates direction =
@@ -46,10 +63,10 @@ let is_eq a b =
   is_subset_eq a b && is_subset_eq b a
 
 let chain_reference_count id chains =
-  let count_references rules =
-    List.fold_left ~f:(fun acc -> function (_, _, Jump id') when id = id' -> acc + 1 | _ -> acc) ~init:0 rules
+  let count_references acc rules =
+    List.fold_left ~init:acc ~f:(fun acc -> function (_, _, Jump id') when Chain_id.equal id id' -> acc + 1 | _ -> acc)  rules
   in
-  Map.fold ~f:(fun ~key:_ ~data:chn acc -> acc + (count_references chn.rules)) chains ~init:0
+  Map.fold ~init:0 ~f:(fun ~key:_ ~data:chn acc -> (count_references acc chn.rules)) chains
 
 let get_referring_rules chain chains =
   let test (_preds, _effects, target) = target = Jump (chain.id) in
@@ -410,6 +427,9 @@ let address_family_of_pred pred =
   in
   Ir.Address_family s, n
 
+let preds_all_true preds =
+  List.for_all ~f:(is_always true) preds
+
 (** Inline chains that satifies p *)
 let rec inline cost_f chains =
   let rec inline_chain chain = function
@@ -449,9 +469,6 @@ let rec inline cost_f chains =
     inline cost_f chains
   | None -> chains
 
-let preds_all_true preds =
-  List.for_all ~f:(is_always true) preds
-
 let rec eliminate_dead_rules = function
   | (preds, _effects, target) as rule :: xs when
       is_terminal target && preds_all_true preds->
@@ -489,6 +506,46 @@ let union_preds ps ps' =
   | _ -> None
 [@@warning "-32"]
 
+(** Depth first traversal of chains *)
+let traverse_chains_depth_first ~f chains =
+  let rec inner chains chain_id =
+    match Map.find chains chain_id with
+    | None -> chains
+    | Some ({ rules; _ } as chain) ->
+      let chains = f chains chain in
+      List.fold_left ~init:chains ~f:(fun chains -> function
+        | (_, _, Ir.Jump chain_id) -> inner chains chain_id
+        | _ -> chains
+      ) rules
+  in
+  (* Find all buildin chains *)
+  Map.fold ~init:[] ~f:(fun ~key:chain_id ~data:_ acc ->
+    match chain_id with
+    | Builtin _ -> chain_id :: acc
+    | _ -> acc
+  ) chains
+  |> List.fold ~init:chains ~f:inner
+[@@warning "-32"]
+
+let process_chains_breath_first ~f chains =
+  let rec traverse ~init chains chain_id =
+    match Map.find chains chain_id with
+    | Some { rules; _ } ->
+      List.fold_left ~init:(chain_id :: init) ~f:(fun acc -> function
+        | (_, _, Jump id) ->
+          traverse ~init:acc chains id
+        | _ -> acc
+      ) rules
+    | None -> init
+  in
+  Map.fold ~init:[] ~f:(fun ~key:chain_id ~data:_ acc ->
+    match chain_id with
+    | Chain_id.Builtin _ as chain_id -> traverse ~init:acc chains chain_id
+    | _ -> acc
+  ) chains
+  |> List.stable_dedup ~compare:(Chain_id.compare)
+  |> List.rev
+  |> List.fold ~init:chains ~f
 
 let preds_equal ps ps' =
   let ps = sort_predicates ps in
@@ -604,8 +661,16 @@ let reduce_recursive ~(f:'acc list -> 'predicates -> 'acc * 'predicates) chains 
     |> List.rev
   in
 
-  let map_chain inputs chain =
+  let map_chain chains inputs chain =
     let input = Map.find_multi inputs chain.id in
+    (* Verify that we have as many inputs as references to the chain *)
+    let () =
+      match chain_reference_count chain.id chains, List.length input with
+      | references, inputs when references <> inputs ->
+        eprintf "Error: %s has %d inputs, but %d references\n" (Chain_id.show chain.id) inputs references;
+        assert false
+      | _ -> ()
+    in
     let inputs, rules =
       List.fold_left ~init:(inputs, []) ~f:(fun (inputs, acc) (predicates, effects, target) ->
         let output, predicates = f input predicates in
@@ -626,10 +691,15 @@ let reduce_recursive ~(f:'acc list -> 'predicates -> 'acc * 'predicates) chains 
     in
     inputs, { chain with rules = List.rev rules }
   in
-  create_ordered_chains chains
+  let input_chains = chains in
+
+  let ordered_chains = create_ordered_chains chains in
+
+
+  ordered_chains
   |> List.filter_map ~f:(Map.find chains)
   |> List.fold ~init:(Map.empty (module Ir.Chain_id), []) ~f:(fun (inputs, chains) chain ->
-    let inputs, chain = map_chain inputs chain in
+    let inputs, chain = map_chain input_chains inputs chain in
     inputs, chain :: chains
   )
   |> snd
@@ -700,15 +770,142 @@ let map_predicates ~f rules =
     (f predicates, effects, target)
   ) rules
 
+
+(** Push predicates to sub-chains if the predicate are already present on the subchains
+    This only works for chains that has only one reference.
+*)
+let push_predicates ~min_push chains =
+  (* Replace the chain with a chain where all rules have been extended with pred *)
+  let rec merge pred = function
+    | [] -> [pred]
+    | pred' :: ps ->
+      match merge_pred pred pred' with
+      | Some pred -> pred :: ps
+      | None -> pred :: merge pred ps
+  in
+
+  let push rules pred =
+    List.map ~f:(fun (preds, effects, target) ->
+      (merge pred preds, effects, target)
+    ) rules
+  in
+
+  let can_merge pred pred' =
+    merge_pred pred pred' |> Option.is_some
+  in
+
+  let has_conflict pred pred' =
+    match pred_type_identical (fst pred) (fst pred') with
+    | true -> can_merge pred pred' |> not
+    | false -> false
+  in
+
+  let can_merge_rules rules pred =
+    List.exists ~f:(fun (preds, _, _) ->
+      List.exists ~f:(fun pred' -> has_conflict pred pred') preds
+    ) rules
+    |> not
+  in
+
+  let count_merges rules pred =
+    let count =
+      List.count ~f:(fun (preds, _, _) ->
+        List.exists ~f:(can_merge pred) preds
+      ) rules
+    in
+    count * 100 / List.length rules
+  in
+
+  let proccess_chain_rules chains rules =
+    let chains, rules =
+      List.fold ~init:(chains, []) ~f:(fun (chains, acc) -> function
+        | (preds, effects, (Ir.Jump target_id as target)) as rule when chain_reference_count target_id chains = 1 -> begin
+            match Map.find chains target_id with
+            | None -> chains, rule :: acc
+            | Some ({ rules = target_rules; _ } as target_chain) ->
+              let chains, preds =
+                List.fold ~init:(chains, []) ~f:(fun (chains, acc) pred ->
+                  match can_merge_rules rules pred && count_merges target_rules pred >= min_push with
+                  | false -> (chains, pred :: acc)
+                  | true ->
+                    printf "F";
+                    let target_rules = push target_rules pred in
+                    let chains = Map.set chains ~key:target_id ~data:{ target_chain with rules = target_rules } in
+                    chains, acc
+                ) preds
+              in
+              chains, (List.rev preds, effects, target) :: acc
+          end
+        | rule -> chains, rule :: acc
+      ) rules
+    in
+    chains, List.rev rules
+  in
+
+  (* Take all chains in order and start replacing. *)
+  process_chains_breath_first ~f:(fun chains chain_id ->
+    match Map.find chains chain_id with
+    | Some ({ rules; _ } as chain) ->
+      let chains, rules = proccess_chain_rules chains rules in
+      Map.set chains ~key:chain_id ~data:{chain with rules}
+    | _ -> chains
+  ) chains
+
+(* This function essentially does not work as intended. *)
+let reduce_chain_indegree ~max_indegree chains =
+  let folding_map_chain_rules chains ~(init:'acc) ~(f: 'acc -> 'rule -> 'acc * 'rule) =
+    let keys = Map.keys chains in
+    keys
+    |> List.fold ~init:(chains, init) ~f:(fun (chains, acc) chain_id ->
+      match Map.find chains chain_id with
+      | None -> (chains, acc)
+      | Some ({ rules; _ } as chain) ->
+        (* Replace the chain *)
+        let rules, acc =
+          List.fold ~init:([], acc) ~f:(fun (rules_acc, acc) rule ->
+            let acc, rule = f acc rule in
+            (rule :: rules_acc, acc)
+          ) rules
+        in
+        let chains =
+          Map.set chains ~key:chain_id ~data:{ chain with rules = List.rev rules }
+        in
+        chains, acc
+    )
+  in
+  let replace_chain chain acc = function
+    | (preds, effects, Jump id) when Chain_id.equal id chain.id ->
+      let new_chain = Chain.create chain.rules "Duplicate" in
+      new_chain :: acc, (preds, effects, Jump new_chain.id)
+    | rule -> acc, rule
+  in
+
+  process_chains_breath_first ~f:(fun chains chain_id ->
+    match Map.find chains chain_id, chain_reference_count chain_id chains > max_indegree with
+    | Some chain, true ->
+      let chains, new_chains = folding_map_chain_rules chains ~init:[] ~f:(replace_chain chain) in
+      List.fold ~init:chains ~f:(fun chains chain -> Map.add_exn chains ~key:chain.id ~data:chain) new_chains
+    | _, _ -> chains
+  ) chains
+
+(* let _ = push_predicates, remove_duplicate_chains *)
+
+(** Rename chains to hold the path? There may be multiple chains calling the chain. But then we just duplicate the chain names.
+*)
+let rename_chains = ()
+
+let _ = rename_chains, reduce_chain_indegree ~max_indegree:max_chain_indegree
+
 let optimize_pass chains =
-  printf "#Optim: (%d, %d) %!" (Chain.count_rules chains) (Chain.count_predicates chains);
+  printf "#Optim: (%d, %d, %d) %!" (Map.length chains) (Chain.count_rules chains) (Chain.count_predicates chains);
   let chains = fold_return_statements chains in
   let optimize_functions =
     let (@@) a b = a ~f:b in
     [
+      reduce_chain_indegree ~max_indegree:max_chain_indegree;
+      remove_unreferenced_chains;
+      push_predicates ~min_push;
       map_chain_rules @@ eliminate_dead_rules;
-      remove_duplicate_chains;
-      reduce_all_predicates;
       map_chain_rules @@ map_predicates @@ merge_predicates;
       map_chain_rules @@ remove_unsatisfiable_rules;
       map_chain_rules @@ remove_true_predicates;
@@ -718,13 +915,15 @@ let optimize_pass chains =
       join;
       merge_adjecent_rules;
       inline inline_cost;
-      map_chain_rules ~f:(fun rls -> Common.map_filter_exceptions (fun (preds, effect_, tg) -> (merge_predicates preds, effect_, tg)) rls);
+      remove_unreferenced_chains;
+      map_chain_rules ~f:(fun rls -> List.map ~f:(fun (preds, effect_, tg) -> (merge_predicates preds, effect_, tg)) rls);
+      reduce_all_predicates;
       reduce_recursive ~f:(filter_predicates_derived ~init:(Ir.Protocol Set.empty, true) ~of_pred:protocol_of_pred);
       reduce_recursive ~f:(filter_predicates_derived ~init:(Ir.Address_family Set.empty, true) ~of_pred:address_family_of_pred);
-      remove_unreferenced_chains;
+      remove_duplicate_chains;
     ]
   in
-  let chains' = List.fold_left ~f:(fun chains' optim_func -> optim_func chains') ~init:chains optimize_functions in
+  let chains' = List.fold_left ~f:(fun chains' optim_func -> printf "%!"; optim_func chains') ~init:chains optimize_functions in
   printf " (%d, %d)\n" (Chain.count_rules chains') (Chain.count_predicates chains');
   chains'
   |> map_chain_rules ~f:(map_predicates ~f:sort_predicates)
@@ -733,8 +932,12 @@ let rec optimize chains =
   let chains' = optimize_pass chains in
   match (Chain.count_rules chains = Chain.count_rules chains' && Chain.count_predicates chains = Chain.count_predicates chains') with
   | true -> printf "#Optimization done\n";
+    (* Print chain order *)
+    printf "\n# Chains: [";
+    let _ = process_chains_breath_first ~f:(fun chains chain_id -> printf "%s; " (Chain_id.show chain_id); chains) chains in
+    printf "]\n";
     chains'
-  | false -> optimize chains'
+  | false -> printf "%!"; optimize chains'
 
 
 
@@ -788,7 +991,6 @@ module Test = struct
 
         ()
       end;
-
 
       "is_true" >:: begin fun _ ->
         List.iteri ~f:(fun i pred ->
