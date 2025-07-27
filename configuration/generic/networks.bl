@@ -1,9 +1,5 @@
 # These does not cover all ip addresses - only the special iana networks
 
-# Allow dhcp messages
-define ipv4_iana_destination += [ 255.255.255.255/32 ]
-define ipv4_iana_source      += [ 0.0.0.0/32 ]
-
 define ipv6_global_unicast           = 2000::/3
 define ipv6_link_local               = fe80::/10
 

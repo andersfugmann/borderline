@@ -10,17 +10,18 @@ module Ip4 = Ipset.Ip4
     Reducing indegree does not work as intended
     - It ought not to introduce bugs though. But we need to verify that though
 
-    Implement verification
+    ipv4/ipv4 are exlusive. This means that they cannot render true easily.
+    This also means that nft generation does not need to emit address families
 *)
 
 
 (* Percentage for predicates are pushed down to called chains *)
-let min_push = 1
+let min_push = 60
 
 (* Make sure that no chains have an indegree more than N,
    so that 'for all chains | chain_reference_count <= N' holds
 *)
-let max_chain_indegree = 3
+let max_chain_indegree = 1
 
 
 (* List of predicates that always results in true *)
@@ -403,16 +404,22 @@ let address_family_of_pred pred =
   let s, n =
     match pred with
     | Ir.Hoplimit _, _
-    | Ir.Ip6Set (_,_), _
-    | Ir.Icmp6 _, _ ->
+    | Ir.Icmp6 _, _
+    | Ir.Ip6Set (_,_), _ ->
       Set.singleton Ir.Ipv6, false
-    | Ir.Ip4Set (_,_), _
-    | Ir.Icmp4 _, _ ->
+    | Ir.Icmp4 _, _
+    | Ir.Ip4Set (_,_), _ ->
       Set.singleton Ir.Ipv4, false
+
     | Ir.Protocol p, false when Set.is_subset p ~of_:ipv6_protocols ->
       Set.singleton Ir.Ipv6, false
     | Ir.Protocol p, false when Set.is_subset p ~of_:ipv4_protocols ->
       Set.singleton Ir.Ipv4, false
+
+    | Ir.Protocol p, true when Set.is_subset ipv6_protocols ~of_:p ->
+      Set.singleton Ir.Ipv4, false
+    | Ir.Protocol p, false when Set.is_subset ipv4_protocols ~of_:p ->
+      Set.singleton Ir.Ipv6, false
     | Ir.Protocol _, _
     | Ir.True, _
     | Ir.Interface (_,_), _
@@ -770,19 +777,16 @@ let map_predicates ~f rules =
     (f predicates, effects, target)
   ) rules
 
+let map_predicate ~f predicates =
+  List.map ~f predicates
 
 (** Push predicates to sub-chains if the predicate are already present on the subchains
     This only works for chains that has only one reference.
 *)
 let push_predicates ~min_push chains =
   (* Replace the chain with a chain where all rules have been extended with pred *)
-  let rec merge pred = function
-    | [] -> [pred]
-    | pred' :: ps ->
-      match merge_pred pred pred' with
-      | Some pred -> pred :: ps
-      | None -> pred :: merge pred ps
-  in
+  (* We should not merge!!! *)
+  let merge pred preds = pred :: preds in
 
   let push rules pred =
     List.map ~f:(fun (preds, effects, target) ->
@@ -880,6 +884,19 @@ let reduce_chain_indegree ~max_indegree chains =
     | rule -> acc, rule
   in
 
+  let chain_reference_count id chains =
+    let count_references acc rules =
+      List.fold_left ~init:acc ~f:(fun acc -> function
+        | (_, _, Jump id') when Chain_id.equal id id' -> acc + 1
+        | _ -> acc)  rules
+    in
+    Map.fold ~init:0 ~f:(fun ~key:id ~data:chn acc -> match id with
+      | Chain_id.Temporary _ -> (count_references acc chn.rules)
+      | _ -> acc
+    ) chains
+  in
+
+
   process_chains_breath_first ~f:(fun chains chain_id ->
     match Map.find chains chain_id, chain_reference_count chain_id chains > max_indegree with
     | Some chain, true ->
@@ -888,13 +905,17 @@ let reduce_chain_indegree ~max_indegree chains =
     | _, _ -> chains
   ) chains
 
-(* let _ = push_predicates, remove_duplicate_chains *)
+let replace_with_address_family =
+  let ipv4 = Address_family (Set.singleton Ir.Ipv4), false in
+  let ipv6 = Address_family (Set.singleton Ir.Ipv6), false in
 
-(** Rename chains to hold the path? There may be multiple chains calling the chain. But then we just duplicate the chain names.
-*)
-let rename_chains = ()
-
-let _ = rename_chains, reduce_chain_indegree ~max_indegree:max_chain_indegree
+  function
+  | Ip4Set (_, s), false when Ip6.is_empty s -> ipv4
+  | Ip6Set (_, s), false when Ip6.is_empty s -> ipv6
+  | Icmp4 is, false when Set.is_empty is -> ipv6
+  | Icmp6 is, false when Set.is_empty is -> ipv6
+  | Hoplimit cnts, false when Set.is_empty cnts -> ipv6
+  | pred -> pred
 
 let optimize_pass chains =
   printf "#Optim: (%d, %d, %d) %!" (Map.length chains) (Chain.count_rules chains) (Chain.count_predicates chains);
@@ -907,6 +928,7 @@ let optimize_pass chains =
       push_predicates ~min_push;
       map_chain_rules @@ eliminate_dead_rules;
       map_chain_rules @@ map_predicates @@ merge_predicates;
+      map_chain_rules @@ map_predicates @@ map_predicate @@ replace_with_address_family;
       map_chain_rules @@ remove_unsatisfiable_rules;
       map_chain_rules @@ remove_true_predicates;
       map_chain_rules @@ remove_empty_rules;
@@ -928,18 +950,22 @@ let optimize_pass chains =
   chains'
   |> map_chain_rules ~f:(map_predicates ~f:sort_predicates)
 
-let rec optimize chains =
+let rec optimize ?(iter=3) chains =
   let chains' = optimize_pass chains in
-  match (Chain.count_rules chains = Chain.count_rules chains' && Chain.count_predicates chains = Chain.count_predicates chains') with
-  | true -> printf "#Optimization done\n";
+  match (Chain.count_rules chains = Chain.count_rules chains'
+         && Chain.count_predicates chains = Chain.count_predicates chains'
+         && Chain.count_chains chains = Chain.count_chains chains') with
+  | true when iter = 0 -> printf "#Optimization done\n";
     (* Print chain order *)
     printf "\n# Chains: [";
-    let _ = process_chains_breath_first ~f:(fun chains chain_id -> printf "%s; " (Chain_id.show chain_id); chains) chains in
+    let _ = process_chains_breath_first ~f:(fun chains' chain_id -> printf "%s; " (Chain_id.show chain_id); chains') chains in
     printf "]\n";
     chains'
-  | false -> printf "%!"; optimize chains'
-
-
+  | true ->
+    optimize ~iter:(iter - 1) chains'
+  | false ->
+    printf "%!";
+    optimize chains'
 
 module Test = struct
   open OUnit2

@@ -110,7 +110,6 @@ let create_zone_chain direction (id, nodes) =
                 | F.String (s, pos) -> parse_errorf ~pos "Expected ip address, got string '%s'" s
               ) ~init:([], []) ips
         in
-        (* Best place to expand with additional networks. But I need access to aliases! *)
         [ ([(Ir.Ip6Set(direction, Ip6.of_list ip6), false)], [], Ir.Jump chain.Ir.id);
           ([(Ir.Ip4Set(direction, Ip4.of_list ip4), false)], [], Ir.Jump chain.Ir.id) ]
 

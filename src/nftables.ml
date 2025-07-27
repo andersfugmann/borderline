@@ -193,7 +193,7 @@ let gen_pred neg pred =
     in
     let neg_str = match neg with true -> "!=" | false -> "==" in
     sprintf "tcp flags & (%s) %s %s" (to_list mask) neg_str (to_list flags), None
-  | Ir.Hoplimit limits ->
+  | Ir.Hoplimit limits -> (* Hop limit implies ipv6 *)
     let rule =
       string_of_int_set limits
       |> sprintf "ip6 hoplimit %s{ %s }" neg_str
@@ -268,13 +268,9 @@ let gen_rule = function
     let target = gen_target target in
     sprintf "%s %s %s%s;" preds effects target comment_string
 
-(* Expand, as we cannot match both ipv6 and ipv6 rules in the same rule. *)
-(* The expansion contains a bug, so we rewrite it *)
-
+(* Essentially we dont split at all *)
 let expand_rule (rls, effects, target) =
-  (* Lets just split naively *)
-  (* Want to capture that they are all so n is true. I think thats what is does *)
-  (* So when we have both neg and positive rules, we merge wrongly *)
+
   let rec split (rules, (ip4, neg4), (ip6, neg6)) = function
     | (Ir.Ip4Set _, n) as r :: xs -> split (rules, (r :: ip4, neg4 && n), (ip6, neg6)) xs
     | (Ir.Ip6Set _, n) as r :: xs -> split (rules, (ip4, neg4), (r :: ip6, neg6 && n)) xs
@@ -284,13 +280,12 @@ let expand_rule (rls, effects, target) =
   let (rules, (ip4, neg4), (ip6, neg6)) = split ([], ([], true), ([], true)) rls in
 
   match (ip4, neg4), (ip6, neg6) with
-  | ([], _), _
-  | _, ([], _) -> [(rls, effects, target)]
-  | (_, true), (ip6, false) -> [(ip6 @ rules, effects, target)] (* Slight optimization *)
-  | (ip4, false), (_, true) -> [(ip4 @ rules, effects, target)]
-  | (_, false), (_, false) -> [] (* Cannot both be an ipv4 and a ipv6 address *)
-  | (ip4, true), (ip6, true) -> [(ip4 @ rules, effects, target);
-                                 (ip6 @ rules, effects, target) ]
+  | ([], _), ([], _) -> [(rls, effects, target)]
+  | (ip4, _), ([], _) ->
+    [(ip4 @ rules, effects, target)];
+  | ([], _), (ip6, _) -> (* Must be ipv4 and not some ipv6 *)
+    [(ip6 @ rules, effects, target)]
+  | (_, _), (_, _) -> [] (* Cannot be both ipv4 and ipv6 address family *)
 
 let emit_chain { Ir.id; rules; comment } =
   let rules =

@@ -90,6 +90,7 @@ let process_rule _table (rules, targets') =
         let (ip4, ip6) = list2ip ips in
         let chain = gen_op targets acc xs in
         (* Neg in this case needs to be chained *)
+        (* Verify that this actually works as expected. I could mean that filters are exclusive. *)
         Chain.create [
           [Ir.Address_family (Set.singleton Ir.Ipv6), false; Ir.Ip6Set (Ir.Direction.of_string dir, Ipset.Ip6.of_list ip6), neg], [], Ir.Jump chain.Ir.id;
           [Ir.Address_family (Set.singleton Ir.Ipv4), false; Ir.Ip4Set (Ir.Direction.of_string dir, Ipset.Ip4.of_list ip4), neg], [], Ir.Jump chain.Ir.id;

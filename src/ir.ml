@@ -283,13 +283,18 @@ let is_always value =
       | true -> Set.is_empty mask && not neg = value
       | false -> neg = value
     end
-  | Ip6Set (_, s), neg -> Ip6.is_empty s && (neg = value)
-  | Ip4Set (_, s), neg -> Ip4.is_empty s && (neg = value)
+  | Ip6Set (_, s), false when Ip6.is_empty s && not value -> false (* If we match no ip addresses its always false *)
+  | Ip4Set (_, s), false when Ip4.is_empty s && not value -> false (* If we match no ip addresses its always false *)
+  | Ip6Set (_, _), _ -> false (* Still requires address to be ipv6 so it can never be true *)
+  | Ip4Set (_, _), _ -> false (* Still requires address to be ipv6 so it can never be true *)
   | Interface (_, ifs), neg -> Set.is_empty ifs && (neg = value)
   | If_group (_, if_groups), neg -> Set.is_empty if_groups && (neg = value)
-  | Icmp6 is, neg -> Set.is_empty is && (neg = value)
-  | Icmp4 is, neg -> Set.is_empty is && (neg = value)
-  | Hoplimit cnts, neg -> Set.is_empty cnts && (neg = value)
+  | Icmp6 is, false when Set.is_empty is && not value -> true (* Implies ipv6. Always false *)
+  | Icmp6 _, _ -> false (* Implies ipv6 *)
+  | Icmp4 is, false when Set.is_empty is && not value -> true (* Implies ipv4. Always false *)
+  | Icmp4 _, _ -> false  (* Implies ipv4 *)
+  | Hoplimit cnts, false when Set.is_empty cnts && not value -> true (* Implies ipv6. Always false *)
+  | Hoplimit _, _ -> false (* Implies ipv6 *)
   | True, neg -> not neg = value
   | Mark (0, 0), neg -> neg <> value
   | Mark (_, 0), neg -> neg = value
