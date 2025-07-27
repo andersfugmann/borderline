@@ -27,8 +27,8 @@ let all_zones = "zones"
 let builtin_zones = [ mars ]
 
 (* Aliases to which zones are added *)
-let external_zone_alias = "global_zones"
-let internal_zone_alias = "local_zones"
+let global_zone_alias = "global_zones"
+let local_zone_alias = "local_zones"
 
 (* Networks automatically added to network definitions *)
 let ipv4_global_networks = "ipv4_global_networks"
@@ -65,8 +65,8 @@ let get_zone_alias zone_stmts =
   | true -> None
   | false ->
     match List.exists ~f:(function F.Network _ -> true | _ -> false) zone_stmts with
-    | true -> Some external_zone_alias
-    | false -> Some internal_zone_alias
+    | true -> Some local_zone_alias
+    | false -> Some global_zone_alias
 
 (** Get the aliases to include for the zone *)
 let get_extra_network_aliases zone_stmts =
@@ -110,8 +110,15 @@ let create_zone_chain direction (id, nodes) =
                 | F.String (s, pos) -> parse_errorf ~pos "Expected ip address, got string '%s'" s
               ) ~init:([], []) ips
         in
-        [ ([(Ir.Ip6Set(direction, Ip6.of_list ip6), false)], [], Ir.Jump chain.Ir.id);
-          ([(Ir.Ip4Set(direction, Ip4.of_list ip4), false)], [], Ir.Jump chain.Ir.id) ]
+        let ip4_rule =
+          Option.some_if (List.is_empty ip4 |> not)
+            ([(Ir.Ip4Set(direction, Ip4.of_list ip4), false)], [], Ir.Jump chain.Ir.id)
+        in
+        let ip6_rule =
+          Option.some_if (List.is_empty ip6 |> not)
+            ([(Ir.Ip6Set(direction, Ip6.of_list ip6), false)], [], Ir.Jump chain.Ir.id)
+        in
+        [ip4_rule; ip6_rule] |> List.filter_opt
 
   in
   let create_interface_rule chain interfaces =
