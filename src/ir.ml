@@ -97,24 +97,29 @@ type predicate = Interface of Direction.t * id Set.t
                | If_group of Direction.t * [`Int of int | `String of string] Set.t
                | Zone of Direction.t * zone Set.t
                | State of State.t
-               | Ports of Direction.t * Port_type.t * int Set.t
-               | Ip6Set of Direction.t * Ip6.t (* Merge into a generic set *)
-               | Ip4Set of Direction.t * Ip4.t
+               | Ports of Direction.t * Port_type.t * int Set.t (* Implies tcp or udp *)
+               | Ip6Set of Direction.t * Ip6.t (* Implies ipv6 *)
+               | Ip4Set of Direction.t * Ip4.t (* Implies ipv4 *)
                | Protocol of int Set.t
-               | Icmp6 of int Set.t
-               | Icmp4 of int Set.t
+               | Icmp6 of int Set.t (* Implies ipv6 *)
+               | Icmp4 of int Set.t (* Implies ipv4 *)
                | Mark of int * int
-               | TcpFlags of Tcp_flags.t Set.t * Tcp_flags.t Set.t
-               | Hoplimit of int Set.t
+               | TcpFlags of Tcp_flags.t Set.t * Tcp_flags.t Set.t (* Implies tcp *)
+               | Hoplimit of int Set.t (* Implies ipv6 *)
                | Address_family of address_family Set.t
                | True
 
 let string_of_predicate =
+  let sprintf = Printf.sprintf in
   let int_set_to_list l =
     Set.to_list l
     |> List.map ~f:Int.to_string
     |> String.concat ~sep:";"
     |> Printf.sprintf "[ %s ]"
+  in
+  let string_of_dir = function
+    | Direction.Source -> "s"
+    | Direction.Destination -> "d"
   in
   function
   | Interface (_, _) -> "Interface"
@@ -122,8 +127,8 @@ let string_of_predicate =
   | Zone (_, _) -> "Zone"
   | State _ -> "State"
   | Ports (_, _, _) -> "Ports"
-  | Ip6Set (_, s) -> Printf.sprintf "Ip6Set(%d)" (Ip6.IpSet.length s)
-  | Ip4Set (_, _) -> "Ip4Set"
+  | Ip6Set (d, s) -> sprintf "Ip6Set(%d),%s" (Ip6.IpSet.length s) (string_of_dir d)
+  | Ip4Set (d, s) -> sprintf "Ip4Set(%d),%s" (Ip6.IpSet.length s) (string_of_dir d)
   | Protocol s ->
     Printf.sprintf "Protocol %s" (int_set_to_list s)
   | Icmp6 _ -> "Icmp6"
@@ -283,10 +288,9 @@ let is_always value =
       | true -> Set.is_empty mask && not neg = value
       | false -> neg = value
     end
-  | Ip6Set (_, s), false when Ip6.is_empty s && not value -> false (* If we match no ip addresses its always false *)
-  | Ip4Set (_, s), false when Ip4.is_empty s && not value -> false (* If we match no ip addresses its always false *)
-  | Ip6Set (_, _), _ -> false (* Still requires address to be ipv6 so it can never be true *)
-  | Ip4Set (_, _), _ -> false (* Still requires address to be ipv6 so it can never be true *)
+  (* Always false *)
+  | Ip6Set (_, s), neg -> not neg && Ip4.is_empty s && not value (* If we match no ip addresses its always false *)
+  | Ip4Set (_, s), neg -> not neg && Ip4.is_empty s && not value (* If we match no ip addresses its always false *)
   | Interface (_, ifs), neg -> Set.is_empty ifs && (neg = value)
   | If_group (_, if_groups), neg -> Set.is_empty if_groups && (neg = value)
   | Icmp6 is, false when Set.is_empty is && not value -> true (* Implies ipv6. Always false *)

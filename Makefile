@@ -27,8 +27,9 @@ integration:
 	@echo "flush ruleset" >> test.nft
 	dune exec bin/borderline.exe -- configuration/borderline.bl > test.nft
 	@tail -n4 test.nft
-	@cat test.nft | sed 's/if[ ]* {/ifname {/g' | sed -i 's/if[ ]* {/ifname {/g' test.nft > integration.nft
-	@[ "$${INSIDE_EMACS}" != "" ] || sudo /usr/sbin/nft -c -o -n -f integration.nft
+	@cat test.nft | sed 's/if[ ]* {/ifname {/g' | sed 's/ifgroup[ ]* {/ifname {/g' test.nft > integration.nft
+	rm test.nft
+	@[ "$${INSIDE_EMACS}" != "" ] || sudo /usr/sbin/nft -c -n -f integration.nft
 
 
 .PHONY: build

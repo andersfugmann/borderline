@@ -351,6 +351,7 @@ let tcp = 6
 let udp = 17
 let icmp6 = 58
 
+(* AFU: Change to return none, if there is no derived pred *)
 let protocol_of_pred pred =
   let s, n =
     match pred with
@@ -476,9 +477,10 @@ let rec inline cost_f chains =
     inline cost_f chains
   | None -> chains
 
+(* AFU: First map all rules with equivalent protocol or address family *)
 let rec eliminate_dead_rules = function
   | (preds, _effects, target) as rule :: xs when
-      is_terminal target && preds_all_true preds->
+      is_terminal target && preds_all_true preds ->
     List.iter ~f:(fun _ -> printf "D") xs;
     [ rule ]
   | rle :: xs -> rle :: eliminate_dead_rules xs
@@ -496,6 +498,8 @@ let rec eliminate_duplicate_rules = function
     All rules which contains an unsatisfiable rule are removed
     (including its target)
 *)
+
+(* AFU:If all are unsatisfiable, replace with protocol and address families *)
 let remove_unsatisfiable_rules rules =
   List.filter ~f:(fun (preds, _, _) -> is_satisfiable preds) rules
 
@@ -622,6 +626,7 @@ let merge_adjecent_rules chains =
 
 (** All predicates which is always true are removed *)
 let remove_true_predicates rules =
+  (* AFU: First map all rules with equivalent protocol or address family *)
   List.map ~f:(fun (preds, effects, target) ->
     (List.filter ~f:(fun pred -> not (is_always true pred)) preds, effects,target)) rules
 
@@ -690,7 +695,7 @@ let reduce_recursive ~(f:'acc list -> 'predicates -> 'acc * 'predicates) chains 
           match is_always false output with
           | true ->
             printf "P";
-            acc
+            ((Ir.True, true) :: predicates, effects, target) :: acc
           | false -> (predicates, effects, target) :: acc
         in
         (inputs, acc)
@@ -729,7 +734,7 @@ let filter_predicates ~init inputs predicates =
         printf "R";
         input, preds
       | Some pred' ->
-        if (equal_predicate pred pred' |> not) then printf "U";
+        if (eq_pred pred pred' |> not) then printf "r";
         pred', (pred' :: preds)
       | None -> input, (pred :: preds)
     ) predicates
