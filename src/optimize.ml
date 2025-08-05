@@ -6,23 +6,27 @@ open Poly
 module Ip6 = Ipset.Ip6
 module Ip4 = Ipset.Ip4
 
+type string = id [@@ocaml.warning "-34"]
+
 (** Bugs:
     Reducing indegree does not work as intended
     - It ought not to introduce bugs though. But we need to verify that though
-
-    ipv4/ipv4 are exlusive. This means that they cannot render true easily.
-    This also means that nft generation does not need to emit address families
 *)
 
 
 (* Percentage for predicates are pushed down to called chains *)
-let min_push = 60
+let min_push = 80
 
 (* Make sure that no chains have an indegree more than N,
    so that 'for all chains | chain_reference_count <= N' holds
 *)
 let max_chain_indegree = 1
 
+(** Define the saving in predicates when inlining. *)
+let max_inline_cost = 0
+
+(** Minimum length of sequence to of predicates to merge into a new chain *)
+let min_merge = 2
 
 (* List of predicates that always results in true *)
 let true_predicates =
@@ -50,9 +54,10 @@ let true_predicates =
     True, false;
   ] @ true_predicates Direction.Destination @ true_predicates Direction.Source
 
+let false_predicates = List.map ~f:(fun (pred, neg) -> pred, not neg) true_predicates
 
-(** Define the saving in predicates when inlining. *)
-let max_inline_cost = 1
+let string_of_predicate (p, n) =
+  Printf.sprintf "(%s,%b)" (string_of_predicate p) n
 
 let is_satisfiable preds =
   not (List.exists ~f:(is_always false) preds)
@@ -102,12 +107,13 @@ let merge_pred ?(tpe=`Inter) a b =
     | (a, false), (b, true)  -> (diff  b a, true)
     | (a, true),  (b, false) -> (diff  a b, true)
   in
+  (* What a matches but not what b matches *)
   let merge_diff inter union diff a b =
     match a, b with
-    | (a, false), (b, false) -> (diff  a b, false)
-    | (a, true),  (b, true)  -> (diff  b a, false)
-    | (a, false), (b, true)  -> (inter a b, false)
-    | (a, true),  (b, false) -> (union a b, true)
+    | (a, false), (b, false) -> (diff  a b, false) (* OK *)
+    | (a, true),  (b, true)  -> (diff  b a, false) (* OK *)
+    | (a, false), (b, true)  -> (inter a b, false) (* OK *)
+    | (a, true),  (b, false) -> (union a b, true)  (* OK *)
   in
 
   let merge = match tpe with
@@ -183,6 +189,23 @@ let merge_pred ?(tpe=`Inter) a b =
     (Address_family af'', neg'') |> Option.some
   | (Address_family _, _), _ -> None
 
+let cardinal_of_pred = function
+  | Interface (_, is), _ -> Set.length is
+  | State s, _ -> Set.length s
+  | Ports (_, _, ports), _ -> Set.length ports
+  | Protocol p, _ -> Set.length p
+  | Icmp6 types, _ -> Set.length types
+  | Icmp4 types, _ -> Set.length types
+  | Ip6Set (_, set), _ -> Ip6.IpSet.length set
+  | Ip4Set (_, set), _ -> Ip4.IpSet.length set
+  | Zone (_, zones), _ -> Set.length zones
+  | TcpFlags (f, _), _ -> Set.length f
+  | True, _ -> 1
+  | If_group (_, set), _ -> Set.length set
+  | Mark (_, _), _ -> 1
+  | Hoplimit limits, _ -> Set.length limits
+  | Address_family af, _ -> Set.length af
+
 let sort_predicates predicates =
   List.stable_sort ~compare:Ir.compare_predicate predicates
 
@@ -218,6 +241,31 @@ let equal_predicate a b =
 let is_terminal = function
   | Pass | Jump _ -> false
   | Accept | Drop | Return | Reject _ -> true
+
+(* Return a list of chains with leaves first *)
+let get_ordered_chains chains =
+  let rec traverse_chains seen chains acc chain_id =
+    let seen = match Set.mem seen chain_id with
+      | false -> Set.add seen chain_id
+      | true -> failwith "Cycle detected!"
+    in
+    match Map.find chains chain_id with
+    | Some { rules; _ } ->
+      let acc = chain_id :: acc in
+      List.fold_left ~init:acc ~f:(fun acc -> function
+        | (_pred, _effect, Jump chain_id) -> traverse_chains seen chains acc chain_id
+        | _ -> acc
+      ) rules
+    | None -> failwith "Chain id not found"
+  in
+  (* Traverse all builtin chains *)
+  Map.fold chains ~init:[] ~f:(fun ~key ~data:_ acc ->
+    match key with
+    | (Ir.Chain_id.Builtin _) as chain_id ->
+      traverse_chains (Set.empty) chains acc chain_id
+    | _ -> acc
+  )
+  |> List.stable_dedup ~compare:Ir.Chain_id.compare
 
 let join chains =
   let has_pred pred = function
@@ -314,7 +362,9 @@ let remove_duplicate_chains chains =
   List.fold_left ~f:(fun acc (id, ids) -> if List.length ids > 0 then printf "D"; replace_chain_ids (id, ids) acc) ~init:chains remap_list
 
 (** Move drops to the bottom. This allows improvement to dead code
-    elimination, and helps reduce *)
+    elimination, and helps reduce.
+*)
+
 let reorder rules =
   let can_reorder (cl1, ef1, act1) (cl2, ef2, act2) =
     (is_eq ef1 ef2 && act1 = act2) || not (is_satisfiable (merge_predicates (cl1 @ cl2)))
@@ -329,119 +379,114 @@ let reorder rules =
     | Pass       -> 5
   in
   let should_reorder_rules (cl1, ef1, act1) (cl2, ef2, act2) =
-    if can_reorder (cl1, ef1, act1) (cl2, ef2, act2) then
+    match can_reorder (cl1, ef1, act1) (cl2, ef2, act2) with
+    | false -> false
+    | true ->
       match order act1 - order act2 with
       | n when n > 0 -> true
       | 0 when List.length cl1 + List.length ef1 < List.length cl2 + List.length ef2 -> true
       | _ -> false
-    else
-      false
   in
   let reorder_rules _acc rules =
     List.stable_sort ~compare:(fun r1 r2 -> match should_reorder_rules r1 r2 with
-      | true -> 1
+      | true -> printf "~"; 1
       | false -> -1
     ) rules
   in
   reorder_rules [] rules
 
-let icmp = 1
-let igmp  = 2
-let tcp = 6
-let udp = 17
-let icmp6 = 58
+(** Return a derived predicate from the given predicate.
+ * ipv6 => !icmp4
+ * icmp4 => ipv4
+ * !icmp4 => Ø
+*)
+let get_implied_predicate pred =
+  let icmp = 1 in
+  let igmp  = 2 in
+  let tcp = 6 in
+  let udp = 17 in
+  let icmp6 = 58 in
 
-(* AFU: Change to return none, if there is no derived pred *)
-let protocol_of_pred pred =
-  let s, n =
-    match pred with
-    | Ir.Protocol p, neg -> p, neg
-    | Ir.True, _
-    | Ir.Interface (_,_), _
-    | Ir.If_group (_,_), _
-    | Ir.Zone (_,_), _
-    | Ir.State _, _
-    | Ir.Mark (_,_), _ ->
-      Set.empty, true
-    | Ir.Hoplimit _, _ ->
-      Set.of_list [ icmp; igmp ], true
-    | Ir.Ip6Set (_,_), _ ->
-      Set.of_list [ icmp; igmp ], true
-    | Ir.Ip4Set (_,_), _ ->
-      Set.of_list [ icmp6 ], true
-    | Ir.Ports (_, Ir.Port_type.Tcp, _), _ ->
-      Set.singleton tcp , false
-    | Ir.Ports (_, Ir.Port_type.Udp, _), _ ->
-      Set.singleton udp, false
-    | Ir.Icmp4 _, _ ->
-      Set.singleton icmp, false
-    | Ir.Icmp6 _, _ ->
-      Set.singleton icmp6, false
-    | Ir.TcpFlags (_,_), _ ->
-      Set.singleton tcp, false
-    | Ir.Address_family fs, neg ->
-      match Set.to_list fs, neg with
-      | [ Ir.Ipv4 ], false
-      | [ Ir.Ipv6 ], true ->
-        Set.of_list [ icmp6 ], true
-      | [ Ir.Ipv4 ], true
-      | [ Ir.Ipv6 ], false ->
-        Set.of_list [ icmp; igmp ], true
-      | [Ir.Ipv4; Ir.Ipv6], false
-      | [Ir.Ipv6; Ir.Ipv4], false
-      | [], true ->
-        Set.empty, true
-      | [Ir.Ipv4; Ir.Ipv6], true
-      | [Ir.Ipv6; Ir.Ipv4], true
-      | [ ], false ->
-        Set.empty, false
-      | _ :: _ :: _ , _ -> failwith "This cannot be reached and will cause a compilation error"
-  in
-  Ir.Protocol s, n
+  let ipv4_protocols = [icmp; igmp] |> Set.of_list in
+  let ipv6_protocols = [icmp6] |> Set.of_list in
 
-let address_family_of_pred pred =
-  let ipv4_protocols = Set.of_list [ icmp; igmp ] in
-  let ipv6_protocols = Set.of_list [ icmp6 ] in
-  let s, n =
-    match pred with
-    | Ir.Hoplimit _, _
-    | Ir.Icmp6 _, _
-    | Ir.Ip6Set (_,_), _ ->
-      Set.singleton Ir.Ipv6, false
-    | Ir.Icmp4 _, _
-    | Ir.Ip4Set (_,_), _ ->
-      Set.singleton Ir.Ipv4, false
+  let make_address_family tpe neg = Address_family (Set.singleton tpe), neg in
+  let make_protocol lst neg = Ir.Protocol (Set.of_list lst), neg in
 
-    | Ir.Protocol p, false when Set.is_subset p ~of_:ipv6_protocols ->
-      Set.singleton Ir.Ipv6, false
-    | Ir.Protocol p, false when Set.is_subset p ~of_:ipv4_protocols ->
-      Set.singleton Ir.Ipv4, false
+  match pred with
+  | Ir.Protocol s, false when Set.is_subset ~of_:ipv4_protocols s && not (Set.is_empty s) ->
+    make_address_family Ipv4 false |> Option.some
+  | Ir.Protocol s, false when Set.is_subset ~of_:ipv6_protocols s && not (Set.is_empty s) ->
+    make_address_family Ipv6 false |> Option.some
+  | Ir.Protocol _, _ -> None
 
-    | Ir.Protocol p, true when Set.is_subset ipv6_protocols ~of_:p ->
-      Set.singleton Ir.Ipv4, false
-    | Ir.Protocol p, false when Set.is_subset ipv4_protocols ~of_:p ->
-      Set.singleton Ir.Ipv6, false
-    | Ir.Protocol _, _
-    | Ir.True, _
-    | Ir.Interface (_,_), _
-    | Ir.If_group (_,_), _
-    | Ir.Zone (_,_), _
-    | Ir.State _, _
-    | Ir.Mark (_,_), _
-    | Ir.Ports _, _
-    | Ir.TcpFlags (_,_), _ ->
-      Set.empty, true
-    | Ir.Address_family af, neg -> af, neg
-  in
-  Ir.Address_family s, n
+  | Ir.True, _
+  | Ir.Interface _, _
+  | Ir.If_group _, _
+  | Ir.Zone _, _
+  | Ir.State _, _
+  | Ir.Mark _, _ -> None
+
+  | Ir.Ports (_, Tcp, _), _ -> make_protocol [tcp] false |> Option.some
+  | Ir.Ports (_, Udp, _), _ -> make_protocol [udp] false |> Option.some
+  | Ir.TcpFlags _, _ -> make_protocol [tcp] false |> Option.some
+
+  | Ir.Hoplimit _, _ -> make_address_family Ipv6 false |> Option.some
+  | Ir.Icmp6 _, _ -> make_protocol [icmp] false |> Option.some
+  | Ir.Ip6Set _, _ -> make_address_family Ipv6 false |> Option.some
+
+  (* Ipv4 *)
+  | Ir.Icmp4 _, _ -> make_protocol [icmp] false |> Option.some
+  | Ir.Ip4Set _, _ -> make_address_family Ipv4 false |> Option.some
+
+  (* Flip also *)
+  | Ir.Address_family af, neg when Set.length af = 1 -> begin
+      match Set.choose_exn af, neg with
+      | Ir.Ipv4, false
+      | Ir.Ipv6, true -> (Protocol ipv6_protocols, true) |> Option.some
+      | Ir.Ipv4, true
+      | Ir.Ipv6, false -> (Protocol ipv4_protocols, true) |> Option.some
+    end
+  | Ir.Address_family _, _ -> None
+
+let (>::) elt elts =
+  Option.value_map ~f:(fun elt -> elt :: elts) ~default:elts elt
 
 let preds_all_true preds =
-  List.for_all ~f:(is_always true) preds
+  List.fold ~init:[] ~f:(fun acc pred -> get_implied_predicate pred >:: pred :: acc) preds
+  |> List.for_all ~f:(is_always true)
+
+let inline_chains ~max_rules chains =
+  let chain_rule_length chains id =
+    match Map.find chains id with
+    | Some { rules; _ } -> List.length rules
+    | None -> 0
+  in
+  get_ordered_chains chains
+  |> List.fold ~init:chains ~f:(fun chains chain_id ->
+    match Map.find chains chain_id with
+    | Some ({ rules; _ } as chain) ->
+      let rules =
+        List.concat_map ~f:(function
+          | (preds, effects, Ir.Jump id) when chain_rule_length chains id <= max_rules ->
+            (* Inline *)
+            let { rules; _ } = Map.find_exn chains id in
+            List.map ~f:(fun (preds', effects', target) ->
+              (preds' @ preds), effects' @ effects, target
+            ) rules
+          | rule -> [rule]
+        ) rules
+      in
+      Map.set chains ~key:chain_id ~data:{ chain with rules }
+    | None ->
+      chains
+  )
+
 
 (** Inline chains that satifies p *)
 let rec inline cost_f chains =
   let rec inline_chain chain = function
-    | (preds, effects, target) :: xs when target = Jump(chain.id) && (Chain.is_temp chain.id)-> begin
+    | (preds, effects, target) :: xs when equal_target target (Jump chain.id) -> begin
         let rec inline_rules (preds, effects) = function
           | (c, e, t) :: xs -> ( preds @ c, effects @ e, t ) :: inline_rules (preds, effects) xs
           | [] -> []
@@ -456,16 +501,14 @@ let rec inline cost_f chains =
   let chain_to_inline =
     Map.fold ~init:None
       ~f:(fun ~key:_ ~data:chain acc ->
-        match Chain.is_temp chain.id &&
-              chain_reference_count chain.id chains > 0 with
-        | true -> begin
+        match Chain.is_temp chain.id && chain_reference_count chain.id chains > 0 with
+        | false -> acc
+        | true ->
             let cost = cost_f chains chain in
             match cost, acc with
             | c, _ when c > max_inline_cost -> acc
             | _, Some (_, c) when c < cost -> acc
             | _ -> Some (chain, cost)
-          end
-        | false -> acc
       ) chains
     |> Option.map ~f:fst
   in
@@ -478,19 +521,19 @@ let rec inline cost_f chains =
   | None -> chains
 
 (* AFU: First map all rules with equivalent protocol or address family *)
-let rec eliminate_dead_rules = function
+let rec eliminate_unreachable_rules = function
   | (preds, _effects, target) as rule :: xs when
       is_terminal target && preds_all_true preds ->
-    List.iter ~f:(fun _ -> printf "D") xs;
+    List.iter ~f:(fun _ -> printf "X") xs;
     [ rule ]
-  | rle :: xs -> rle :: eliminate_dead_rules xs
+  | rle :: xs -> rle :: eliminate_unreachable_rules xs
   | [] -> []
 
 (* Why not just merge the rules? *)
 let rec eliminate_duplicate_rules = function
   | rle1 :: rle2 :: xs when Ir.eq_rule rle1 rle2 ->
-    printf "d";
-    rle1 :: eliminate_duplicate_rules xs
+    printf "D";
+    eliminate_duplicate_rules (rle1 :: xs)
   | rle :: xs -> rle :: eliminate_duplicate_rules xs
   | [] -> []
 
@@ -498,13 +541,19 @@ let rec eliminate_duplicate_rules = function
     All rules which contains an unsatisfiable rule are removed
     (including its target)
 *)
-
-(* AFU:If all are unsatisfiable, replace with protocol and address families *)
 let remove_unsatisfiable_rules rules =
-  List.filter ~f:(fun (preds, _, _) -> is_satisfiable preds) rules
+  (* Removing complete rules due to unsatifiability is ok *)
+  List.filter ~f:(fun (preds, _, _) -> match is_satisfiable preds with
+    | true -> true
+    | false ->
+      printf "U"; false
+  )rules
 
 let remove_empty_rules rules =
-  List.filter ~f:(function (_, [], Ir.Pass) -> false | _ -> true) rules
+  List.filter ~f:(function
+    | (_, [], Ir.Pass) -> printf "E"; false
+    | _ -> true
+  ) rules
 
 let union_preds ps ps' =
   let ps = sort_predicates ps in
@@ -628,7 +677,10 @@ let merge_adjecent_rules chains =
 let remove_true_predicates rules =
   (* AFU: First map all rules with equivalent protocol or address family *)
   List.map ~f:(fun (preds, effects, target) ->
-    (List.filter ~f:(fun pred -> not (is_always true pred)) preds, effects,target)) rules
+    (List.filter_map ~f:(fun pred -> match is_always true pred with
+       | true -> printf "E"; get_implied_predicate pred
+       | false -> Some pred
+    ) preds, effects,target)) rules
 
 (** Determine the cost of inlining. *)
 let inline_cost cs c =
@@ -647,32 +699,6 @@ let inline_cost cs c =
     All redundant rules are removed
 *)
 let reduce_recursive ~(f:'acc list -> 'predicates -> 'acc * 'predicates) chains =
-  let create_ordered_chains chains =
-    let rec traverse_chains seen chains acc chain_id =
-      let seen = match Set.mem seen chain_id with
-        | false -> Set.add seen chain_id
-        | true -> failwith "Cycle detected!"
-      in
-      match Map.find chains chain_id with
-      | Some { rules; _ } ->
-        let acc = chain_id :: acc in
-        List.fold_left ~init:acc ~f:(fun acc -> function
-          | (_pred, _effect, Jump chain_id) -> traverse_chains seen chains acc chain_id
-          | _ -> acc
-        ) rules
-      | None -> failwith "Chain id not found"
-    in
-    (* Traverse all builtin chains *)
-    Map.fold chains ~init:[] ~f:(fun ~key ~data:_ acc ->
-     match key with
-      | (Ir.Chain_id.Builtin _) as chain_id ->
-        traverse_chains (Set.empty) chains acc chain_id
-      | _ -> acc
-    )
-    |> List.stable_dedup ~compare:Ir.Chain_id.compare
-    |> List.rev
-  in
-
   let map_chain chains inputs chain =
     let input = Map.find_multi inputs chain.id in
     (* Verify that we have as many inputs as references to the chain *)
@@ -691,6 +717,7 @@ let reduce_recursive ~(f:'acc list -> 'predicates -> 'acc * 'predicates) chains 
           | Ir.Jump chain_id -> Map.add_multi inputs ~key:chain_id ~data:output
           | _ -> inputs
         in
+        (* I don't think this is needed at all *)
         let acc =
           match is_always false output with
           | true ->
@@ -705,7 +732,7 @@ let reduce_recursive ~(f:'acc list -> 'predicates -> 'acc * 'predicates) chains 
   in
   let input_chains = chains in
 
-  let ordered_chains = create_ordered_chains chains in
+  let ordered_chains = get_ordered_chains chains |> List.rev in
 
 
   ordered_chains
@@ -721,56 +748,60 @@ let reduce_recursive ~(f:'acc list -> 'predicates -> 'acc * 'predicates) chains 
     Traversing all chains, reduce all rules that match the initial rule.
     All redundant rules are removed
 *)
+
 let filter_predicates ~init inputs predicates =
   let input =
     List.reduce ~f:(fun acc pred -> merge_pred ~tpe:`Union acc pred |> Option.value ~default:init) inputs
     |> Option.value ~default:init
   in
+  (* Augment input with derived predicates *)
+  let input =
+    List.fold ~init:input ~f:(fun acc pred ->
+      match get_implied_predicate pred with
+      | Some pred' when equal_predicate pred pred' ->
+        acc
+      | Some pred' ->
+        merge_pred acc pred'
+        |> Option.value ~default:acc
+      | None -> acc
+    ) predicates
+  in
+  let merge input pred =
+    match merge_pred ~tpe:`Inter input pred with
+    | None -> None
+    | Some pred' ->
+      match merge_pred ~tpe:`Diff input pred' with
+      | None ->
+        Some pred'
+      | Some (p, n) ->
+        match merge_pred input (p, not n) with
+        | None ->
+          printf "§";
+          Some pred'
+        | Some pred'' when equal_predicate pred' pred'' && cardinal_of_pred (p, not n) < cardinal_of_pred pred' ->
+          printf "€";
+          Some (p, not n)
+        | Some _ ->
+          printf "$";
+          Some pred'
+  in
+
   let output, predicates =
     List.fold_left ~init:(input, []) ~f:(fun (input, preds) pred ->
-      match merge_pred input pred with
-      | Some pred when eq_pred pred input ->
-        (* Predicate had no effect *)
+      match merge input pred with
+      | Some pred' when eq_pred pred' input ->
+        (* Predicate had no effect. *)
         printf "R";
         input, preds
       | Some pred' ->
         if (eq_pred pred pred' |> not) then printf "r";
         pred', (pred' :: preds)
-      | None -> input, (pred :: preds)
+      | None ->
+        input, (pred :: preds)
+
     ) predicates
   in
   output, predicates
-
-(** Filter based on derived predicates *)
-let filter_predicates_derived ~init ~of_pred inputs predicates =
-  let input =
-    List.reduce ~f:(fun acc pred -> merge_pred ~tpe:`Union acc pred |> Option.value_exn) inputs
-    |> Option.value ~default:init
-  in
-  (* Map all predicates *)
-  let predicates' =
-    List.map ~f:(fun pred -> pred, of_pred pred) predicates
-  in
-  let input =
-    List.fold ~init:input ~f:(fun acc (pred, derived) ->
-      match pred_type_identical (fst pred) (fst derived) with
-      | true -> acc
-      | false -> merge_pred derived acc |> Option.value_exn
-    ) predicates'
-  in
-  let output, predicates =
-    List.fold_left ~init:(input, []) ~f:(fun (input, preds) (pred, _derived) ->
-      match merge_pred input pred with
-      | Some pred when eq_pred pred input ->
-        printf "R";
-        input, preds
-      | Some pred ->
-        printf "U";
-        pred, (pred :: preds)
-      | None -> input, (pred :: preds)
-    ) predicates'
-  in
-  output, List.rev predicates
 
 let reduce_all_predicates chains =
   List.fold_left ~init:chains ~f:(fun chains init ->
@@ -785,12 +816,57 @@ let map_predicates ~f rules =
 let map_predicate ~f predicates =
   List.map ~f predicates
 
+let merge_adjecent_rules2 ~min_merge ~typ chains =
+  let merge acc preds =
+    List.find_map ~f:(fun pred ->
+      merge_pred ~tpe:`Union pred acc
+      |> Option.bind ~f:(function
+        | pred when is_always true pred -> None
+        | pred -> Some pred
+      )
+    ) preds
+  in
+  let rec inner chains mergeable common_pred rules =
+    let common_pred' =
+      List.hd rules |> Option.bind ~f:(fun (preds, _, _) -> merge common_pred preds)
+    in
+    match common_pred', rules with
+    (* Consider moving rules *)
+    | Some common_pred, r :: rs ->
+      printf "^%!";
+      inner chains (r :: mergeable) common_pred rs
+    | None, rs when List.length mergeable >= min_merge ->
+      let new_chain = Chain.create (List.rev mergeable) "Reduce2" in
+      let chains = Map.add_exn ~key:new_chain.id ~data:new_chain chains in
+      let rule = ([common_pred], [], Ir.Jump new_chain.id) in
+      let chains, rules = inner chains [] typ rs in
+      chains, rule :: rules
+    | None, r :: rs ->
+      let (chain, rules) = inner chains [] typ rs in
+      let rules = (List.rev mergeable) @ (r :: rules) in
+      chain, rules
+    | _, [] ->
+      chains, List.rev mergeable
+  in
+  (* Map every chain *)
+  Map.data chains
+  |> List.fold ~init:(Map.empty (module Ir.Chain_id)) ~f:(fun acc ({ id; rules; _ } as chain) ->
+    let acc, rules = inner acc [] typ rules in
+    Map.add_exn acc ~key:id ~data:{ chain with rules }
+  )
+
+let merge_all_rules chains =
+  List.fold_left ~init:chains ~f:(fun chains typ ->
+    merge_adjecent_rules2 ~min_merge ~typ chains
+  ) false_predicates
+
+
+
 (** Push predicates to sub-chains if the predicate are already present on the subchains
     This only works for chains that has only one reference.
 *)
 let push_predicates ~min_push chains =
   (* Replace the chain with a chain where all rules have been extended with pred *)
-  (* We should not merge!!! *)
   let merge pred preds = pred :: preds in
 
   let push rules pred =
@@ -825,7 +901,7 @@ let push_predicates ~min_push chains =
     count * 100 / List.length rules
   in
 
-  let proccess_chain_rules chains rules =
+  let process_chain_rules chains rules =
     let chains, rules =
       List.fold ~init:(chains, []) ~f:(fun (chains, acc) -> function
         | (preds, effects, (Ir.Jump target_id as target)) as rule when chain_reference_count target_id chains = 1 -> begin
@@ -837,7 +913,7 @@ let push_predicates ~min_push chains =
                   match can_merge_rules rules pred && count_merges target_rules pred >= min_push with
                   | false -> (chains, pred :: acc)
                   | true ->
-                    printf "F";
+                    printf ">";
                     let target_rules = push target_rules pred in
                     let chains = Map.set chains ~key:target_id ~data:{ target_chain with rules = target_rules } in
                     chains, acc
@@ -855,12 +931,11 @@ let push_predicates ~min_push chains =
   process_chains_breath_first ~f:(fun chains chain_id ->
     match Map.find chains chain_id with
     | Some ({ rules; _ } as chain) ->
-      let chains, rules = proccess_chain_rules chains rules in
+      let chains, rules = process_chain_rules chains rules in
       Map.set chains ~key:chain_id ~data:{chain with rules}
     | _ -> chains
   ) chains
 
-(* This function essentially does not work as intended. *)
 let reduce_chain_indegree ~max_indegree chains =
   let folding_map_chain_rules chains ~(init:'acc) ~(f: 'acc -> 'rule -> 'acc * 'rule) =
     let keys = Map.keys chains in
@@ -922,55 +997,85 @@ let replace_with_address_family =
   | Hoplimit cnts, false when Set.is_empty cnts -> ipv6
   | pred -> pred
 
-let optimize_pass chains =
-  printf "#Optim: (%d, %d, %d) %!" (Map.length chains) (Chain.count_rules chains) (Chain.count_predicates chains);
+let remove_transient_chains chains =
+  (* Make a map of transient chains *)
+  let transient_chains =
+    Map.fold ~init:(Map.empty (module Chain_id)) ~f:(fun ~key ~data acc ->
+      match data with
+      | { rules = [([], [], Ir.Jump id)]; _ } -> Map.set acc ~key ~data:id
+      | _ -> acc
+    ) chains
+  in
+  map_chain_rules ~f:(fun rules ->
+    List.map ~f:(function
+      | (preds, effects, Ir.Jump id) when Map.mem transient_chains id ->
+        (preds, effects, Ir.Jump (Map.find_exn transient_chains id))
+      | rule -> rule
+    ) rules
+  ) chains
+
+
+
+
+let optimize_pass ~stage chains =
   let chains = fold_return_statements chains in
   let optimize_functions =
     let (@@) a b = a ~f:b in
     [
-      reduce_chain_indegree ~max_indegree:max_chain_indegree;
-      remove_unreferenced_chains;
-      push_predicates ~min_push;
-      map_chain_rules @@ eliminate_dead_rules;
-      map_chain_rules @@ map_predicates @@ merge_predicates;
-      map_chain_rules @@ map_predicates @@ map_predicate @@ replace_with_address_family;
-      map_chain_rules @@ remove_unsatisfiable_rules;
-      map_chain_rules @@ remove_true_predicates;
-      map_chain_rules @@ remove_empty_rules;
-      map_chain_rules @@ eliminate_duplicate_rules;
-      map_chain_rules @@ reorder;
-      join;
-      merge_adjecent_rules;
-      inline inline_cost;
-      remove_unreferenced_chains;
-      map_chain_rules ~f:(fun rls -> List.map ~f:(fun (preds, effect_, tg) -> (merge_predicates preds, effect_, tg)) rls);
-      reduce_all_predicates;
-      reduce_recursive ~f:(filter_predicates_derived ~init:(Ir.Protocol Set.empty, true) ~of_pred:protocol_of_pred);
-      reduce_recursive ~f:(filter_predicates_derived ~init:(Ir.Address_family Set.empty, true) ~of_pred:address_family_of_pred);
-      remove_duplicate_chains;
+      [  2  ], reduce_chain_indegree ~max_indegree:max_chain_indegree;
+      [1;2;3], remove_unreferenced_chains;
+      [1;2  ], push_predicates ~min_push;
+      [1;2;3], map_chain_rules @@ eliminate_unreachable_rules;
+      [1;2;3], map_chain_rules @@ map_predicates @@ merge_predicates;
+      [1;2;3], map_chain_rules @@ map_predicates @@ map_predicate @@ replace_with_address_family;
+      [1;2;3], map_chain_rules @@ remove_unsatisfiable_rules;
+      [1;2;3], map_chain_rules @@ remove_true_predicates;
+      [1;2;3], map_chain_rules @@ remove_empty_rules;
+      [1;2;3], map_chain_rules @@ eliminate_duplicate_rules;
+      [1;2;3], map_chain_rules @@ reorder;
+      [1;2  ], join;
+      [1;2;3], merge_adjecent_rules;
+      [1;2  ], inline inline_cost;
+      [1;2;3], remove_unreferenced_chains;
+      [1;2;3], map_chain_rules ~f:(fun rls -> List.map ~f:(fun (preds, effect_, tg) -> (merge_predicates preds, effect_, tg)) rls);
+      [1;2;3], reduce_all_predicates;
+      [1;2;3], remove_duplicate_chains;
+      [1;2  ], merge_all_rules;
+      [     ], remove_transient_chains;
+      [1;  3], inline_chains ~max_rules:1
     ]
   in
-  let chains' = List.fold_left ~f:(fun chains' optim_func -> printf "%!"; optim_func chains') ~init:chains optimize_functions in
-  printf " (%d, %d)\n" (Chain.count_rules chains') (Chain.count_predicates chains');
+  let chains' = List.fold_left ~init:chains ~f:(fun chains' (stages, optim_func) ->
+    match List.exists ~f:(Int.equal stage) stages with
+    | true -> printf "%!"; optim_func chains'
+    | false -> chains')  optimize_functions
+  in
   chains'
   |> map_chain_rules ~f:(map_predicates ~f:sort_predicates)
 
-let rec optimize ?(iter=3) chains =
-  let chains' = optimize_pass chains in
+let rec optimize ?(stage=1) ?(iter=1) chains =
+  printf "\n#Stage: %d,%d: (%d, %d, %d): " stage iter (Chain.count_rules chains) (Chain.count_predicates chains) (Chain.count_chains chains);
+  let chains' = optimize_pass ~stage chains in
+
   match (Chain.count_rules chains = Chain.count_rules chains'
          && Chain.count_predicates chains = Chain.count_predicates chains'
          && Chain.count_chains chains = Chain.count_chains chains') with
-  | true when iter = 0 -> printf "#Optimization done\n";
+  | true when iter > 2  && stage >= 3 -> printf "\n#Optimization done\n";
     (* Print chain order *)
     printf "\n# Chains: [";
     let _ = process_chains_breath_first ~f:(fun chains' chain_id -> printf "%s; " (Chain_id.show chain_id); chains') chains in
     printf "]\n";
     chains'
+    (*|> merge_all_rules
+    |> reduce_all_predicates
+    *)
+  | true when iter > 2 ->
+    optimize ~stage:(stage + 1) chains'
   | true ->
-    optimize ~iter:(iter - 1) chains'
+    optimize ~stage ~iter:(iter + 1) chains'
   | false ->
     printf "%!";
-    optimize chains'
+    optimize ~stage chains'
 
 module Test = struct
   open OUnit2
@@ -1019,14 +1124,38 @@ module Test = struct
         assert_bool "'c' is a subset of 'b'" (is_subset ~of_:b c);
         assert_bool "'b' is a subset of 'b'" (is_subset ~of_:b b);
 
-
         ()
+      end;
+
+      "ip6set diff" >:: begin fun _ ->
+        let make lst n =
+          lst
+          |> List.map ~f:Ipaddr.V6.Prefix.of_string_exn
+          |> Ip6.of_list
+          |> fun v -> Ir.Ip6Set (Ir.Direction.Source, v), n
+        in
+        let a = make ["2000::/3"; "fe80::/10"; "ff02::1:2/128"] false in
+        let x = make ["2000::/3"; "fe80::/10"] false in
+        let y = make ["fe80::/10"; "ff02::1:2/128"] false in
+        let z = make ["2000::/3"] false in
+
+        [ "a", a;
+          "x", x;
+          "y", y;
+          "z", z;
+          "a / x", merge_pred ~tpe:`Diff a x |> Option.value_exn;
+          "a / x", merge_pred ~tpe:`Diff a x |> Option.value_exn
+        ]
+        |> List.map ~f:(fun (s, v) -> Printf.sprintf "%s: %s" s (string_of_predicate v))
+        |> String.concat ~sep:"\n"
+        |> Stdio.eprintf "%s %s\n" (Ipaddr.V6.Prefix.of_string_exn "::/0" |> Ipaddr.V6.Prefix.to_string)
+
       end;
 
       "is_true" >:: begin fun _ ->
         List.iteri ~f:(fun i pred ->
           let msg =
-            Printf.sprintf "Predicate %s (index %d) should always be true" (Ir.string_of_predicate (fst pred)) i
+            Printf.sprintf "Predicate %s (index %d) should always be true" (string_of_predicate pred) i
           in
           assert_bool msg (is_always true pred)
         ) true_predicates

@@ -2,7 +2,6 @@ open Base
 (** Operations on chains *)
 
 (** This module keeps global state of all chains. *)
-
 open Ir
 
 let next_id = ref 0

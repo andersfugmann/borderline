@@ -1,4 +1,5 @@
 val optimize :
+  ?stage:int ->
   ?iter:int ->
   (Ir.Chain_id.t, Ir.chain, Ir.Chain_id.comparator_witness)
     Base.Map.t ->
