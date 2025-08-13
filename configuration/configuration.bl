@@ -6,7 +6,6 @@ define global_zones += []
 # Define list of zones with network definitions
 define local_zones += []
 
-
 # Filter unallocated network addresses from global zones
 define block_global_bogons = false
 
