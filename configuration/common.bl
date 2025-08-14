@@ -5,6 +5,8 @@ define common = {
     rule { state = [ related, established ]; } policy log_allow;
     rule {
         # Drop any martian packets. Martians defined as packets from unallocated networks
+        source address != ::0/32;
+        source address != 0.0.0.0/32;
         rule { source zone = mars; } policy log_martian;
         rule { destination zone = mars; } policy log_martian;
     };

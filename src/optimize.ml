@@ -53,7 +53,7 @@ let max_chain_indegree = 1
 let _max_inline_cost = 5
 
 (** Minimum length of sequence to of predicates to merge into a new chain *)
-let min_merge = 3
+let _min_merge = 3
 
 let (>::) elt elts =
   Option.value_map ~f:(fun elt -> elt :: elts) ~default:elts elt
@@ -131,29 +131,29 @@ let map_chains_inputs chains =
   in
   chains
 
-(* This should be used with a set of filters *)
-let map_rules_input chains ~f =
+(** This should be used with a set of filters *)
+let map_rules_input ~f chains =
   map_chains_inputs chains
-  |> List.map ~f:(fun (input, chain) ->
-    let rules = f input chain.rules in
-    chain.id, { chain with rules }
+  |> List.concat_map ~f:(fun (input, chain) ->
+    let rules, new_chains = f input chain.rules in
+    { chain with rules } :: new_chains
   )
+  |> List.map ~f:(fun chain -> chain.id, chain)
   |> Map.of_alist_exn (module Chain_id)
+
 
 let remove_unsatisfiable_rules input rules =
   (* Removing complete rules due to unsatifiability is ok *)
-  List.filter ~f:(fun (preds, _, _) ->
-    let satisfiable =
-      (input @ (P.get_implied_predicates preds) @ preds)
-      |> P.merge_preds ~tpe:`Inter
-      |> P.is_satisfiable
-    in
-    match satisfiable with
-    | false ->
-      printf "U";
-      false
-    | true -> true
-  ) rules
+  let rules =
+    List.filter ~f:(fun (preds, _, _) ->
+      match P.is_satisfiable (input @ preds) with
+      | false ->
+        printf "U";
+        false
+      | true -> true
+    ) rules
+  in
+  rules, []
 
 let remove_empty_rules rules =
   List.filter ~f:(function
@@ -194,12 +194,19 @@ let inline_chains ~max_rules chains =
       chains
   )
 
+let remove_implied_predicates input rules =
+  let rules =
+    List.map ~f:(fun (preds, effects, target) ->
+      let implied_predicates = P.get_implied_predicates (preds @ input) in
+      let preds = List.filter ~f:(fun pred -> List.mem implied_predicates pred ~equal:P.equal_predicate |> not) preds in
+      (preds, effects, target)
+    ) rules
+  in
+  rules, []
+
 let reduce_predicates input rules =
   let map_predicates predicates =
-    let input =
-      let implied_predicates = P.get_implied_predicates predicates in
-      P.merge_preds ~tpe:`Inter (implied_predicates @ input)
-    in
+    let input = P.extend_implied input in
     (* As input now contains all implied predicates, we can filter
        implied.  Its a bit dangerous, as we want to remove implied
        also, so we need to replace with the implied, but not filter on
@@ -222,17 +229,83 @@ let reduce_predicates input rules =
       [] -> []
       | p :: ps ->
         match List.find_map input ~f:(merge p) with
-        (* We dont recuce at all - That should be a seperate step *)
         | None -> p :: inner ps
-        | Some (input', _) when P.is_eq input' p ->
+        | Some (input', _) when P.equal_predicate input' p ->
+          printf "R";
           P.get_implied_predicate p >:: inner ps
-        | Some (_, p) -> p :: inner ps
+        | Some (_, p) ->
+          printf "r";
+          p :: inner ps
     in
     inner predicates
   in
-  List.map ~f:(fun (preds, effects, target) ->
-    map_predicates preds, effects, target
-  ) rules
+  let rules =
+    List.map ~f:(fun (preds, effects, target) ->
+      map_predicates preds, effects, target
+    ) rules
+  in
+  rules, []
+
+let push_common_pred input rules =
+  let is_mem input pred =
+    (* If the predicate already exists in the input, dont use the result *)
+    List.exists ~f:(P.equal_predicate pred) input
+  in
+
+  let common_pred pred preds =
+    match List.find_map ~f:(P.merge_pred ~tpe:`Union pred) preds with
+    | Some pred when not (P.is_always true pred) ->
+      Some pred
+    | _ ->
+      None
+  in
+
+  let _is_exclusive pred preds =
+    P.is_satisfiable (pred :: preds) |> not
+  in
+
+  let rec find_pred_seq pred seq = function
+    | [] ->
+      pred, (List.rev seq), []
+    | ((preds, _, _) as rule) :: rules ->
+      match common_pred pred preds with
+      | Some pred ->
+        find_pred_seq pred (rule :: seq) rules
+      | None ->
+        pred, (List.rev seq), rules
+  in
+
+  let rec inner (pred, seq, head, tail) prev = function
+    | (preds, _, _) as rule :: rules ->
+      let (pred, seq, head, tail) =
+        List.fold ~init:(pred, seq, head, tail) ~f:(fun (pred, seq, head, tail) p ->
+          let (pred', seq', tail') = find_pred_seq p [] (rule :: rules) in
+          printf "%d" (List.length seq');
+          match List.length seq' > List.length seq with
+          | true when not (is_mem input pred') ->
+            printf "!";
+            (pred', seq', prev, tail')
+          | true ->
+            printf "%%";
+            (pred, seq, head, tail)
+          | false ->
+            (pred, seq, head, tail)
+        ) preds
+      in
+      inner (pred, seq, head, tail) (rule :: prev) rules
+    | [] -> (pred, seq, head, tail)
+  in
+
+  let init = ((Ir.True, true), [], rules, []) in
+  let (pred, seq, head, tail) = inner init [] rules in
+  match List.length seq with
+  | n when n < 2 -> rules, []
+  | n ->
+    printf "C";
+    (* Create a new chain *)
+    let new_chain = Chain.create seq (Printf.sprintf "Push common pred: %d" n) in
+    let rules = head @ ([pred], [], Ir.Jump new_chain.id) :: tail in
+    rules, [new_chain]
 
 let rec eliminate_unreachable_rules = function
   | (preds, _effects, target) as rule :: rs when
@@ -244,58 +317,11 @@ let rec eliminate_unreachable_rules = function
 
 (** All predicates which is always true are removed *)
 let remove_true_predicates rules =
-  (* AFU: First map all rules with equivalent protocol or address family *)
   List.map ~f:(fun (preds, effects, target) ->
-    (List.filter_map ~f:(fun pred -> match is_always true pred with
+    (List.filter_map ~f:(fun pred -> match P.is_always true pred with
        | true -> printf "E"; P.get_implied_predicate pred
        | false -> Some pred
     ) preds, effects,target)) rules
-
-let merge_adjecent_rules ~min_merge ~typ chains =
-  let merge acc preds =
-    List.find_map ~f:(fun pred ->
-      P.merge_pred ~tpe:`Union pred acc
-      |> Option.bind ~f:(function
-        | pred when is_always true pred -> P.get_implied_predicate pred
-        | pred -> Some pred
-      )
-    ) preds
-  in
-  let rec inner chains cnt mergeable common_pred rules =
-    let common_pred' =
-      List.hd rules |> Option.bind ~f:(fun (preds, _, _) -> merge common_pred preds)
-    in
-    match common_pred', rules with
-    (* Consider moving rules *)
-    (* We can skip rules, if (for this pred) there exists one thats mutually exclusive *)
-    | Some common_pred, r :: rs ->
-      inner chains cnt (r :: mergeable) common_pred rs
-    | None, rs when List.length mergeable >= min_merge (* && List.length mergeable < cnt *) ->
-      (* We dont want to do this, if |mergable| = |rules|. We dont have the complete size. Maybe send that also *)
-      printf "M";
-      let new_chain = Chain.create (List.rev mergeable) "Reduce2" in
-      let chains = Map.add_exn ~key:new_chain.id ~data:new_chain chains in
-      let rule = ([common_pred], [], Ir.Jump new_chain.id) in
-      let chains, rules = inner chains cnt [] typ rs in
-      chains, rule :: rules
-    | None, r :: rs ->
-      let (chain, rules) = inner chains cnt [] typ rs in
-      let rules = (List.rev mergeable) @ (r :: rules) in
-      chain, rules
-    | _, [] ->
-      chains, List.rev mergeable
-  in
-  Map.data chains
-  |> List.fold ~init:(Map.empty (module Ir.Chain_id)) ~f:(fun acc ({ id; rules; _ } as chain) ->
-    let acc, rules = inner acc (List.length rules) [] typ rules in
-    Map.add_exn acc ~key:id ~data:{ chain with rules }
-  )
-
-let merge_all_rules ~min_merge chains =
-  List.fold_left ~init:chains ~f:(fun chains typ ->
-    merge_adjecent_rules ~min_merge ~typ chains
-  ) P.false_predicates
-
 
 (** Push predicates to sub-chains if the predicate are already present on the subchains
     This only works for chains that has only one reference.
@@ -371,6 +397,23 @@ let push_predicates ~min_push chains =
     | _ -> chains
   ) chains
 
+(** Always inline chains when a chain ends with a jump *)
+
+let tail_inline chains =
+  Map.keys chains
+  |> List.fold ~init:chains ~f:(fun chains chain_id ->
+    let chain = Map.find_exn chains chain_id in
+    let rules =
+      match List.rev chain.rules with
+      | ([], [], Ir.Jump target) :: rules_rev ->
+        let target = Map.find_exn chains target in
+        List.rev_append rules_rev target.rules
+      | rules -> List.rev rules
+    in
+    Map.set chains ~key:chain_id ~data:{ chain with rules }
+  )
+
+
 let reduce_chain_indegree ~max_indegree chains =
   let folding_map_chain_rules chains ~(init:'acc) ~(f: 'acc -> 'rule -> 'acc * 'rule) =
     let keys = Map.keys chains in
@@ -407,40 +450,27 @@ let reduce_chain_indegree ~max_indegree chains =
     | _, _ -> chains
   ) chains
 
-let remove_transient_chains chains =
-  (* Make a map of transient chains *)
-  let transient_chains =
-    Map.fold ~init:(Map.empty (module Chain_id)) ~f:(fun ~key ~data acc ->
-      match data with
-      | { rules = [([], [], Ir.Jump id)]; _ } -> Map.set acc ~key ~data:id
-      | _ -> acc
-    ) chains
-  in
-  map_chain_rules ~f:(fun rules ->
-    List.map ~f:(function
-      | (preds, effects, Ir.Jump id) when Map.mem transient_chains id ->
-        (preds, effects, Ir.Jump (Map.find_exn transient_chains id))
-      | rule -> rule
-    ) rules
-  ) chains
-
 let _ = reduce_predicates, remove_unsatisfiable_rules, map_rules_input
 
+(* If a chain ends in a jump, inline that chain *)
 
 let optimize_pass ~stage chains =
   let (@@) a b = a ~f:b in
   let optimize_functions =
     [
-      [  1;   ], map_rules_input ~f:remove_unsatisfiable_rules;
       [  0;   ], reduce_chain_indegree ~max_indegree:max_chain_indegree;
       [  0;   ], push_predicates ~min_push;
-      [  0;   ], map_chain_rules @@ eliminate_unreachable_rules;
-      [  0;   ], map_chain_rules @@ remove_true_predicates;
-      [  0;   ], map_chain_rules @@ remove_empty_rules;
+      [  1;   ], map_rules_input @@ remove_unsatisfiable_rules;
+      [  1;   ], map_rules_input @@ reduce_predicates;
+      [  1;   ], map_rules_input @@ remove_implied_predicates;
+      [  1;   ], map_chain_rules @@ eliminate_unreachable_rules;
+      [  1;   ], map_chain_rules @@ remove_true_predicates;
+      [  1;   ], map_chain_rules @@ remove_empty_rules;
       [  1;   ], remove_unreferenced_chains;
-      [  0;   ], remove_transient_chains;
-      [0;     ], merge_all_rules ~min_merge; (* This expands. We cannot call this repeatably, as it will continue to push predicates *)
-      [  1;   ], inline_chains ~max_rules:2;
+      [  1;   ], tail_inline;
+      [  2;   ], map_rules_input @@ push_common_pred;
+      [  1;   ], inline_chains ~max_rules:5;
+      [  2;   ], inline_chains ~max_rules:1;
     ]
   in
 

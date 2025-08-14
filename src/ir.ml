@@ -275,39 +275,6 @@ let compare_predicate (pred1, neg1) (pred2, neg2) =
     end
   | n -> n
 
-(** Test if expr always evaluates to value *)
-let is_always value =
-  let open Poly in
-  function
-  | State states, neg -> State.is_empty states && (neg = value)
-  | Zone (_, zs), neg -> Set.is_empty zs && (neg = value)
-  | Ports (_, _, ps), neg -> Set.is_empty ps && (neg = value)
-  | Protocol s, neg -> Set.is_empty s && (neg = value)
-  | TcpFlags (flags, mask), neg when Set.is_empty flags && Set.is_empty mask -> neg <> value
-  | TcpFlags (flags, mask), neg when not (Set.is_subset ~of_:mask flags) -> neg = value
-  | TcpFlags _, _ -> false
-  | Ip6Set (_, s), neg when Ip6.equal s (Ip6.singleton (Ipaddr.V6.Prefix.of_string_exn "::/0")) -> neg <> value
-  | Ip6Set (_, s), neg -> Ip6.is_empty s && (neg = value)
-  | Ip4Set (_, s), neg when Ip4.equal s (Ip4.singleton (Ipaddr.V4.Prefix.of_string_exn "0.0.0.0/0")) -> neg <> value
-  | Ip4Set (_, s), neg -> Ip4.is_empty s && (neg = value)
-  | Interface (_, ifs), neg -> Set.is_empty ifs && (neg = value)
-  | If_group (_, if_groups), neg -> Set.is_empty if_groups && (neg = value)
-  | Icmp6 is, neg -> Set.is_empty is && (neg = value)
-  | Icmp4 is, neg -> Set.is_empty is && (neg = value)
-  | Hoplimit cnts, neg -> Set.is_empty cnts && (neg = value)
-  | True, neg -> neg <> value
-  | Mark (value_, mask), neg when value_ = 0 && mask = 0 -> neg <> value
-  | Mark (_, mask), neg when mask = 0 -> neg = value
-  | Mark _, _ -> false
-  | Address_family a, neg ->
-    (* Make sure to warn if we extend address_family *)
-    match Set.to_list a with
-    | [] -> neg = value
-    | _ :: _ :: _ -> neg <> value
-    | [(Ipv4|Ipv6)] -> false
-
-
-
 type string = id [@@ocaml.warning "-34"]
 type int = mask [@@ocaml.warning "-34"]
 type bool = pol [@@ocaml.warning "-34"]

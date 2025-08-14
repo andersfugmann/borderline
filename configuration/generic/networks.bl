@@ -6,7 +6,7 @@ define ipv6_link_local               = fe80::/10
 # Refine at a later point - use iana specifications
 define ipv4_global_networks = 0.0.0.0/0
 define ipv6_global_networks = [ ::/0 ]
-define ipv4_local_networks = [ 0.0.0.0, ipv4_multicast ]
+define ipv4_local_networks = [ ipv4_multicast ]
 define ipv6_local_networks = [ ipv6_multicast, ipv6_link_local ]
 
 # Multicast addresses
