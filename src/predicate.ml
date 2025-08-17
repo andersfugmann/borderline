@@ -272,11 +272,13 @@ let rec get_implied_predicates = function
     | Some p -> p :: get_implied_predicates (p :: ps)
 
 (* O(N^2) - I know. But N < 30 (constant) so its ok *)
-let merge_preds ?tpe preds =
+(* Bug: Merge preds ~tpe:`Union have very different semantics *)
+(* Create different functions for each type *)
+let inter_preds preds =
   let rec inner acc pred = function
     | [] -> pred, acc
     | p :: ps ->
-      match merge_pred ?tpe pred p with
+      match merge_pred ~tpe:`Inter pred p with
       | None -> inner (p :: acc) pred ps
       | Some pred -> inner acc pred ps
   in
@@ -292,16 +294,32 @@ let merge_preds ?tpe preds =
   |> merge
   |> List.filter ~f:(fun pred -> is_always true pred |> not)
 
+let union_preds preds_list =
+  let preds_list =
+    List.map ~f:inter_preds preds_list
+  in
+  match preds_list with
+  | [] -> []
+  | preds :: [] -> preds
+  | preds :: rest ->
+    List.filter_map ~f:(fun pred ->
+      List.fold_until ~finish:Option.some ~init:pred ~f:(fun pred preds ->
+        match List.find_map ~f:(merge_pred ~tpe:`Union pred) preds with
+        | None -> Continue_or_stop.Stop None
+        | Some pred -> Continue_or_stop.Continue pred
+      ) rest
+    ) preds
+
 let is_subset b ~of_:a =
   merge_pred ~tpe:`Union a b |> Option.value_map ~f:(eq_pred a) ~default:false
 
 let is_satisfiable preds =
-  merge_preds preds
+  inter_preds preds
   |> List.exists ~f:(is_always false)
   |> not
 
 let preds_all_true preds =
-  merge_preds preds
+  inter_preds preds
   |> List.for_all ~f:(is_always true)
 
 let equal_predicate a b =

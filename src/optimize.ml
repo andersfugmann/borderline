@@ -10,14 +10,9 @@ module P = Predicate
 type string = id [@@ocaml.warning "-34"]
 
 (**
-   Bug: Zone marking for Mars gets pushed down.
    - Marking of zones is an effect. Verify that effects are not ignored when inlining.
-   - Cannot take union for inputs and use a ground truth.
-   - Merging inputs. Only if a predicate is present in all inputs, we can take the union.
-     - If a predicate is not present in any of the chain inputs, we can only assume True.
-
-
    - Ideas: Define upper bound for zones
+
    - duplicate negates predicates to remaining chains when the target is terminal.
      - a -> drop
      - b & c -> X => ^a & b & c -> X
@@ -148,13 +143,12 @@ let map_chains_inputs chains =
     List.fold_map ~init:(Map.empty (module Chain_id)) ~f:(fun inputs chain ->
       let input =
         Map.find_multi inputs chain.id
-        |> List.concat
-        |> P.merge_preds ~tpe:`Union (* All of them! Yes. *)
+        |> P.union_preds
       in
       let inputs =
         List.fold ~init:inputs ~f:(fun inputs -> function
           | (preds, _, Jump id) ->
-            let input = P.merge_preds ~tpe:`Inter (input @ preds) in
+            let input = P.inter_preds (input @ preds) in
             Map.add_multi inputs ~key:id ~data:input
           | _ -> inputs
         ) chain.rules
@@ -275,7 +269,7 @@ let remove_implied_predicates input rules =
 
 let reduce_predicates input rules =
   let map_predicates predicates =
-    let input = P.merge_preds input in
+    let input = P.inter_preds input in
     (* As input now contains all implied predicates, we can filter
        implied.  Its a bit dangerous, as we want to remove implied
        also, so we need to replace with the implied, but not filter on
@@ -326,10 +320,6 @@ let push_common_pred input rules =
       None
   in
 
-  let _is_exclusive pred preds =
-    P.is_satisfiable (pred :: preds) |> not
-  in
-
   let rec find_pred_seq pred seq = function
     | [] ->
       pred, (List.rev seq), []
@@ -349,7 +339,7 @@ let push_common_pred input rules =
           match List.length seq' > List.length seq with
           | true when not (is_mem input pred') ->
             printf "!";
-            (pred', seq', prev, tail')
+            (pred', seq', List.rev prev, tail') (* This is not the spot, I think *)
           | true ->
             printf "%%";
             (pred, seq, head, tail)
@@ -522,7 +512,7 @@ let optimize_pass ~stage chains =
     [
       [  0;   ], reduce_chain_indegree ~max_indegree:max_chain_indegree;
       [  0;   ], push_predicates ~min_push;
-      [  2;   ], map_chain_rules @@ map_predicates @@ P.merge_preds;
+      [  2;   ], map_chain_rules @@ map_predicates @@ P.inter_preds;
       [  2;   ], map_rules_input @@ remove_unsatisfiable_rules;
       [  2;   ], map_rules_input @@ reduce_predicates;
       [  2;   ], map_rules_input @@ remove_implied_predicates;
