@@ -19,8 +19,8 @@ let is_temp = function
   | Chain_id.Temporary _ -> true
   | _ -> false
 
-
-let chains = ref (Map.empty (module Ir.Chain_id))
+let empty = Map.empty (module Ir.Chain_id)
+let chains = ref empty
 
 (** Select all chains that satisfies pred *)
 let filter pred chains : Ir.chain list =

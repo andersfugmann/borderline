@@ -76,6 +76,11 @@ module Direction = struct
     | "src" | "source" -> Source
     | "dst" | "destination" -> Destination
     | s -> parse_error ~id:s ~pos "'source' or 'destination' expected"
+
+  let to_string = function
+    | Source -> "source"
+    | Destination -> "destination"
+
 end
 
 module Reject = struct
@@ -109,7 +114,7 @@ type predicate = Interface of Direction.t * id Set.t
                | Address_family of address_family Set.t
                | True
 
-let string_of_predicate =
+let predicate_to_string =
   let sprintf = Printf.sprintf in
   let int_set_to_list l =
     Set.to_list l
@@ -139,11 +144,6 @@ let string_of_predicate =
     Printf.sprintf "Hoplimit %s" (int_set_to_list l)
   | Address_family s -> Printf.sprintf "Address_family [%s] "(Set.to_list s |> List.map ~f:show_address_family |> String.concat ~sep:";")
   | True -> "True"
-
-let string_of_predicates preds =
-  List.map ~f:(fun (p, n) -> Printf.sprintf "(%s,%b)" (string_of_predicate p) n) preds
-  |> String.concat ~sep:"; "
-  |> Printf.sprintf "[ %s ]"
 
 type effect_ = MarkZone of Direction.t * zone
              | Counter

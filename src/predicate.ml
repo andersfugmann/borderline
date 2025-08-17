@@ -5,6 +5,16 @@ open Poly
 module Ip6 = Ipset.Ip6
 module Ip4 = Ipset.Ip4
 
+type t = Ir.predicate * bool
+
+let to_string (p, n) =
+  Printf.sprintf "(%s,%b)" (Ir.predicate_to_string p) n
+
+let string_of_predicates preds =
+  List.map ~f:(to_string) preds
+  |> String.concat ~sep:"; "
+  |> Printf.sprintf "[ %s ]"
+
 
 (** List of predicates that always results in true *)
 let true_predicates =
@@ -43,6 +53,7 @@ let false_predicates = List.map ~f:(fun (pred, neg) -> pred, not neg) true_predi
 let is_always value =
   let open Poly in
   function
+  | State states, neg when State.equal states State.all -> (neg <> value)
   | State states, neg -> State.is_empty states && (neg = value)
   | Zone (_, zs), neg -> Set.is_empty zs && (neg = value)
   | Ports (_, _, ps), neg -> Set.is_empty ps && (neg = value)
@@ -55,7 +66,7 @@ let is_always value =
   | Ip4Set (_, s), neg when Ip4.equal s (Ip4.singleton (Ipaddr.V4.Prefix.of_string_exn "0.0.0.0/0")) -> neg <> value
   | Ip4Set (_, s), neg -> Ip4.is_empty s && (neg = value)
   | Interface (_, ifs), neg -> Set.is_empty ifs && (neg = value)
-  | If_group (_, if_groups), neg -> Set.is_empty if_groups && (neg = value)
+  | If_group (_, ifs), neg -> Set.is_empty ifs && (neg = value)
   | Icmp6 is, neg -> Set.is_empty is && (neg = value)
   | Icmp4 is, neg -> Set.is_empty is && (neg = value)
   | Hoplimit cnts, neg -> Set.is_empty cnts && (neg = value)
@@ -70,8 +81,6 @@ let is_always value =
     | _ :: _ :: _ -> neg <> value
     | [(Ipv4|Ipv6)] -> false
 
-let string_of_predicate (p, n) =
-  Printf.sprintf "(%s,%b)" (string_of_predicate p) n
 
 let merge_pred ?(tpe=`Inter) a b =
   (* !A => !B => X   =>  !(A | B) => X
@@ -117,10 +126,6 @@ let merge_pred ?(tpe=`Inter) a b =
   let merge_sets a b = merge Set.inter Set.union Set.diff a b in
 
   match a, b with
-  | (Interface (dir, is), neg), (Interface (dir', is'), neg') when dir = dir' ->
-    let (is'', neg'') = merge_sets (is, neg) (is', neg') in
-    (Interface (dir, is''), neg'') |> Option.some
-  | (Interface _, _), _ -> None
   | (State s, neg), (State s', neg') ->
     let (s'', neg'') = merge_states (s, neg) (s', neg') in
     (State s'', neg'') |> Option.some
@@ -168,8 +173,12 @@ let merge_pred ?(tpe=`Inter) a b =
   | (True, _), _  -> None
   | (If_group (dir, ifs), neg), (If_group (dir', ifs'), neg') when dir = dir' ->
     let (ifs'', neg'') = merge_sets (ifs, neg) (ifs', neg') in
-    Some (If_group (dir, ifs''), neg'')
+    (If_group (dir, ifs''), neg'') |> Option.some
   | (If_group _, _), _  -> None
+  | (Interface (dir, is), neg), (Interface (dir', is'), neg') when dir = dir' ->
+    let (is'', neg'') = merge_sets (is, neg) (is', neg') in
+    (Interface (dir, is''), neg'') |> Option.some
+  | (Interface _, _), _ -> None
   | (Mark _, _), _ -> None
   | (Hoplimit limits, neg), (Hoplimit limits', neg') ->
     let (limits, neg) = merge_sets (limits, neg) (limits', neg') in
@@ -253,20 +262,6 @@ let get_implied_predicate pred =
     end
   | Ir.Address_family _, _ -> None
 
-(* O(N^2) - I know. But N < 30 (constant) so its ok *)
-let rec merge_preds ~tpe =
-  let rec inner acc pred = function
-    | [] -> pred, acc
-    | p :: ps ->
-      match merge_pred ~tpe pred p with
-      | None -> inner (p :: acc) pred ps
-      | Some pred -> inner acc pred ps
-  in
-  function
-  | [] -> []
-  | p :: ps ->
-    let pred, rest = inner [] p ps in
-    pred :: merge_preds ~tpe rest
 
 (** Only return implied predicates *)
 let rec get_implied_predicates = function
@@ -276,27 +271,37 @@ let rec get_implied_predicates = function
     | None -> get_implied_predicates ps
     | Some p -> p :: get_implied_predicates (p :: ps)
 
-let extend_implied preds =
-  let rec inner = function
+(* O(N^2) - I know. But N < 30 (constant) so its ok *)
+let merge_preds ?tpe preds =
+  let rec inner acc pred = function
+    | [] -> pred, acc
+    | p :: ps ->
+      match merge_pred ?tpe pred p with
+      | None -> inner (p :: acc) pred ps
+      | Some pred -> inner acc pred ps
+  in
+  let rec merge =
+    function
     | [] -> []
     | p :: ps ->
-      match get_implied_predicate p with
-      | Some p' -> p :: inner (p' :: ps)
-      | None -> p :: inner ps
+      let pred, rest = inner [] p ps in
+      pred :: merge rest
   in
-  inner preds
-  |> merge_preds ~tpe:`Inter
+  get_implied_predicates preds
+  |> List.rev_append preds
+  |> merge
+  |> List.filter ~f:(fun pred -> is_always true pred |> not)
 
 let is_subset b ~of_:a =
   merge_pred ~tpe:`Union a b |> Option.value_map ~f:(eq_pred a) ~default:false
 
 let is_satisfiable preds =
-  extend_implied preds
+  merge_preds preds
   |> List.exists ~f:(is_always false)
   |> not
 
 let preds_all_true preds =
-  extend_implied preds
+  merge_preds preds
   |> List.for_all ~f:(is_always true)
 
 let equal_predicate a b =
@@ -457,7 +462,7 @@ module Test = struct
           "a / x", merge_pred ~tpe:`Diff a x |> Option.value_exn;
           "a / x", merge_pred ~tpe:`Diff a x |> Option.value_exn
         ]
-        |> List.map ~f:(fun (s, v) -> Printf.sprintf "%s: %s" s (string_of_predicate v))
+        |> List.map ~f:(fun (s, v) -> Printf.sprintf "%s: %s" s (to_string v))
         |> String.concat ~sep:"\n"
         |> Stdio.eprintf "%s %s\n" (Ipaddr.V6.Prefix.of_string_exn "::/0" |> Ipaddr.V6.Prefix.to_string)
 
@@ -466,7 +471,7 @@ module Test = struct
       "is_true" >:: begin fun _ ->
         List.iteri ~f:(fun i pred ->
           let msg =
-            Printf.sprintf "Predicate %s (index %d) should always be true" (string_of_predicate pred) i
+            Printf.sprintf "Predicate %s (index %d) should always be true" (to_string pred) i
           in
           assert_bool msg (is_always true pred)
         ) true_predicates
