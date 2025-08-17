@@ -12,16 +12,15 @@ type string = id [@@ocaml.warning "-34"]
 (**
    Bug: Zone marking for Mars gets pushed down.
    - Marking of zones is an effect. Verify that effects are not ignored when inlining.
-   - Cannot take union for inputs and use a ground truth. Thats an overapproximation!
-   - Maybe inputs should be dropped when there a multiple.
-     - but as long as we are only considering one predicate at a time, I think its ok!
-     - That needs to be verified
+   - Cannot take union for inputs and use a ground truth.
+   - Merging inputs. Only if a predicate is present in all inputs, we can take the union.
+     - If a predicate is not present in any of the chain inputs, we can only assume True.
+
 
    - Ideas: Define upper bound for zones
    - duplicate negates predicates to remaining chains when the target is terminal.
      - a -> drop
      - b & c -> X => ^a & b & c -> X
-   - Add comment for effect to mark zone.
 
    in general:
     - a & b -> drop
