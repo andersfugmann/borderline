@@ -127,7 +127,7 @@ let remap_chain_ids chains =
       let rules =
         List.map ~f:(function
             | (preds, effects, Ir.Jump target) ->
-              let target = Map.find chain_map id |> Option.value ~default:target in
+              let target = Map.find chain_map target |> Option.value ~default:target in
               (preds, effects, Ir.Jump target)
             | rule -> rule
           ) rules
