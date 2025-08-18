@@ -461,31 +461,6 @@ module Test = struct
 
       end;
 
-      "ip6set diff" >:: begin fun _ ->
-        let make lst n =
-          lst
-          |> List.map ~f:Ipaddr.V6.Prefix.of_string_exn
-          |> Ip6.of_list
-          |> fun v -> Ir.Ip6Set (Ir.Direction.Source, v), n
-        in
-        let a = make ["2000::/3"; "fe80::/10"; "ff02::1:2/128"] false in
-        let x = make ["2000::/3"; "fe80::/10"] false in
-        let y = make ["fe80::/10"; "ff02::1:2/128"] false in
-        let z = make ["2000::/3"] false in
-
-        [ "a", a;
-          "x", x;
-          "y", y;
-          "z", z;
-          "a / x", merge_pred ~tpe:`Diff a x |> Option.value_exn;
-          "a / x", merge_pred ~tpe:`Diff a x |> Option.value_exn
-        ]
-        |> List.map ~f:(fun (s, v) -> Printf.sprintf "%s: %s" s (to_string v))
-        |> String.concat ~sep:"\n"
-        |> Stdio.eprintf "%s %s\n" (Ipaddr.V6.Prefix.of_string_exn "::/0" |> Ipaddr.V6.Prefix.to_string)
-
-      end;
-
       "is_true" >:: begin fun _ ->
         List.iteri ~f:(fun i pred ->
           let msg =
@@ -494,5 +469,15 @@ module Test = struct
           assert_bool msg (is_always true pred)
         ) true_predicates
       end;
+
+      "is_false" >:: begin fun _ ->
+        List.iteri ~f:(fun i pred ->
+          let msg =
+            Printf.sprintf "Predicate %s (index %d) should always be true" (to_string pred) i
+          in
+          assert_bool msg (is_always false pred)
+        ) false_predicates
+      end;
+
     ]
 end
