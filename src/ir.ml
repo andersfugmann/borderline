@@ -48,6 +48,10 @@ module Port_type = struct
     | "tcp" -> Tcp
     | "udp" -> Udp
     | _ -> parse_error ~id ~pos "'tcp' or 'udp' expected"
+
+  let to_string = function
+    | Tcp -> "tcp"
+    | Udp -> "udp"
 end
 
 module Tcp_flags = struct
@@ -123,17 +127,17 @@ let predicate_to_string =
     |> Printf.sprintf "[ %s ]"
   in
   let string_of_dir = function
-    | Direction.Source -> "s"
-    | Direction.Destination -> "d"
+    | Direction.Source -> "src"
+    | Direction.Destination -> "dst"
   in
   function
-  | Interface (_, _) -> "Interface"
+  | Interface (dir, is) -> sprintf "Interface (%s,[%s])" (string_of_dir dir) (Set.to_list is |> String.concat ~sep:";")
   | If_group (_, _) -> "If_group"
-  | Zone (_, _) -> "Zone"
+  | Zone (dir, zs) -> sprintf "Zone (%s, [%s])" (string_of_dir dir) (Set.to_list zs |> String.concat ~sep:";")
   | State _ -> "State"
-  | Ports (_, _, _) -> "Ports"
-  | Ip6Set (d, s) -> sprintf "Ip6Set(%d),%s" (Ip6.IpSet.length s) (string_of_dir d)
-  | Ip4Set (d, s) -> sprintf "Ip4Set(%d),%s" (Ip6.IpSet.length s) (string_of_dir d)
+  | Ports (dir, tpe, ports) -> sprintf "Ports (%s, %s, %s)" (string_of_dir dir) (Port_type.to_string tpe) (int_set_to_list ports)
+  | Ip6Set (d, s) -> sprintf "Ip6Set (%d),%s" (Ip6.IpSet.length s) (string_of_dir d)
+  | Ip4Set (d, s) -> sprintf "Ip4Set (%d),%s" (Ip6.IpSet.length s) (string_of_dir d)
   | Protocol s ->
     Printf.sprintf "Protocol %s" (int_set_to_list s)
   | Icmp6 _ -> "Icmp6"
@@ -275,6 +279,6 @@ let compare_predicate (pred1, neg1) (pred2, neg2) =
     end
   | n -> n
 
-type string = id [@@ocaml.warning "-34"]
-type int = mask [@@ocaml.warning "-34"]
-type bool = pol [@@ocaml.warning "-34"]
+type string = String.t [@@ocaml.warning "-34"]
+type int = Int.t [@@ocaml.warning "-34"]
+type bool = Bool.t [@@ocaml.warning "-34"]

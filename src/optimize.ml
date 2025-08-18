@@ -202,33 +202,47 @@ let rec join_rules_with_same_target =
     P.merge_pred ~tpe:`Union pred pred'
     |> Option.value_map ~f:(P.is_always true) ~default:false
   in
+
+  let common preds preds' =
+    List.filter ~f:(fun pred ->
+      List.exists ~f:(P.equal_predicate pred) preds'
+    ) preds
+  in
+  (* Return common, uniq_a, uniq_b *)
   let mutual_differences preds1 preds2 =
     let exclusive p p' =
       List.filter ~f:(fun pred ->
         List.exists ~f:(P.equal_predicate pred) p' |> not)
         p
     in
-    let common preds preds' =
-      List.filter ~f:(fun pred ->
-        List.exists ~f:(P.equal_predicate pred) preds'
-      ) preds
-    in
-
     let common = common preds1 preds2 in
     let preds1' = exclusive preds1 common in
     let preds2' = exclusive preds2 common in
     common, preds1', preds2'
   in
 
+  let can_merge (preds, effects, target) = function
+    | (preds', effects', target') when
+        equal_target target target' &&
+        eq_effects effects effects' ->
+      begin
+        match mutual_differences preds preds' with
+        | (_common, [pred], [pred']) -> is_union_true pred pred'
+        | (_common, [], _)
+        | (_common, _, []) -> true
+        | _ -> false
+      end
+    | _ -> false
+  in
+
   function
-  | ((preds, effects, target) as rule1) :: ((preds', effects', target') as rule2) :: rules when
-      equal_target target target' &&
-      eq_effects effects effects' ->
-    begin match mutual_differences preds preds' with
-    | (common, [pred], [pred']) when is_union_true pred pred' ->
-      (common, effects, target) :: join_rules_with_same_target rules
-    | _ -> rule1 :: join_rules_with_same_target (rule2 :: rules)
-    end
+  | ((preds1, effects, target) as rule1) :: ((preds2, _, _) as rule2) :: rules when can_merge rule1 rule2 ->
+    let common = common preds1 preds2 in
+    join_rules_with_same_target ((common, effects, target) :: rules)
+  | ((preds1, effects, target) as rule1) :: ((preds3, _, _) as rule3) :: ((preds2, _, _) as rule2) :: rules
+    when can_merge rule1 rule2 && P.disjoint preds3 preds2 ->
+    let common = common preds1 preds2 in
+    join_rules_with_same_target ((common, effects, target) :: rule3 :: rules)
   | rule :: rules ->
     rule :: join_rules_with_same_target rules
   | [] -> []

@@ -8,7 +8,7 @@ module Ip4 = Ipset.Ip4
 type t = Ir.predicate * bool
 
 let to_string (p, n) =
-  Printf.sprintf "(%s,%b)" (Ir.predicate_to_string p) n
+  Printf.sprintf "%s, %b" (Ir.predicate_to_string p) n
 
 let string_of_predicates preds =
   List.map ~f:(to_string) preds
@@ -317,6 +317,10 @@ let is_satisfiable preds =
   inter_preds preds
   |> List.exists ~f:(is_always false)
   |> not
+
+let disjoint preds preds' =
+  inter_preds (preds @ preds')
+  |> List.exists ~f:(is_always false)
 
 let preds_all_true preds =
   inter_preds preds
