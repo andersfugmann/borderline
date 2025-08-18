@@ -473,7 +473,7 @@ module Test = struct
       "is_false" >:: begin fun _ ->
         List.iteri ~f:(fun i pred ->
           let msg =
-            Printf.sprintf "Predicate %s (index %d) should always be true" (to_string pred) i
+            Printf.sprintf "Predicate %s (index %d) should always be false" (to_string pred) i
           in
           assert_bool msg (is_always false pred)
         ) false_predicates
