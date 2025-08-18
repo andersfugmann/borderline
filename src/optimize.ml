@@ -125,15 +125,12 @@ let remap_chain_ids chains =
   |> List.map ~f:(fun ({ id; rules; _ } as rule) ->
       let id = Map.find chain_map id |> Option.value ~default:id in
       let rules =
-        List.map ~f:(fun (preds, effects, target) ->
-          let target =
-            match target with
-            | Ir.Jump target ->
-              Ir.Jump (Map.find chain_map target |> Option.value ~default:id)
-            | _ -> target
-          in
-          (preds, effects, target)
-        ) rules
+        List.map ~f:(function
+            | (preds, effects, Ir.Jump target) ->
+              let target = Map.find chain_map id |> Option.value ~default:target in
+              (preds, effects, Ir.Jump target)
+            | rule -> rule
+          ) rules
       in
       { rule with id; rules }
   )
