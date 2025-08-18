@@ -388,7 +388,7 @@ let remove_true_predicates rules =
     ) preds, effects,target)) rules
 
 (** Push predicates to sub-chains if the predicate are already present on the subchains
-    *This only works for chains that has only one reference.
+  * This only works for chains that has only one reference.
 *)
 let push_predicates ~min_push chains =
   (* Replace the chain with a chain where all rules have been extended with pred *)
