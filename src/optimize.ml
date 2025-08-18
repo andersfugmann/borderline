@@ -11,11 +11,23 @@ type string = id [@@ocaml.warning "-34"]
 
 (**
    - Marking of zones is an effect. Verify that effects are not ignored when inlining.
-   - Ideas: Define upper bound for zones
+   - Merge pass creates merges partial merges. Rethink the recursive approach.
 
-   - duplicate negates predicates to remaining chains when the target is terminal.
-     - a -> drop
-     - b & c -> X => ^a & b & c -> X
+   - Ideas:
+     * Define upper bound for zones
+     * duplicate negates predicates to remaining chains when the target is terminal.
+       - a -> drop
+       - b & c -> X => ^a & b & c -> X
+     * Don't push predicates if we are going to test for all predicates anyways?
+     * Understand why guest iiface is not part of the push?
+     * Effects on setting zone should be considered on following inputs.
+       ( But that is dangerous, as we may override later, and not intersect )
+     * Skip rules when merging if any of the predicates are exclusive
+     * Create function 'P.disjoint'. Two sets of predicates are
+       provable disjoint if there exists a merged predicates that always
+       evaluates to false. Remember to include derived predicates, so
+       ipv4 and ipv6 is considered disjoint.
+
 
    in general:
     - a & b -> drop

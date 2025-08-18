@@ -10,7 +10,7 @@ define local_zones += []
 define block_global_bogons = false
 
 # Filter based on iana allocations.
-define allocations = false
+define allocations = true
 
 # List of ports all machines guarded by the firewall can be contacted.
 # See commmon.bl
