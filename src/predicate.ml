@@ -292,7 +292,6 @@ let inter_preds preds =
   get_implied_predicates preds
   |> List.rev_append preds
   |> merge
-  |> List.filter ~f:(fun pred -> is_always true pred |> not)
 
 let union_preds preds_list =
   let preds_list =

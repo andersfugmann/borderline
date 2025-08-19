@@ -5,6 +5,8 @@ module F = Frontend
 module Ip4 = Ipset.Ip4
 module Ip6 = Ipset.Ip6
 
+type t = Predicate.t list * Ir.effects * Ir.target
+
 let pos_of = function
   | F.Number (_, pos)
   | F.String (_, pos)
