@@ -171,14 +171,14 @@ let map_chains_inputs chains =
 let map_rules_input ~f chains =
   map_chains_inputs chains
   |> List.concat_map ~f:(fun (input, chain) ->
-    let rules, new_chains = f input chain.rules in
+    let rules, new_chains = f chains input chain.rules in
     { chain with rules } :: new_chains
   )
   |> List.map ~f:(fun chain -> chain.id, chain)
   |> Map.of_alist_exn (module Chain_id)
 
 
-let remove_unsatisfiable_rules input rules =
+let remove_unsatisfiable_rules _chains input rules =
   (* Removing complete rules due to unsatifiability is ok *)
   let rules =
     List.filter ~f:(fun (preds, _, _) ->
@@ -280,7 +280,7 @@ let inline_chains ~max_rules chains =
       chains
   )
 
-let remove_implied_predicates input rules =
+let remove_implied_predicates _chains input rules =
   let rules =
     List.map ~f:(fun (preds, effects, target) ->
       let implied_predicates = P.get_implied_predicates (preds @ input) in
@@ -290,36 +290,45 @@ let remove_implied_predicates input rules =
   in
   rules, []
 
-let push_common_predicates input (rules : Rule.t list) =
+let push_common_predicates ~find_pred chains input (rules : Rule.t list) =
   (* Create a set of merge sequences based in the input predicate *)
   let rec get_seqeuences ~input head rules =
     (* Find a pred where the the type matches *)
-    let find_pred pred preds  =
+    let get_pred_by_type pred preds  =
       List.find ~f:(fun pred' ->
           P.merge_pred ~tpe:`Union pred pred' |> Option.is_some
         ) preds
     in
-    let _find_union_pred pred preds =
-      List.find_map ~f:(fun pred' ->
-          P.merge_pred ~tpe:`Union pred pred'
-        ) preds
+
+    (* Determine if the target and predicates are the same if its a jump target *)
+    let match_effect_and_target (_, effects, target) rule' =
+      let rec inner = function
+        | [] -> true
+        | (_, effects', target') :: rules
+          when Ir.eq_effects effects effects' &&
+               Ir.equal_target target target' ->
+          inner rules
+        | (_, effects', Jump id) :: rules
+          when Ir.eq_effects effects effects' ->
+          Map.find chains id
+          |> Option.value_map ~default:false ~f:(fun { rules; _ } ->
+            inner rules) &&
+          inner rules
+        | _ -> false
+      in
+      inner [rule']
     in
 
-    let find_union_pred pred preds =
-      List.find ~f:(Predicate.equal_predicate pred) preds
-    in
-
-    (** Can rule be pushed below rule? *)
     let can_reorder (preds, effects, target) rules =
       List.for_all ~f:(fun (preds', effects', target') ->
-          (Ir.equal_target target target'  && Ir.eq_effects effects effects' ) ||
+          match_effect_and_target (preds, effects, target) (preds', effects', target') ||
           P.disjoint preds preds') rules
     in
 
     let rec reorder_disjoint pred (acc : Rule.t list) = function
       | [] -> None
       | ((preds, _, _) as rule) :: rules ->
-        match find_union_pred pred preds with
+        match find_pred pred preds with
         | Some pred when can_reorder rule acc ->
           Some (pred, rule, List.rev (acc @ rules))
         | Some _ -> None
@@ -337,7 +346,7 @@ let push_common_predicates input (rules : Rule.t list) =
     match rules with
     | [] -> []
     | ((preds, _, _) as rule) :: rules ->
-      match find_pred input preds with
+      match get_pred_by_type input preds with
       | Some pred ->
         let (pred, seq, tail) = create_seq (pred, []) (rule :: rules) in
         let head', tail' = List.split_n (rule :: rules) (List.length seq) in
@@ -353,20 +362,18 @@ let push_common_predicates input (rules : Rule.t list) =
       | pred :: preds -> pred :: reduce preds
     in
     List.concat_map ~f:(fun (preds, _, _) -> preds) rules
-    |> (fun preds -> P.get_implied_predicates preds @ preds)
+    |> (fun preds -> preds @ P.get_implied_predicates preds)
     |> reduce
   in
 
-  (** The scoring function to select the best candidate. We could also count number of predicates that have been moved *)
-
-  let score (_, _, seq, _) = List.length seq in
+  let rank (_, _, seq, _) = List.length seq in
   let sequence =
     List.concat_map ~f:(fun input ->
         get_seqeuences ~input [] rules
       ) input_predicates
-    (* Remove predicates that have already been filterd in the input *)
-    |> List.filter ~f:(fun (pred, _, _, _) -> List.exists ~f:(fun input -> P.is_subset ~of_:pred input) input |> not)
-    |> List.max_elt ~compare:(fun a b  -> Int.compare (score a) (score b))
+    (* Remove predicates that have already been matched as part of input *)
+    |> List.filter ~f:(fun (pred, _, _, _) -> List.exists ~f:(fun input -> true || P.equal_predicate pred input) input |> not)
+    |> List.max_elt ~compare:(fun a b  -> Int.compare (rank a) (rank b))
   in
   match sequence with
   | Some (pred, head, seq, tail) when List.length seq >= 2 ->
@@ -376,15 +383,22 @@ let push_common_predicates input (rules : Rule.t list) =
     rules, [new_chain]
   | _ -> rules, []
 
-let push_common_predicates input rules =
-  let rec inner acc rules =
-    match push_common_predicates input rules with
-    | rules, [] -> rules, acc
-    | rules, chains -> inner (chains @ acc) rules
+let push_common_predicates_equal =
+  let find_pred pred preds =
+    List.find ~f:(Predicate.equal_predicate pred) preds
   in
-  inner [] rules
+  push_common_predicates ~find_pred
 
-let reduce_predicates input rules =
+let push_common_predicates_union =
+  let find_pred pred preds =
+    List.find_map ~f:(fun pred' ->
+      P.merge_pred ~tpe:`Union pred pred'
+    ) preds
+  in
+  push_common_predicates ~find_pred
+
+
+let reduce_predicates _chains input rules =
   let map_predicates predicates =
     let merge pred input =
       match P.merge_pred ~tpe:`Inter input pred with
@@ -417,7 +431,7 @@ let reduce_predicates input rules =
   in
   rules, []
 
-let push_common_pred input rules =
+let push_common_pred _chains input rules =
   let is_mem input pred =
     (* If the predicate already exists in the input, dont use the result *)
     List.exists ~f:(fun input -> P.is_subset pred ~of_:input) input
@@ -564,7 +578,7 @@ let push_predicates ~min_push chains =
   ) chains
 
 (** Always inline chains when a chain ends with a jump *)
-let tail_inline chains =
+let _tail_inline chains =
   Map.keys chains
   |> List.fold ~init:chains ~f:(fun chains chain_id ->
     let chain = Map.find_exn chains chain_id in
@@ -578,6 +592,21 @@ let tail_inline chains =
     Map.set chains ~key:chain_id ~data:{ chain with rules }
   )
 
+let inline_pure_jumps chains =
+  Map.keys chains
+  |> List.fold ~init:chains ~f:(fun chains chain_id ->
+    let chain = Map.find_exn chains chain_id in
+    let rules =
+      List.concat_map ~f:(function
+        | ([], [], Ir.Jump target) as rule ->
+          printf "P";
+          Map.find chains target
+          |> Option.value_map ~default:[rule] ~f:(fun { rules; _ } -> rules)
+        | rule -> [rule]
+      ) chain.rules
+    in
+    Map.set chains ~key:chain_id ~data:{ chain with rules }
+  )
 
 let reduce_chain_indegree ~max_indegree chains =
   let folding_map_chain_rules chains ~(init:'acc) ~(f: 'acc -> 'rule -> 'acc * 'rule) =
@@ -623,7 +652,8 @@ let optimize_pass ~stage chains =
     [
       [  0;   ], reduce_chain_indegree ~max_indegree:max_chain_indegree;
       [  0;   ], push_predicates ~min_push;
-      [  2;   ], map_rules_input @@ push_common_predicates;
+      [  2;   ], map_rules_input @@ push_common_predicates_equal;
+      [0;     ], map_rules_input @@ push_common_predicates_union;
       [  2;   ], map_chain_rules @@ map_predicates @@ P.inter_preds;
       [  2;   ], map_rules_input @@ remove_unsatisfiable_rules;
       [  2;   ], map_rules_input @@ reduce_predicates;
@@ -633,9 +663,10 @@ let optimize_pass ~stage chains =
       [  2;   ], map_chain_rules @@ remove_empty_rules;
       [  2;   ], map_chain_rules @@ join_rules_with_same_target;
       [  2;   ], remove_unreferenced_chains;
-      [  2;   ], tail_inline;
+      [  2;   ], inline_pure_jumps;
       [  0;   ], map_rules_input @@ push_common_pred;
-      [  2;   ], map_rules_input @@ push_common_predicates;
+      [  0;  0], map_rules_input @@ push_common_predicates_equal;
+      [  0;  0], map_rules_input @@ push_common_predicates_union;
       [1;     ], inline_chains ~max_rules:5;
       [  2;   ], inline_chains ~max_rules:1;
       [    0  ], inline_chains ~max_rules:2;
