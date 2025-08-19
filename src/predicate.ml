@@ -47,7 +47,6 @@ let true_predicates =
   ] @ true_predicates Direction.Destination @ true_predicates Direction.Source
 
 let false_predicates = List.map ~f:(fun (pred, neg) -> pred, not neg) true_predicates
-(* Assumes its possible to create false predicates. Can we veryfy that? *)
 
 (** Test if expr always evaluates to value *)
 let is_always value =

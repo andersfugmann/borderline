@@ -205,7 +205,7 @@ let emit_filter zones =
                         ([], [], Ir.Jump dst_chain.Ir.id) ] in
   (input_opers, output_opers, forward_opers)
 
-let emit_nat (zones : (string * F.zone_stm list) list) : Ir.oper list =
+let emit_nat (zones : (string * F.zone_stm list) list) : Ir.rule list =
   let gen (zone : string) = function
     | F.ZoneSnat (src_zones, ip) ->
       let () = match ip with

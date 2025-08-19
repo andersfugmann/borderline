@@ -158,7 +158,6 @@ type effect_ = MarkZone of Direction.t * zone
 [@@deriving equal]
 
 type effects = effect_ list [@@driving equal]
-let equal_effects = List.equal equal_effect_
 
 type target = Jump of Chain_id.t
             | Accept
@@ -168,9 +167,9 @@ type target = Jump of Chain_id.t
             | Pass (* Not terminal *)
               [@@deriving equal, show]
 
-type oper = (predicate * bool) list * effects * target
+type rule = (predicate * bool) list * effects * target
 
-type chain = { id: Chain_id.t; rules : oper list; comment: string; }
+type chain = { id: Chain_id.t; rules : rule list; comment: string; }
 
 (** Test if two predicates are idential *)
 let eq_pred (x, n) (y, m) =

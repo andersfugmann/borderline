@@ -292,24 +292,35 @@ let remove_implied_predicates input rules =
 
 let push_common_predicates input (rules : Rule.t list) =
   (* Create a set of merge sequences based in the input predicate *)
-  let rec get_seqeuences ~input head =
+  let rec get_seqeuences ~input head rules =
     (* Find a pred where the the type matches *)
     let find_pred pred preds  =
       List.find ~f:(fun pred' ->
           P.merge_pred ~tpe:`Union pred pred' |> Option.is_some
         ) preds
     in
-    let find_union_pred pred preds =
+    let _find_union_pred pred preds =
       List.find_map ~f:(fun pred' ->
           P.merge_pred ~tpe:`Union pred pred'
         ) preds
+    in
+
+    let find_union_pred pred preds =
+      List.find ~f:(Predicate.equal_predicate pred) preds
+    in
+
+    (** Can rule be pushed below rule? *)
+    let can_reorder (preds, effects, target) rules =
+      List.for_all ~f:(fun (preds', effects', target') ->
+          (Ir.equal_target target target'  && Ir.eq_effects effects effects' ) ||
+          P.disjoint preds preds') rules
     in
 
     let rec reorder_disjoint pred (acc : Rule.t list) = function
       | [] -> None
       | ((preds, _, _) as rule) :: rules ->
         match find_union_pred pred preds with
-        | Some pred when List.for_all ~f:(fun (preds', _, _) -> P.disjoint preds preds') acc ->
+        | Some pred when can_reorder rule acc ->
           Some (pred, rule, List.rev (acc @ rules))
         | Some _ -> None
         | None -> reorder_disjoint pred (rule :: acc) rules
@@ -323,16 +334,16 @@ let push_common_predicates input (rules : Rule.t list) =
         | Some (pred, rule, tail) ->
           create_seq (pred, rule :: seq) tail
     in
-    function
+    match rules with
     | [] -> []
     | ((preds, _, _) as rule) :: rules ->
       match find_pred input preds with
       | Some pred ->
         let (pred, seq, tail) = create_seq (pred, []) (rule :: rules) in
-        (* Rules may be reordered, so we cannot use the seq. *)
-        let head', tail' = List.split_n (rule::rules) (List.length seq) in
+        let head', tail' = List.split_n (rule :: rules) (List.length seq) in
         (pred, List.rev head, seq, tail) :: get_seqeuences ~input (List.rev_append head' head) tail'
-      | None -> get_seqeuences ~input (rule :: head) rules
+      | None ->
+        get_seqeuences ~input (rule :: head) rules
   in
   let input_predicates =
     let rec reduce = function
@@ -350,19 +361,20 @@ let push_common_predicates input (rules : Rule.t list) =
 
   let score (_, _, seq, _) = List.length seq in
   let sequence =
-    List.concat_map ~f:(fun input -> get_seqeuences ~input [] rules) input_predicates
+    List.concat_map ~f:(fun input ->
+        get_seqeuences ~input [] rules
+      ) input_predicates
     (* Remove predicates that have already been filterd in the input *)
     |> List.filter ~f:(fun (pred, _, _, _) -> List.exists ~f:(fun input -> P.is_subset ~of_:pred input) input |> not)
-    |> List.filter ~f:(fun (_, _, seq, _) -> List.length seq > 2)
     |> List.max_elt ~compare:(fun a b  -> Int.compare (score a) (score b))
   in
   match sequence with
-  | Some (pred, head, seq, tail) ->
+  | Some (pred, head, seq, tail) when List.length seq >= 2 ->
     printf "V";
     let new_chain = Chain.create seq (Printf.sprintf "Push common pred: %d: %s" (List.length seq) (P.to_string pred)) in
     let rules = head @ ([pred], [], Ir.Jump new_chain.id) :: tail in
     rules, [new_chain]
-  | None -> rules, []
+  | _ -> rules, []
 
 let push_common_predicates input rules =
   let rec inner acc rules =
@@ -611,22 +623,23 @@ let optimize_pass ~stage chains =
     [
       [  0;   ], reduce_chain_indegree ~max_indegree:max_chain_indegree;
       [  0;   ], push_predicates ~min_push;
-      [  2;3;4], map_chain_rules @@ map_predicates @@ P.inter_preds;
-      [  2;3;4], map_rules_input @@ remove_unsatisfiable_rules;
-      [  2;3;4], map_rules_input @@ reduce_predicates;
-      [  2;3;4], map_rules_input @@ remove_implied_predicates;
-      [  2;3;4], map_chain_rules @@ eliminate_unreachable_rules;
-      [  2;3;4], map_chain_rules @@ remove_true_predicates;
-      [  2;3;4], map_chain_rules @@ remove_empty_rules;
-      [  2;3;4], map_chain_rules @@ join_rules_with_same_target;
-      [  2;3;4], remove_unreferenced_chains;
-      [  2;3;4], tail_inline;
+      [  2;   ], map_rules_input @@ push_common_predicates;
+      [  2;   ], map_chain_rules @@ map_predicates @@ P.inter_preds;
+      [  2;   ], map_rules_input @@ remove_unsatisfiable_rules;
+      [  2;   ], map_rules_input @@ reduce_predicates;
+      [  2;   ], map_rules_input @@ remove_implied_predicates;
+      [  2;   ], map_chain_rules @@ eliminate_unreachable_rules;
+      [  2;  4], map_chain_rules @@ remove_true_predicates;
+      [  2;   ], map_chain_rules @@ remove_empty_rules;
+      [  2;   ], map_chain_rules @@ join_rules_with_same_target;
+      [  2;   ], remove_unreferenced_chains;
+      [  2;   ], tail_inline;
       [  0;   ], map_rules_input @@ push_common_pred;
-      [  2;3;4], map_rules_input @@ push_common_predicates;
-      [1;     ], inline_chains ~max_rules:6;
-      [  2;   ], inline_chains ~max_rules:4;
-      [    3; ], inline_chains ~max_rules:2;
-      [      4], inline_chains ~max_rules:1;
+      [  2;   ], map_rules_input @@ push_common_predicates;
+      [1;     ], inline_chains ~max_rules:5;
+      [  2;   ], inline_chains ~max_rules:1;
+      [    0  ], inline_chains ~max_rules:2;
+      [      0], inline_chains ~max_rules:1;
     ]
   in
 
