@@ -1,5 +1,5 @@
 open Base
-type state = New | Established | Related | Invalid | Untracked
+type state = New | Established | Related | Invalid | Untracked [@@deriving compare, sexp, equal, show]
 let of_string (id, pos) =
   match String.lowercase id with
   | "new" -> New

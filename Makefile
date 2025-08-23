@@ -12,6 +12,7 @@ install: release
 
 .PHONY: unittest
 unittest: build
+	dune test
 	dune exec bin/unit_test.exe
 
 .PHONY: test

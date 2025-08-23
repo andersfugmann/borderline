@@ -134,12 +134,11 @@ let predicate_to_string =
   | Interface (dir, is) -> sprintf "Interface (%s,[%s])" (string_of_dir dir) (Set.to_list is |> String.concat ~sep:";")
   | If_group (_, _) -> "If_group"
   | Zone (dir, zs) -> sprintf "Zone (%s, [%s])" (string_of_dir dir) (Set.to_list zs |> String.concat ~sep:";")
-  | State _ -> "State"
+  | State states -> sprintf "State [%s]" (Set.to_list states |> List.map ~f:State.show_state |> String.concat ~sep:";")
   | Ports (dir, tpe, ports) -> sprintf "Ports (%s, %s, %s)" (string_of_dir dir) (Port_type.to_string tpe) (int_set_to_list ports)
   | Ip6Set (d, s) -> sprintf "Ip6Set (%d),%s" (Ip6.IpSet.length s) (string_of_dir d)
   | Ip4Set (d, s) -> sprintf "Ip4Set (%d),%s" (Ip6.IpSet.length s) (string_of_dir d)
-  | Protocol s ->
-    Printf.sprintf "Protocol %s" (int_set_to_list s)
+  | Protocol s -> Printf.sprintf "Protocol %s" (int_set_to_list s)
   | Icmp6 _ -> "Icmp6"
   | Icmp4 _ -> "Icmp4"
   | Mark (_, _) -> "Mark"
@@ -158,6 +157,17 @@ type effect_ = MarkZone of Direction.t * zone
 [@@deriving equal]
 
 type effects = effect_ list [@@driving equal]
+let equal_effects a b =
+  let order = function
+    | MarkZone _ -> 1
+    | Counter -> 2
+    | Notrack -> 3
+    | Log _ -> 4
+    | Snat _ -> 5
+    | Comment _ -> 6
+  in
+  let sort = List.stable_sort ~compare:(fun x y -> compare (order x) (order y)) in
+  List.equal equal_effect_ (sort a) (sort b)
 
 type target = Jump of Chain_id.t
             | Accept
@@ -165,7 +175,7 @@ type target = Jump of Chain_id.t
             | Return
             | Reject of Reject.t
             | Pass (* Not terminal *)
-              [@@deriving equal, show]
+[@@deriving equal, show]
 
 type rule = (predicate * bool) list * effects * target
 
@@ -196,41 +206,12 @@ let eq_pred (x, n) (y, m) =
 let eq_preds a b =
   List.equal eq_pred a b
 
-let eq_rule (preds, effects, action) (preds', effects', action') =
-  let open Poly in
-  action = action' && effects = effects' && eq_preds preds preds'
+let eq_rule (preds, effects, target) (preds', effects', target') =
+  equal_target target target' && equal_effects effects effects' && eq_preds preds preds'
 
 let eq_rules a b =
   List.equal eq_rule a b
 
-let eq_effect a b =
-  let (=) = Poly.equal in
-  match a, b with
-  | MarkZone (dir, zone), MarkZone (dir', zone') -> dir = dir' && zone = zone'
-  | MarkZone _, _ -> false
-  | Counter, Counter -> true
-  | Counter, _ -> false
-  | Comment c, Comment c' -> String.equal c c'
-  | Comment _, _ -> false
-  | Notrack, Notrack -> true
-  | Notrack, _ -> false
-  | Log prefix, Log prefix' -> String.equal prefix prefix'
-  | Log _, _ -> false
-  | Snat (Some ip), Snat (Some ip') -> Ipaddr.V4.equal ip ip'
-  | Snat None, Snat None -> true
-  | Snat _, _ -> false
-
-let eq_effects a b =
-  let order = function
-    | MarkZone _ -> 1
-    | Counter -> 2
-    | Notrack -> 3
-    | Log _ -> 4
-    | Snat _ -> 5
-    | Comment _ -> 6
-  in
-  let sort = List.sort ~compare:(fun x y -> compare (order x) (order y)) in
-  List.equal eq_effect (sort a) (sort b)
 
 let get_dir = function
   | Interface _ -> None

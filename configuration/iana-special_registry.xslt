@@ -71,7 +71,7 @@
 
       <!-- Main define line -->
       <xsl:choose>
-        <xsl:when test="$name_raw = 'Private-Use'">
+        <xsl:when test="$name_raw = 'Private-Use1'">
           <xsl:value-of select="concat('define ', $prefix, '_', $snake_case_name, ' += [',
                                 iana:address, '] # ', $name_raw, '&#10;')" />
         </xsl:when>
