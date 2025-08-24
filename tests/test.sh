@@ -38,14 +38,17 @@ function execute () {
     if (( OKS == EXPECTED && ERRORS == 0 )); then
         echo -n "success"
         let SUCCESS++
-    elif (( OKS == EXPECTED )); then
-        echo -n "warn. Expected (${EXPECTED}, 0). Got:  "
-        let WARN++
     else
-        echo -n "error. Expected (${EXPECTED}, 0). Got:  "
-        let FAILED++
+        if (( OKS == EXPECTED )); then
+            echo -n "warn. Expected (${EXPECTED}, 0). Got:  "
+            let WARN++
+        else
+            echo -n "error. Expected (${EXPECTED}, 0). Got:  "
+            let FAILED++
+        fi
     fi
     echo "(${OKS}, ${ERRORS})"
+
 }
 TESTS=$(ls *.bl | sort)
 for test_file in ${TESTS}; do

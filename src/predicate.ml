@@ -65,7 +65,7 @@ let is_always value =
   | Ip4Set (_, s), neg when Ip4.equal s (Ip4.singleton (Ipaddr.V4.Prefix.of_string_exn "0.0.0.0/0")) -> neg <> value
   | Ip4Set (_, s), neg -> Ip4.is_empty s && (neg = value)
   | Interface (_, ifs), neg -> Set.is_empty ifs && (neg = value)
-  | If_group (_, ifs), neg -> Set.is_empty ifs && (neg = value)
+  | If_group  (_, ifs), neg -> Set.is_empty ifs && (neg = value)
   | Icmp6 is, neg -> Set.is_empty is && (neg = value)
   | Icmp4 is, neg -> Set.is_empty is && (neg = value)
   | Hoplimit cnts, neg -> Set.is_empty cnts && (neg = value)
@@ -190,6 +190,7 @@ let merge_pred ?(tpe=`Inter) a b =
 
 let cardinal_of_pred = function
   | Interface (_, is), _ -> Set.length is
+  | If_group (_, set), _ -> Set.length set
   | State s, _ -> Set.length s
   | Ports (_, _, ports), _ -> Set.length ports
   | Protocol p, _ -> Set.length p
@@ -200,7 +201,6 @@ let cardinal_of_pred = function
   | Zone (_, zones), _ -> Set.length zones
   | TcpFlags (f, _), _ -> Set.length f
   | True, _ -> 1
-  | If_group (_, set), _ -> Set.length set
   | Mark (_, _), _ -> 1
   | Hoplimit limits, _ -> Set.length limits
   | Address_family af, _ -> Set.length af
@@ -225,9 +225,9 @@ let get_implied_predicate pred =
   let make_protocol lst neg = (Ir.Protocol (Set.of_list lst), neg) |> Option.some in
 
   match pred with
-  | Ir.Protocol s, false when Set.is_subset ~of_:ipv4_protocols s && not (Set.is_empty s) -> (* Dont need the guard. We can derive anything from false *)
+  | Ir.Protocol s, false when Set.is_subset ~of_:ipv4_protocols s && not (Set.is_empty s) && false -> (* Dont need the guard. We can derive anything from false *)
     make_address_family Ipv4 false
-  | Ir.Protocol s, false when Set.is_subset ~of_:ipv6_protocols s && not (Set.is_empty s) ->
+  | Ir.Protocol s, false when Set.is_subset ~of_:ipv6_protocols s && not (Set.is_empty s) && false ->
     make_address_family Ipv6 false
   | Ir.Protocol _, _ -> None
 

@@ -122,8 +122,6 @@ let map_chains_inputs chains =
             let inputs = Map.add_multi inputs ~key:id ~data:input' in
             (inputs, input)
             (* Only use the single predicate as filter if it has no implied predicate, i.e. its not ipv4 filter *)
-          | ([(p, n)], _, target) when is_terminal target && P.get_implied_predicate (p, n) |> Option.is_none  ->
-            inputs, P.inter_preds ((p, not n) :: input)
           | _ ->
             inputs, input
         ) chain.rules
@@ -412,15 +410,24 @@ let reduce_predicates _chains input rules =
     let merge pred input =
       match P.merge_pred ~tpe:`Inter input pred with
       | None -> None (* Cannot reduce *)
-      | Some pred' ->
-        match P.merge_pred ~tpe:`Diff input pred' with
-        | Some (p, n) when P.cardinal_of_pred (p, not n) <= P.cardinal_of_pred pred' &&
-                           P.cardinal_of_pred (p, not n) <= P.cardinal_of_pred pred ->
+      | Some result when P.equal_predicate result pred ->
+        printf "£";
+        Some (True, false);
+      | Some result ->
+        (* We may have that the input is a,b,c,d and pred id a,b,c. Then we want to
+           have !d.
+           If input is a,b,c,d and pred is a,b,c,e => !d
+        *)
+
+        match P.merge_pred ~tpe:`Diff input pred with
+        | Some (p, n) when P.cardinal_of_pred (p, not n) <= P.cardinal_of_pred result &&
+                           P.cardinal_of_pred (p, not n) <= P.cardinal_of_pred pred &&
+                           P.merge_pred ~tpe:`Inter (p, not n) input |> Option.value_map ~default:false ~f:(P.equal_predicate result) ->
           printf "€";
           Some (p, not n)
-        | _ when P.cardinal_of_pred pred' <= P.cardinal_of_pred pred ->
+        | _ when P.cardinal_of_pred result <= P.cardinal_of_pred pred ->
           printf "§";
-          Some pred'
+          Some result
         | _ ->
           printf "$";
           Some pred
@@ -436,15 +443,10 @@ let reduce_predicates _chains input rules =
     in
     inner predicates
   in
-  let rules, _input =
-    List.fold ~init:([], input) ~f:(fun (acc, input) (preds, effects, target) ->
-      let input = match P.inter_preds preds with
-        | [(p, n)] when is_terminal target ->
-          P.inter_preds ((p, not n) :: input)
-        | _ -> input
-      in
+  let rules =
+    List.fold ~init:[] ~f:(fun acc (preds, effects, target) ->
       let preds = map_predicates input preds in
-      (preds, effects, target) :: acc, input
+      (preds, effects, target) :: acc
     ) rules
   in
   List.rev rules, []
@@ -555,7 +557,7 @@ let _tail_inline chains =
   )
 
 let inline_pure_jumps chains =
-  Map.keys chains
+  get_ordered_chains chains
   |> List.fold ~init:chains ~f:(fun chains -> function
     | (Ir.Chain_id.Temporary _) as chain_id ->
       Map.change chains chain_id ~f:(function
@@ -637,27 +639,28 @@ let optimize_pass ~stage chains =
     [
       [1;       ], reduce_chain_indegree ~max_indegree:1;
       [1;       ], inline_chains ~max_rules:10000;
-      [  2;3    ], inline_chains ~max_rules:3;
+      [  2      ], inline_chains ~max_rules:3;
       [      4;5], inline_chains ~max_rules:1;
-      [1;2;3;4;5], map_rules_input @@ remove_unsatisfiable_rules;
-      [1;2;3;4;5], map_rules_input @@ reduce_predicates;
       [1;2;3;4;5], map_chain_rules @@ map_predicates @@ P.inter_preds;
-      [1;2;3;4;5], map_chain_rules @@ remove_true_predicates;
-      [      4;5], map_rules_input @@ remove_implied_predicates;
-      [1;2;3;4;5], map_chain_rules @@ eliminate_unreachable_rules;
+      [1;2;3;4;5], map_rules_input @@ reduce_predicates;
+      [1;      5], map_rules_input @@ remove_implied_predicates;
       [1;2;3;4;5], map_chain_rules @@ remove_empty_rules;
+      [1;2;3;4;5], map_rules_input @@ remove_unsatisfiable_rules;
+      [1;2;3;4;5], map_chain_rules @@ remove_true_predicates;
+      [1;2;3;4;5], map_chain_rules @@ eliminate_unreachable_rules;
       [1;2;3;4; ], push_predicates ~min_push:80;
-      [  2;3;   ], map_rules_input @@ push_common_predicates_equal;
-      [  2;3    ], map_rules_input @@ push_common_predicates_equal;
-      [  2;3    ], map_rules_input @@ push_common_predicates_equal;
-      [  2;3    ], map_rules_input @@ push_common_predicates_equal;
+      [1;2;3;4  ], map_rules_input @@ push_common_predicates_equal;
+      [1;2;3;4  ], map_rules_input @@ push_common_predicates_equal;
+      [1;2;3;4  ], map_rules_input @@ push_common_predicates_equal;
+      [1;2;3;4  ], map_rules_input @@ push_common_predicates_equal;
       [  0;     ], map_rules_input @@ push_common_predicates_union;
-      [  2;3;   ], remove_unreferenced_chains;
-      [  2;3;   ], inline_pure_jumps;
-      [    3;4  ], merge_identical_chains;
-      [    3;4  ], map_chain_rules @@ join_rules_with_same_target;
-      [        5], remove_unreferenced_chains;
-      [        5], remap_chain_ids;
+      [  2;3;4  ], remove_unreferenced_chains;
+      [1;2;3;4  ], inline_pure_jumps;
+      [1;  3;4  ], merge_identical_chains;
+      [1;  3;4  ], map_chain_rules @@ join_rules_with_same_target;
+      [1;      5], remove_unreferenced_chains;
+      [1;      5], remap_chain_ids;
+      [1;       ], inline_chains ~max_rules:1;
     ]
   in
 

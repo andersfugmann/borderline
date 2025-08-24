@@ -16,26 +16,26 @@ process filter {
         } policy { log "ERROR: b - cannot be both ipv4 and ipv6"; accept };
 
         rule {
-             source interface = ["c", "d", "e1", "e2"];
+             source interface = ["e1", "e2", "e3", "e4"];
              address family = ipv6;
              #protocol = [ ipv6-icmp ]; #58
              rule {
-                  source interface = "d";
+                  source interface = "e1";
                   icmp6 = [ 1,2 ];
                   hoplimit != 255;
-              } policy { log "OK: d - hoplimit only works for ipv6"; drop };
-             rule {
-                 source interface = "e1";
-                 source address = 1.1.1.3
-             } policy { log "ERROR: e1 - ipv4 kept"; reject };
+              } policy { log "OK: e1 - hoplimit only works for ipv6"; drop };
              rule {
                  source interface = "e2";
+                 source address = 1.1.1.3
+             } policy { log "ERROR: e2 - ipv4 kept"; reject };
+             rule {
+                 source interface = "e3";
                  source address = 1::1
-             } policy { log "OK: e2 - ipv6 kept"; accept };
-        } policy { log "OK: No conflict on rules ipv6"; accept };
+             } policy { log "OK: e3 - ipv6 kept"; accept };
+        } policy { log "OK: e4 - No conflict on rules ipv6"; accept };
 
         rule {
-             source interface = ["g1", "g2", "g3"];
+             source interface = ["g1", "g2", "g3", "g4", "g5"];
              address family = ipv4;
              rule {
                   source interface = "g1";
@@ -50,7 +50,10 @@ process filter {
                  source interface = "g3";
                  source address = 1::1
              } policy { log "ERROR: g3 - ipv6 kept"; reject };
-         } policy { log "OK: No conflict on rules ipv4"; drop };
+             rule {
+                  source interface = "g4";
+             } policy { log "OK: No conflict on rules ipv4"; accept; }
+         } policy { reject };
 
       rule {
           source interface = ["x1", "x2", "x3"];

@@ -132,7 +132,12 @@ let predicate_to_string =
   in
   function
   | Interface (dir, is) -> sprintf "Interface (%s,[%s])" (string_of_dir dir) (Set.to_list is |> String.concat ~sep:";")
-  | If_group (_, _) -> "If_group"
+  | If_group (dir, is) ->
+    let string_of_group = function
+      | `Int i -> Int.to_string i
+      | `String s -> s
+    in
+    sprintf "If_group (%s,[%s])" (string_of_dir dir) (Set.to_list is |> List.map ~f:string_of_group |> String.concat ~sep:";")
   | Zone (dir, zs) -> sprintf "Zone (%s, [%s])" (string_of_dir dir) (Set.to_list zs |> String.concat ~sep:";")
   | State states -> sprintf "State [%s]" (Set.to_list states |> List.map ~f:State.show_state |> String.concat ~sep:";")
   | Ports (dir, tpe, ports) -> sprintf "Ports (%s, %s, %s)" (string_of_dir dir) (Port_type.to_string tpe) (int_set_to_list ports)
@@ -145,7 +150,7 @@ let predicate_to_string =
   | TcpFlags (_, _) -> "TcpFlags"
   | Hoplimit l ->
     Printf.sprintf "Hoplimit %s" (int_set_to_list l)
-  | Address_family s -> Printf.sprintf "Address_family [%s] "(Set.to_list s |> List.map ~f:show_address_family |> String.concat ~sep:";")
+  | Address_family s -> Printf.sprintf "Address_family [%s]" (Set.to_list s |> List.map ~f:show_address_family |> String.concat ~sep:";")
   | True -> "True"
 
 type effect_ = MarkZone of Direction.t * zone
