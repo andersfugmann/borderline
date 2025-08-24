@@ -20,11 +20,11 @@ type zone = id [@@deriving compare, equal]
 type mask = int [@@deriving compare, equal]
 type prefix = string [@@deriving compare, equal]
 
-type address_family = Ipv4 | Ipv6 [@@deriving show]
+type address_family = Ipv4 | Ipv6 [@@deriving show { with_path = false }]
 
 module Chain_type = struct
   type t = Input | Output | Forward | Pre_routing | Post_routing
-  [@@deriving compare, sexp, equal, show]
+  [@@deriving compare, sexp, equal, show { with_path = false }]
 
   include Comparator.Make(struct type nonrec t = t let compare = compare let sexp_of_t = sexp_of_t end)
 end
@@ -33,7 +33,7 @@ module Chain_id = struct
   type t = Temporary of int
          | Builtin of Chain_type.t
          | Named of string
-  [@@deriving compare, sexp, equal, show]
+  [@@deriving compare, sexp, equal, show { with_path = false }]
   include Comparator.Make(struct type nonrec t = t let compare = compare let sexp_of_t = sexp_of_t end)
 end
 
@@ -89,7 +89,7 @@ end
 
 module Reject = struct
   type t = HostUnreachable | NoRoute | AdminProhibited | PortUnreachable | TcpReset
-  [@@deriving compare, sexp, equal, show]
+  [@@deriving compare, sexp, equal, show { with_path = false }]
 
   include Comparator.Make(struct type nonrec t = t let compare = compare let sexp_of_t = sexp_of_t end)
   let of_string (id, pos) =
@@ -175,7 +175,7 @@ type target = Jump of Chain_id.t
             | Return
             | Reject of Reject.t
             | Pass (* Not terminal *)
-[@@deriving equal, show]
+[@@deriving equal, show { with_path = false }]
 
 type rule = (predicate * bool) list * effects * target
 

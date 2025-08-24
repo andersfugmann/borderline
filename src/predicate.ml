@@ -74,11 +74,11 @@ let is_always value =
   | Mark (_, mask), neg when mask = 0 -> neg = value
   | Mark _, _ -> false
   | Address_family a, neg ->
-    (* Make sure to warn if we extend address_family *)
+    (* Make sure to generate a compiler warning if address_family is extended *)
     match Set.to_list a with
     | [] -> neg = value
-    | _ :: _ :: _ -> neg <> value
     | [(Ipv4|Ipv6)] -> false
+    | _ :: _ :: _ -> neg <> value
 
 
 let merge_pred ?(tpe=`Inter) a b =
@@ -185,7 +185,6 @@ let merge_pred ?(tpe=`Inter) a b =
   | (Hoplimit _, _), _ -> None
   | (Address_family af, neg), (Address_family af', neg') ->
     let (af'', neg'') = merge_sets (af, neg) (af', neg') in
-    (* printf "merged: %d,%b + %d,%b -> %d,%b\n" (Set.length af) neg (Set.length af') neg' (Set.length af'') neg''; *)
     (Address_family af'', neg'') |> Option.some
   | (Address_family _, _), _ -> None
 
@@ -319,6 +318,12 @@ let is_satisfiable preds =
 let disjoint preds preds' =
   inter_preds (preds @ preds')
   |> List.exists ~f:(is_always false)
+
+let%test "Disjoint Address_family" =
+  let ipv4 = Address_family (Set.singleton Ipv4) in
+  let ipv6 = Address_family (Set.singleton Ipv6) in
+  disjoint [ipv4, false] [ipv6, false]
+
 
 let preds_all_true preds =
   inter_preds preds

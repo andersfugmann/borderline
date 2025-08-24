@@ -1,11 +1,14 @@
 open Base
 module Set = Set.Poly
-open Stdio
 open Ir
 open Poly
 module Ip6 = Ipset.Ip6
 module Ip4 = Ipset.Ip4
 module P = Predicate
+
+let printf = Stdio.printf
+let sprintf = Printf.sprintf [@@ocaml.warning "-32"]
+
 
 type string = id [@@ocaml.warning "-34"]
 
@@ -96,6 +99,40 @@ let process_chains_breath_first chains ~f =
   |> List.rev
   |> List.fold_left ~init:chains ~f
 
+(** Return an ordered list of chains extended inputs for each inputs *)
+let map_chains_inputs chains =
+  (* Get the set of chains *)
+  let chains =
+    get_ordered_chains chains
+    |> List.rev
+    |> List.filter_map ~f:(Map.find chains)
+  in
+  (* Map the chains to have initial reduced input. *)
+  (* Extend to also handle derived inputs *)
+  let _inputs, chains =
+    List.fold_map ~init:(Map.empty (module Chain_id)) ~f:(fun inputs chain ->
+      let input =
+        Map.find_multi inputs chain.id
+        |> P.union_preds
+      in
+      let (inputs, _input) =
+        List.fold ~init:(inputs, input) ~f:(fun (inputs, input) -> function
+          | (preds, _, Jump id) ->
+            let input' = P.inter_preds (preds @ input) in
+            let inputs = Map.add_multi inputs ~key:id ~data:input' in
+            (inputs, input)
+            (* Only use the single predicate as filter if it has no implied predicate, i.e. its not ipv4 filter *)
+          | ([(p, n)], _, target) when is_terminal target && P.get_implied_predicate (p, n) |> Option.is_none  ->
+            inputs, P.inter_preds ((p, not n) :: input)
+          | _ ->
+            inputs, input
+        ) chain.rules
+      in
+      inputs, (input, chain)
+    ) chains
+  in
+  chains
+
 let remap_chain_ids chains =
   let chain_ids =
     get_ordered_chains chains
@@ -124,41 +161,8 @@ let remap_chain_ids chains =
   |> Map.of_alist_exn (module Chain_id)
 
 
-(** Return an ordered list of chains extended inputs for each inputs *)
-let map_chains_inputs chains =
-  (* Get the set of chains *)
-  let chains =
-    get_ordered_chains chains
-    |> List.rev
-    |> List.filter_map ~f:(Map.find chains)
-  in
-  (* Map the chains to have initial reduced input. *)
-  (* Extend to also handle derived inputs *)
-  let _inputs, chains =
-    List.fold_map ~init:(Map.empty (module Chain_id)) ~f:(fun inputs chain ->
-      let input =
-        Map.find_multi inputs chain.id
-        |> P.union_preds
-      in
-      let (inputs, _input) =
-        (* TODO: Filter inputs when we see patterns like: [pred] -> terminal *)
-        List.fold ~init:(inputs, input) ~f:(fun (inputs, input) -> function
-          | (preds, _, Jump id) ->
-            let input' = P.inter_preds (preds @ input) in
-            let inputs = Map.add_multi inputs ~key:id ~data:input' in
-            (inputs, input)
-          | ([(p, n)], _, target) when is_terminal target ->
-            inputs, P.inter_preds ((p, not n) :: input)
-          | _ ->
-            inputs, input
-        ) chain.rules
-      in
-      inputs, (input, chain)
-    ) chains
-  in
-  chains
-
 (** This should be used with a set of filters *)
+(** Should remove already matched predicates *)
 let map_rules_input ~f chains =
   map_chains_inputs chains
   |> List.concat_map ~f:(function
@@ -248,10 +252,10 @@ let remove_unreferenced_chains chains =
   Map.filter_keys ~f:(Set.mem referenced_chains) chains
 
 let inline_chains ~max_rules chains =
-  let chain_rule_length chains id =
+  let should_inline chains id =
     match Map.find chains id with
-    | Some { rules; _ } -> List.length rules
-    | None -> 0
+    | Some { rules; _ } -> Chain.is_temp id && List.length rules <= max_rules
+    | None -> false
   in
   get_ordered_chains chains
   |> List.fold ~init:chains ~f:(fun chains -> function
@@ -260,11 +264,11 @@ let inline_chains ~max_rules chains =
         | Some ({ rules; _ } as chain) ->
           let rules =
             List.concat_map ~f:(function
-              | (preds, effects, Ir.Jump id) when chain_rule_length chains id <= max_rules ->
-                (* Inline *)
+              | (preds, effects, Ir.Jump id) when should_inline chains id->
+                printf "I";
                 let { rules; _ } = Map.find_exn chains id in
                 List.map ~f:(fun (preds', effects', target) ->
-                  (preds' @ preds), effects' @ effects, target
+                  P.inter_preds (preds @ preds'), effects @ effects', target
                 ) rules
               | rule -> [rule]
             ) rules
@@ -286,7 +290,7 @@ let remove_implied_predicates _chains input rules =
   in
   rules, []
 
-let rec push_common_predicates ~find_pred ~debug chains input (rules : Rule.t list) =
+let rec push_common_predicates ~find_pred chains input (rules : Rule.t list) =
   (* Create a set of merge sequences based in the input predicate *)
   let rec get_seqeuences ~input head rules =
     (* Find a pred where the the type matches *)
@@ -325,11 +329,14 @@ let rec push_common_predicates ~find_pred ~debug chains input (rules : Rule.t li
       | [] -> None
       | ((preds, _, _) as rule) :: rules ->
         match find_pred pred preds with
+        (* Found a match. See if we can reorder and return if true *)
         | Some pred when can_reorder rule acc ->
           Some (pred, rule, List.rev_append acc rules)
+        (* Acc could not be reordered *)
         | Some _ -> None
         | None ->
-          reorder_disjoint pred (rule :: acc) rules |> ignore; None
+          (* No match for this rule - continue *)
+          reorder_disjoint pred (rule :: acc) rules
     in
 
     let rec create_seq (acc, seq) = function
@@ -363,38 +370,12 @@ let rec push_common_predicates ~find_pred ~debug chains input (rules : Rule.t li
     |> reduce
   in
 
-  let print_results results =
-    let string_of_rule (preds, _, target) =
-      Printf.sprintf "%s -> %s" (P.string_of_predicates preds) (Ir.show_target target)
-    in
-    let string_of_rules rules =
-      Printf.sprintf "[ %s ]" (List.map ~f:string_of_rule rules |> String.concat ~sep:"\n            ")
-    in
-
-    let print_result (pred, head, seq, tail) =
-      printf "  - Length: %d\n" (List.length seq);
-      printf "  - Pred: %s\n" (P.to_string pred);
-      printf "  - Head: %s\n" (string_of_rules head);
-      printf "  - Seq : %s\n" (string_of_rules seq);
-      printf "  - Tail: %s\n" (string_of_rules (List.rev tail)); (* What? *)
-    in
-    match debug with
-    | true ->
-      printf "Res:\n";
-      List.iter ~f:(fun result ->
-        printf "========================================================\n";
-        print_result result
-      ) results
-    | false -> ()
-  in
-
   let rank (_, _, seq, _) = List.length seq in
   let sequence =
     List.concat_map ~f:(fun input ->
       get_seqeuences ~input [] rules
     ) input_predicates
     |> List.filter ~f:(fun (_, _, seq, _) -> List.length seq >= 2)
-    |> (fun res -> if debug && false then (print_results res); res)
     (* Remove predicates that have already been matched as part of input *)
     |> List.filter ~f:(fun (pred, _, _, _) -> List.exists ~f:(fun input -> P.equal_predicate pred input) input |> not)
     |> List.filter ~f:(fun (pred, _, _, _) -> not (P.is_always true pred))
@@ -402,41 +383,28 @@ let rec push_common_predicates ~find_pred ~debug chains input (rules : Rule.t li
   in
   match sequence with
   | Some (pred, head, seq, tail) ->
-    print_results [(pred, head, seq, tail)];
     printf "V";
     (* Map the new chain *)
     let input' = pred :: input in
-    let seq', new_chains' = push_common_predicates ~find_pred ~debug chains input' seq in
-
+    let seq', new_chains' = push_common_predicates ~find_pred chains input' seq in
     let new_chain = Chain.create seq' (Printf.sprintf "Push common pred: %d: %s" (List.length seq) (P.to_string pred)) in
     let rules = head @ ([pred], [], Ir.Jump new_chain.id) :: tail in
     rules, new_chain :: new_chains'
   | _ -> rules, []
 
-let push_common_predicates_equal ~debug =
+let push_common_predicates_equal =
   let find_pred pred preds =
     List.find ~f:(Predicate.equal_predicate pred) preds
   in
-  push_common_predicates ~find_pred ~debug
+  push_common_predicates ~find_pred
 
-(*let%expect_test "push_common_predicates" =
-  (* Create a chain with some good predicates *)
-  let rules = [
-    (Ir.Ip4 (
-
-  ]
-
-
-  printf "Hi";
-  [%expect {| Hi |}]
-*)
-let push_common_predicates_union ~debug =
+let push_common_predicates_union =
   let find_pred pred preds =
     List.find_map ~f:(fun pred' ->
       P.merge_pred ~tpe:`Union pred pred'
     ) preds
   in
-  push_common_predicates ~find_pred ~debug
+  push_common_predicates ~find_pred
 
 
 let reduce_predicates _chains input rules =
@@ -459,26 +427,24 @@ let reduce_predicates _chains input rules =
     in
 
     let rec inner = function
-      [] -> []
+      | [] -> []
       | p :: ps ->
-        match List.find_map input ~f:(merge p) with
+        match List.find_map ~f:(merge p) input with
         | None -> p :: inner ps
-        | Some p ->
-          printf "r";
-          p :: inner ps
+        | Some p' ->
+          p' :: inner ps
     in
     inner predicates
   in
-  (* This is a fold *)
   let rules, _input =
     List.fold ~init:([], input) ~f:(fun (acc, input) (preds, effects, target) ->
-      let preds' = map_predicates input preds in
-      let input = match preds' with
+      let input = match P.inter_preds preds with
         | [(p, n)] when is_terminal target ->
           P.inter_preds ((p, not n) :: input)
         | _ -> input
       in
-      (preds', effects, target) :: acc, input
+      let preds = map_predicates input preds in
+      (preds, effects, target) :: acc, input
     ) rules
   in
   List.rev rules, []
@@ -669,40 +635,29 @@ let optimize_pass ~stage chains =
   let (@@) a b = a ~f:b in
   let optimize_functions =
     [
-      [1;         ], reduce_chain_indegree ~max_indegree:1;
-      [      3;   ], push_predicates ~min_push:100;
-      [        4;5], merge_identical_chains;
-      [    2;3;4;5], map_rules_input @@ reduce_predicates;
-      [    2;3;4;5], map_chain_rules @@ map_predicates @@ P.inter_preds;
-      [    2;3;4;5], map_rules_input @@ remove_unsatisfiable_rules;
-      [    0;3;4;5], map_rules_input @@ remove_implied_predicates;
-      [    2;3;4;5], map_chain_rules @@ eliminate_unreachable_rules;
-      [    2;3;4;5], map_chain_rules @@ remove_true_predicates;
-      [    2;3;4;5], map_chain_rules @@ remove_empty_rules;
-      [    2;3;4;5], map_chain_rules @@ join_rules_with_same_target;
-      [    2;3;4;5], remove_unreferenced_chains;
-      [    2;3;4  ], inline_pure_jumps;
-      [    2;3;   ], map_rules_input @@ push_common_predicates_equal ~debug:false;
-      [    2;3;4  ], map_rules_input @@ reduce_predicates;
-      [    2;3;   ], map_rules_input @@ push_common_predicates_equal ~debug:false;
-      [    2;3;4  ], map_rules_input @@ reduce_predicates;
-      [    2;3;   ], map_rules_input @@ push_common_predicates_equal ~debug:false;
-      [    2;3;4  ], map_rules_input @@ reduce_predicates;
-      [    2;3;   ], map_rules_input @@ push_common_predicates_equal ~debug:false;
-      [    2;3;4  ], map_rules_input @@ reduce_predicates;
-      [    2;3;   ], map_rules_input @@ push_common_predicates_equal ~debug:false;
-      [    2;3;4  ], map_rules_input @@ reduce_predicates;
-      [    2;3;   ], map_rules_input @@ push_common_predicates_equal ~debug:false;
-      [    2;3;4  ], map_rules_input @@ reduce_predicates;
-      [    2;3;   ], map_rules_input @@ push_common_predicates_equal ~debug:false;
-      [    2;3;4  ], map_rules_input @@ reduce_predicates;
-      [    2;3;   ], map_rules_input @@ push_common_predicates_equal ~debug:false;
-      [    2;3;4  ], map_rules_input @@ reduce_predicates;
-      [    0;     ], map_rules_input @@ push_common_predicates_union ~debug:false;
-      [1;         ], inline_chains ~max_rules:10000;
-      [  0;       ], inline_chains ~max_rules:1;
-      [    0;     ], inline_chains ~max_rules:2;
-      [        4  ], inline_chains ~max_rules:1;
+      [1;       ], reduce_chain_indegree ~max_indegree:1;
+      [1;       ], inline_chains ~max_rules:10000;
+      [  2;3    ], inline_chains ~max_rules:3;
+      [      4  ], inline_chains ~max_rules:1;
+      [1;2;3;4;5], map_rules_input @@ remove_unsatisfiable_rules;
+      [1;2;3;4;5], map_rules_input @@ reduce_predicates;
+      [1;2;3;4;5], map_chain_rules @@ map_predicates @@ P.inter_preds;
+      [1;2;3;4;5], map_chain_rules @@ remove_true_predicates;
+      [      4;5], map_rules_input @@ remove_implied_predicates;
+      [1;2;3;4;5], map_chain_rules @@ eliminate_unreachable_rules;
+      [1;2;3;4;5], map_chain_rules @@ remove_empty_rules;
+      [1;2;3;4; ], push_predicates ~min_push:80;
+      [  2;3;   ], map_rules_input @@ push_common_predicates_equal;
+      [  2;3    ], map_rules_input @@ push_common_predicates_equal;
+      [  2;3    ], map_rules_input @@ push_common_predicates_equal;
+      [  2;3    ], map_rules_input @@ push_common_predicates_equal;
+      [  0;     ], map_rules_input @@ push_common_predicates_union;
+      [  2;3;   ], remove_unreferenced_chains;
+      [  2;3;   ], inline_pure_jumps;
+      [    3;4  ], merge_identical_chains;
+      [    3;4  ], map_chain_rules @@ join_rules_with_same_target;
+      [        5], remove_unreferenced_chains;
+      [        5], remap_chain_ids;
     ]
   in
 
@@ -711,6 +666,17 @@ let optimize_pass ~stage chains =
     | true -> printf "%!"; optim_func chains'
     | false -> chains'
   ) optimize_functions
+
+let dump_chains chains =
+  chains
+  |> inline_chains ~max_rules:1
+  |> inline_chains ~max_rules:1
+  |> get_ordered_chains
+  |> List.rev
+  |> List.filter_map ~f:(fun chain -> Map.find chains chain)
+  |> List.iter ~f:(fun {id; rules; _ } ->
+    printf "# Chain %s. Rules %3d. Ref: %2d\n" (Chain_id.show id) (List.length rules) (chain_reference_count id chains)
+  )
 
 let max_stages = 5
 let rec optimize ?(stage=1) chains =
@@ -722,7 +688,4 @@ let rec optimize ?(stage=1) chains =
   | true ->
     printf "\n#Optimization done\n";
     chains'
-    |> map_rules_input ~f:(push_common_predicates_equal ~debug:true)
-    |> inline_chains ~max_rules:1;
-    |> remove_unreferenced_chains
-    |> remap_chain_ids
+    |> (fun chains -> dump_chains chains; chains)
