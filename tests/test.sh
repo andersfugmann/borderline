@@ -43,7 +43,7 @@ function execute () {
         let WARN++
     else
         echo -n "error. Expected (${EXPECTED}, 0). Got:  "
-        let ERRORS++
+        let FAILED++
     fi
     echo "(${OKS}, ${ERRORS})"
 }
