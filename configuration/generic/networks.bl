@@ -6,12 +6,30 @@ define ipv6_link_local               = fe80::/10
 # Refine at a later point - use iana specifications
 define ipv4_global_networks = 0.0.0.0/0
 define ipv6_global_networks = [ ::/0 ]
-define ipv4_local_networks = [ ipv4_multicast ]
-define ipv6_local_networks = [ ipv6_multicast, ipv6_link_local ]
+define ipv6_this_host       = ::/128
+define ipv4_this_host       = 0.0.0.0/32
+define ipv4_local_networks  = [ ipv4_multicast, ipv6_this_host ]
+define ipv6_local_networks  = [ ipv6_multicast, ipv6_link_local, ipv6_this_host ]
+define local_networks       = [ ipv4_local_networks, ipv6_local_networks ]
+
+# Networks automatically added based on zone definition
+#   A zone that does not have any address definitions will
+#   be included in 'global_zones' alias and includes address definitions 'ipv{4,6}_global_auto'
+#   Zones that includes one or more address definitions are included in 'local_zones' alias and
+#   includes address definitions 'ipv{4,6}_local_auto'. In general its adviced to not set the 'ipv{4,6}_local_auto'.
+
+define ipv4_global_auto = ipv4_global_networks
+define ipv6_global_auto = ipv6_global_networks
+define ipv4_local_auto  = [ ]
+define ipv6_local_auto  = [ ]
+#define ipv4_local_auto  = [ ipv4_multicast, ipv6_this_host ]
+#define ipv6_local_auto  = [ ipv6_multicast, ipv6_link_local, ipv6_this_host ]
+
 
 # Multicast addresses
 define ipv6_all_routers = ff02::1:2
 
+# Networks automatically added based on zone configuration
 define ipv4_global = [ local_host_network, 255.255.255.255 ]
 define ipv4_local = [ ipv4_global, ipv4_multicast, broadcast ]
 

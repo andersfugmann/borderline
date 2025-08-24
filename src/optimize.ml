@@ -414,11 +414,11 @@ let reduce_predicates _chains input rules =
       | None -> None (* Cannot reduce *)
       | Some pred' ->
         match P.merge_pred ~tpe:`Diff input pred' with
-        | Some (p, n) when P.cardinal_of_pred (p, not n) < P.cardinal_of_pred pred' &&
-                           P.cardinal_of_pred (p, not n) < P.cardinal_of_pred pred ->
+        | Some (p, n) when P.cardinal_of_pred (p, not n) <= P.cardinal_of_pred pred' &&
+                           P.cardinal_of_pred (p, not n) <= P.cardinal_of_pred pred ->
           printf "€";
           Some (p, not n)
-        | _ when P.cardinal_of_pred pred' < P.cardinal_of_pred pred ->
+        | _ when P.cardinal_of_pred pred' <= P.cardinal_of_pred pred ->
           printf "§";
           Some pred'
         | _ ->
@@ -638,7 +638,7 @@ let optimize_pass ~stage chains =
       [1;       ], reduce_chain_indegree ~max_indegree:1;
       [1;       ], inline_chains ~max_rules:10000;
       [  2;3    ], inline_chains ~max_rules:3;
-      [      4  ], inline_chains ~max_rules:1;
+      [      4;5], inline_chains ~max_rules:1;
       [1;2;3;4;5], map_rules_input @@ remove_unsatisfiable_rules;
       [1;2;3;4;5], map_rules_input @@ reduce_predicates;
       [1;2;3;4;5], map_chain_rules @@ map_predicates @@ P.inter_preds;
@@ -669,8 +669,6 @@ let optimize_pass ~stage chains =
 
 let dump_chains chains =
   chains
-  |> inline_chains ~max_rules:1
-  |> inline_chains ~max_rules:1
   |> get_ordered_chains
   |> List.rev
   |> List.filter_map ~f:(fun chain -> Map.find chains chain)
