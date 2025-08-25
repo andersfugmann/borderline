@@ -21,6 +21,7 @@
    ppx_deriving
    ppx_compare
    ppx_sexp_conv
+   ppx_expect
    menhir
  )
 )

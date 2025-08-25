@@ -15,8 +15,8 @@ depends: [
   "ipaddr"
   "ppx_deriving"
   "ppx_compare"
-  "ppx_expect"
   "ppx_sexp_conv"
+  "ppx_expect"
   "menhir"
   "odoc" {with-doc}
 ]
