@@ -8,7 +8,7 @@ define ipv4_global_networks = 0.0.0.0/0
 define ipv6_global_networks = [ ::/0 ]
 define ipv6_this_host       = ::/128
 define ipv4_this_host       = 0.0.0.0/32
-define ipv4_local_networks  = [ ipv4_multicast, ipv6_this_host ]
+define ipv4_local_networks  = [ ipv4_multicast, ipv4_this_host ]
 define ipv6_local_networks  = [ ipv6_multicast, ipv6_link_local, ipv6_this_host ]
 define local_networks       = [ ipv4_local_networks, ipv6_local_networks ]
 
@@ -36,19 +36,6 @@ define ipv4_local = [ ipv4_global, ipv4_multicast, broadcast ]
 define ipv4_private_networks = ipv4_iana_private_use
 
 define ipv4_multicast                = 224.0.0.0/4
-
-# https://en.wikipedia.org/wiki/Multicast_address
-# I dont think I care enough about this.
-
-define ipv4_multicast_routable = [
-       ipv4_mulicast_internetwork_control,
-       ipv4_multicast_adhoc,
-       ipv4_multicast_sdp_sap,
-       ipv4_multicast_adhoc,
-       ipv4_multicast_source_specific,
-       ipv4_multicast_glop,
-       ipv4_multicast_unicast,
-       ipv4_multicast_administratively_scoped ]
 
 define ipv4_multicast_local = 224.0.0.0/24
 define ipv4_mulicast_internetwork_control = 224.0.1.0/24 # routable
