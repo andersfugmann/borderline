@@ -225,9 +225,9 @@ let get_implied_predicate pred =
   let make_protocol lst neg = (Ir.Protocol (Set.of_list lst), neg) |> Option.some in
 
   match pred with
-  | Ir.Protocol s, false when Set.is_subset ~of_:ipv4_protocols s && not (Set.is_empty s) && false -> (* Dont need the guard. We can derive anything from false *)
+  | Ir.Protocol s, false when Set.is_subset ~of_:ipv4_protocols s && not (Set.is_empty s) ->
     make_address_family Ipv4 false
-  | Ir.Protocol s, false when Set.is_subset ~of_:ipv6_protocols s && not (Set.is_empty s) && false ->
+  | Ir.Protocol s, false when Set.is_subset ~of_:ipv6_protocols s && not (Set.is_empty s) ->
     make_address_family Ipv6 false
   | Ir.Protocol _, _ -> None
 
@@ -251,7 +251,7 @@ let get_implied_predicate pred =
   | Ir.Ip4Set _, _ -> make_address_family Ipv4 false
 
   (* Flip also *)
-  | Ir.Address_family af, neg when Set.length af = 1 -> begin
+  | Ir.Address_family af, neg when Set.length af = 1 && false -> begin
       match Set.choose_exn af, neg with
       | Ir.Ipv4, false
       | Ir.Ipv6, true -> (Protocol ipv6_protocols, true) |> Option.some
