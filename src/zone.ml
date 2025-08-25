@@ -31,10 +31,10 @@ let global_zone_alias = "global_zones"
 let local_zone_alias = "local_zones"
 
 (* Networks automatically added to network definitions *)
-let ipv4_global_networks = "ipv4_global_networks"
-let ipv6_global_networks = "ipv6_global_networks"
-let ipv4_local_networks  = "ipv4_local_networks"
-let ipv6_local_networks  = "ipv6_local_networks"
+let ipv4_global_networks = "ipv4_global_auto"
+let ipv6_global_networks = "ipv6_global_auto"
+let ipv4_local_networks  = "ipv4_local_auto"
+let ipv6_local_networks  = "ipv6_local_auto"
 
 type t = {
   interfaces: F.data list;
