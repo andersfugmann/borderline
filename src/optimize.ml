@@ -13,44 +13,13 @@ let sprintf = Printf.sprintf [@@ocaml.warning "-32"]
 type string = id [@@ocaml.warning "-34"]
 
 (**
-   - Marking of zones is an effect. Verify that effects are not ignored when inlining.
-   - Merge pass creates merges partial merges. Rethink the recursive approach.
-
-   - Ideas:
-     * Define upper bound for zones
-     * duplicate negates predicates to remaining chains when the target is terminal.
-       - a -> drop
-       - b & c -> X => ^a & b & c -> X
-     * Don't push predicates if we are going to test for all predicates anyways?
-     * Understand why guest iiface is not part of the push?
-     * Effects on setting zone should be considered on following inputs.
-       ( But that is dangerous, as we may override later, and not intersect )
-     * Skip rules when merging if any of the predicates are exclusive
-     * Create function 'P.disjoint'. Two sets of predicates are
-       provable disjoint if there exists a merged predicates that always
-       evaluates to false. Remember to include derived predicates, so
-       ipv4 and ipv6 is considered disjoint.
-     * Sort predicates based on rank
-
-   in general:
-    - a & b -> drop
-    - c & d -> X  =>
-
-    ^(a & b) & c & d -> X
-    => (^a | ^b) & c & d -> X
-    => c & d => { ^a -> X | ^b -> X }(* No optimization needed *)
-
-    - a & b -> drop
-    - b & d -> X  =>
-
-    ^(a & b) & b & d -> X
-    => ^a & b & d -> X
+  Further improvements
+  * Sort predicates based on rank
 *)
 
 let (>::) elt elts =
   Option.value_map ~f:(fun elt -> elt :: elts) ~default:elts elt
-
-let _ = ( >:: )
+[@@ocaml.warning "-32"]
 
 let chain_reference_count id chains =
   let count_references acc rules =
@@ -69,7 +38,7 @@ let is_terminal = function
   | Pass | Jump _ -> false
   | Accept | Drop | Return | Reject _ -> true
 
-(* Return a list of chains with leaves first *)
+(** Return a list of chains with leaves first *)
 let get_ordered_chains chains =
   let rec traverse_chains seen chains acc chain_id =
     let seen = match Set.mem seen chain_id with
@@ -83,7 +52,7 @@ let get_ordered_chains chains =
         | (_pred, _effect, Jump ((Temporary _) as chain_id)) -> traverse_chains seen chains acc chain_id
         | _ -> acc
       ) rules
-    | None -> failwith "Chain id not found" (* TODO: Handle user defined chains *)
+    | None -> acc
   in
   (* Traverse all builtin chains *)
   Map.fold chains ~init:[] ~f:(fun ~key ~data:_ acc ->
@@ -160,9 +129,7 @@ let remap_chain_ids chains =
   |> List.map ~f:(fun chain -> chain.id, chain)
   |> Map.of_alist_exn (module Chain_id)
 
-
 (** This should be used with a set of filters *)
-(** Should remove already matched predicates *)
 let map_rules_input ~f chains =
   map_chains_inputs chains
   |> List.concat_map ~f:(function
@@ -642,25 +609,24 @@ let optimize_pass ~stage chains =
       [1;       ], reduce_chain_indegree ~max_indegree:1;
       [1;       ], inline_chains ~max_rules:10000;
       [  2      ], inline_chains ~max_rules:3;
-      [      4;5], inline_chains ~max_rules:1;
+      [    3;4;5], inline_chains ~max_rules:1;
       [1;2;3;4;5], map_chain_rules @@ map_predicates @@ P.inter_preds;
       [1;2;3;4;5], map_rules_input @@ reduce_predicates;
-      [1;      5], map_rules_input @@ remove_implied_predicates;
+      [1;2;    5], map_rules_input @@ remove_implied_predicates;
       [1;2;3;4;5], map_chain_rules @@ remove_empty_rules;
       [1;2;3;4;5], map_rules_input @@ remove_unsatisfiable_rules;
       [1;2;3;4;5], map_chain_rules @@ remove_true_predicates;
       [1;2;3;4;5], map_chain_rules @@ eliminate_unreachable_rules;
-      [1;2;3;4; ], push_predicates ~min_push:80;
+      [1;2;3;4; ], push_predicates ~min_push:30;
+      [1;2;3;4  ], map_rules_input @@ push_common_predicates_equal;
       [1;2;3;4  ], map_rules_input @@ push_common_predicates_equal;
       [         ], map_rules_input @@ push_common_predicates_union;
-      [1;2;3;4  ], map_rules_input @@ push_common_predicates_equal;
       [  2;3;4  ], remove_unreferenced_chains;
       [1;2;3;4  ], inline_pure_jumps;
       [1;  3;4  ], merge_identical_chains;
       [1;  3;4  ], map_chain_rules @@ join_rules_with_same_target;
       [1;      5], remove_unreferenced_chains;
       [1;      5], remap_chain_ids;
-      [1;       ], inline_chains ~max_rules:1;
     ]
   in
 
