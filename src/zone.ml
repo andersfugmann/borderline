@@ -31,10 +31,10 @@ let global_zone_alias = "global_zones"
 let local_zone_alias = "local_zones"
 
 (* Networks automatically added to network definitions *)
-let ipv4_global_networks = "ipv4_global_networks"
-let ipv6_global_networks = "ipv6_global_networks"
-let ipv4_local_networks  = "ipv4_local_networks"
-let ipv6_local_networks  = "ipv6_local_networks"
+let ipv4_global_networks = "ipv4_global_auto"
+let ipv6_global_networks = "ipv6_global_auto"
+let ipv4_local_networks  = "ipv4_local_auto"
+let ipv6_local_networks  = "ipv6_local_auto"
 
 type t = {
   interfaces: F.data list;
@@ -154,7 +154,10 @@ let create_zone_chain direction (id, nodes) =
     [ (pred, [], Ir.Jump chain.Ir.id) ]
   in
   let { networks; interfaces; groups; } = init nodes in
-  Chain.create [([], [Ir.MarkZone(direction, id)], Ir.Pass)] ("Mark zone " ^ id)
+  let comment =
+    Printf.sprintf "Mark %s zone: %s" (Ir.Direction.to_string direction) id
+  in
+  Chain.create [([], [Ir.MarkZone(direction, id); Ir.Comment comment], Ir.Pass)] ("Mark zone " ^ id)
   |> (fun c -> Chain.create (create_network_rules c networks) ("Match networks for zone " ^ id))
   |> (fun c -> Chain.create (create_interface_rule c interfaces) ("Match interfaces for zone " ^ id))
   |> (fun c -> Chain.create (create_group_rule c groups) ("Match interface groups for zone " ^ id))
@@ -190,10 +193,10 @@ let emit_filter zones =
   let src_chains = List.map ~f:(create_zone_chain Ir.Direction.Source) zones in
   let dst_chains = List.map ~f:(create_zone_chain Ir.Direction.Destination) zones in
   let src_chain =
-    Chain.create (([], [Ir.MarkZone(Ir.Direction.Source, mars)], Ir.Pass)
+    Chain.create (([], [Ir.MarkZone(Ir.Direction.Source, mars); Ir.Comment "Mark source zone: Mars"], Ir.Pass)
                   :: (List.map ~f:(fun chn -> ([], [], Ir.Jump chn.Ir.id)) src_chains)) "Mark source zones" in
   let dst_chain =
-    Chain.create (([], [Ir.MarkZone(Ir.Direction.Destination, mars)], Ir.Pass) ::
+    Chain.create (([], [Ir.MarkZone(Ir.Direction.Destination, mars); Ir.Comment "Mark destination zone: Mars"], Ir.Pass) ::
                   (List.map ~f:(fun chn -> ([], [], Ir.Jump chn.Ir.id)) dst_chains)) "Mark destination zones" in
 
   let input_opers =   [ ([], [Ir.MarkZone (Ir.Direction.Destination, self)], Ir.Jump src_chain.Ir.id) ] in
@@ -202,7 +205,7 @@ let emit_filter zones =
                         ([], [], Ir.Jump dst_chain.Ir.id) ] in
   (input_opers, output_opers, forward_opers)
 
-let emit_nat (zones : (string * F.zone_stm list) list) : Ir.oper list =
+let emit_nat (zones : (string * F.zone_stm list) list) : Ir.rule list =
   let gen (zone : string) = function
     | F.ZoneSnat (src_zones, ip) ->
       let () = match ip with

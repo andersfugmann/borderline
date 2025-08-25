@@ -11,6 +11,7 @@ zone int {
      interface = eth1;
      network = 1111:2222:3333:1::/64;
      network = 192.168.1.0/24;
+     network = local_networks; # Full local network
 
      # Process any packets going into this zone (i.e. leaving the network interface)
      process filter {

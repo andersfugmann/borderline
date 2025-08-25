@@ -1,0 +1,4 @@
+* Dont automatically add networks to external / internal interfaces
+* Understand how to match on interface lo (problematic in input/output chains)
+  Test to see if it can be replaced with the empty string in nftables.
+  This is a nftables specific problem, but would be nice if we can have a upper bound on interfaces.

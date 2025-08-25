@@ -31,7 +31,8 @@ generic/services.bl: /etc/services
 generic/iana-ipv%-special-registry.bl: URL = https://www.iana.org/assignments/iana-ipv$*-special-registry/iana-ipv$*-special-registry.xml
 generic/iana-ipv%-special-registry.bl: iana-special_registry.xslt
 	@echo "Gen     :" $@
-	@xsltproc --stringparam prefix ipv$*_iana iana-special_registry.xslt <(curl -s $(URL)) > $@
+	@echo "# Extracted from $(URL)" > $@
+	@xsltproc --stringparam prefix ipv$*_iana iana-special_registry.xslt <(curl -s $(URL)) >> $@
 
 generic/allocated6.bl: URL = http://www.iana.org/assignments/ipv6-unicast-address-assignments/ipv6-unicast-address-assignments.xml
 generic/allocated6.bl: allocations.xslt

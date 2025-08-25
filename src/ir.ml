@@ -20,11 +20,11 @@ type zone = id [@@deriving compare, equal]
 type mask = int [@@deriving compare, equal]
 type prefix = string [@@deriving compare, equal]
 
-type address_family = Ipv4 | Ipv6 [@@deriving show]
+type address_family = Ipv4 | Ipv6 [@@deriving show { with_path = false }]
 
 module Chain_type = struct
   type t = Input | Output | Forward | Pre_routing | Post_routing
-  [@@deriving compare, sexp, equal, show]
+  [@@deriving compare, sexp, equal, show { with_path = false }]
 
   include Comparator.Make(struct type nonrec t = t let compare = compare let sexp_of_t = sexp_of_t end)
 end
@@ -33,7 +33,7 @@ module Chain_id = struct
   type t = Temporary of int
          | Builtin of Chain_type.t
          | Named of string
-  [@@deriving compare, sexp, equal, show]
+  [@@deriving compare, sexp, equal, show { with_path = false }]
   include Comparator.Make(struct type nonrec t = t let compare = compare let sexp_of_t = sexp_of_t end)
 end
 
@@ -48,6 +48,10 @@ module Port_type = struct
     | "tcp" -> Tcp
     | "udp" -> Udp
     | _ -> parse_error ~id ~pos "'tcp' or 'udp' expected"
+
+  let to_string = function
+    | Tcp -> "tcp"
+    | Udp -> "udp"
 end
 
 module Tcp_flags = struct
@@ -76,11 +80,16 @@ module Direction = struct
     | "src" | "source" -> Source
     | "dst" | "destination" -> Destination
     | s -> parse_error ~id:s ~pos "'source' or 'destination' expected"
+
+  let to_string = function
+    | Source -> "source"
+    | Destination -> "destination"
+
 end
 
 module Reject = struct
   type t = HostUnreachable | NoRoute | AdminProhibited | PortUnreachable | TcpReset
-  [@@deriving compare, sexp, equal, show]
+  [@@deriving compare, sexp, equal, show { with_path = false }]
 
   include Comparator.Make(struct type nonrec t = t let compare = compare let sexp_of_t = sexp_of_t end)
   let of_string (id, pos) =
@@ -109,7 +118,7 @@ type predicate = Interface of Direction.t * id Set.t
                | Address_family of address_family Set.t
                | True
 
-let string_of_predicate =
+let predicate_to_string =
   let sprintf = Printf.sprintf in
   let int_set_to_list l =
     Set.to_list l
@@ -118,32 +127,31 @@ let string_of_predicate =
     |> Printf.sprintf "[ %s ]"
   in
   let string_of_dir = function
-    | Direction.Source -> "s"
-    | Direction.Destination -> "d"
+    | Direction.Source -> "src"
+    | Direction.Destination -> "dst"
   in
   function
-  | Interface (_, _) -> "Interface"
-  | If_group (_, _) -> "If_group"
-  | Zone (_, _) -> "Zone"
-  | State _ -> "State"
-  | Ports (_, _, _) -> "Ports"
-  | Ip6Set (d, s) -> sprintf "Ip6Set(%d),%s" (Ip6.IpSet.length s) (string_of_dir d)
-  | Ip4Set (d, s) -> sprintf "Ip4Set(%d),%s" (Ip6.IpSet.length s) (string_of_dir d)
-  | Protocol s ->
-    Printf.sprintf "Protocol %s" (int_set_to_list s)
+  | Interface (dir, is) -> sprintf "Interface (%s,[%s])" (string_of_dir dir) (Set.to_list is |> String.concat ~sep:";")
+  | If_group (dir, is) ->
+    let string_of_group = function
+      | `Int i -> Int.to_string i
+      | `String s -> s
+    in
+    sprintf "If_group (%s,[%s])" (string_of_dir dir) (Set.to_list is |> List.map ~f:string_of_group |> String.concat ~sep:";")
+  | Zone (dir, zs) -> sprintf "Zone (%s, [%s])" (string_of_dir dir) (Set.to_list zs |> String.concat ~sep:";")
+  | State states -> sprintf "State [%s]" (Set.to_list states |> List.map ~f:State.show_state |> String.concat ~sep:";")
+  | Ports (dir, tpe, ports) -> sprintf "Ports (%s, %s, %s)" (string_of_dir dir) (Port_type.to_string tpe) (int_set_to_list ports)
+  | Ip6Set (d, s) -> sprintf "Ip6Set (%d),%s" (Ip6.IpSet.length s) (string_of_dir d)
+  | Ip4Set (d, s) -> sprintf "Ip4Set (%d),%s" (Ip6.IpSet.length s) (string_of_dir d)
+  | Protocol s -> Printf.sprintf "Protocol %s" (int_set_to_list s)
   | Icmp6 _ -> "Icmp6"
   | Icmp4 _ -> "Icmp4"
   | Mark (_, _) -> "Mark"
   | TcpFlags (_, _) -> "TcpFlags"
   | Hoplimit l ->
     Printf.sprintf "Hoplimit %s" (int_set_to_list l)
-  | Address_family s -> Printf.sprintf "Address_family [%s] "(Set.to_list s |> List.map ~f:show_address_family |> String.concat ~sep:";")
+  | Address_family s -> Printf.sprintf "Address_family [%s]" (Set.to_list s |> List.map ~f:show_address_family |> String.concat ~sep:";")
   | True -> "True"
-
-let string_of_predicates preds =
-  List.map ~f:(fun (p, n) -> Printf.sprintf "(%s,%b)" (string_of_predicate p) n) preds
-  |> String.concat ~sep:"; "
-  |> Printf.sprintf "[ %s ]"
 
 type effect_ = MarkZone of Direction.t * zone
              | Counter
@@ -154,7 +162,17 @@ type effect_ = MarkZone of Direction.t * zone
 [@@deriving equal]
 
 type effects = effect_ list [@@driving equal]
-let equal_effects = List.equal equal_effect_
+let equal_effects a b =
+  let order = function
+    | MarkZone _ -> 1
+    | Counter -> 2
+    | Notrack -> 3
+    | Log _ -> 4
+    | Snat _ -> 5
+    | Comment _ -> 6
+  in
+  let sort = List.stable_sort ~compare:(fun x y -> compare (order x) (order y)) in
+  List.equal equal_effect_ (sort a) (sort b)
 
 type target = Jump of Chain_id.t
             | Accept
@@ -162,11 +180,11 @@ type target = Jump of Chain_id.t
             | Return
             | Reject of Reject.t
             | Pass (* Not terminal *)
-              [@@deriving equal, show]
+[@@deriving equal, show { with_path = false }]
 
-type oper = (predicate * bool) list * effects * target
+type rule = (predicate * bool) list * effects * target
 
-type chain = { id: Chain_id.t; rules : oper list; comment: string; }
+type chain = { id: Chain_id.t; rules : rule list; comment: string; }
 
 (** Test if two predicates are idential *)
 let eq_pred (x, n) (y, m) =
@@ -193,41 +211,12 @@ let eq_pred (x, n) (y, m) =
 let eq_preds a b =
   List.equal eq_pred a b
 
-let eq_rule (preds, effects, action) (preds', effects', action') =
-  let open Poly in
-  action = action' && effects = effects' && eq_preds preds preds'
+let eq_rule (preds, effects, target) (preds', effects', target') =
+  equal_target target target' && equal_effects effects effects' && eq_preds preds preds'
 
 let eq_rules a b =
   List.equal eq_rule a b
 
-let eq_effect a b =
-  let (=) = Poly.equal in
-  match a, b with
-  | MarkZone (dir, zone), MarkZone (dir', zone') -> dir = dir' && zone = zone'
-  | MarkZone _, _ -> false
-  | Counter, Counter -> true
-  | Counter, _ -> false
-  | Comment c, Comment c' -> String.equal c c'
-  | Comment _, _ -> false
-  | Notrack, Notrack -> true
-  | Notrack, _ -> false
-  | Log prefix, Log prefix' -> String.equal prefix prefix'
-  | Log _, _ -> false
-  | Snat (Some ip), Snat (Some ip') -> Ipaddr.V4.equal ip ip'
-  | Snat None, Snat None -> true
-  | Snat _, _ -> false
-
-let eq_effects a b =
-  let order = function
-    | MarkZone _ -> 1
-    | Counter -> 2
-    | Notrack -> 3
-    | Log _ -> 4
-    | Snat _ -> 5
-    | Comment _ -> 6
-  in
-  let sort = List.sort ~compare:(fun x y -> compare (order x) (order y)) in
-  List.equal eq_effect (sort a) (sort b)
 
 let get_dir = function
   | Interface _ -> None
@@ -275,41 +264,6 @@ let compare_predicate (pred1, neg1) (pred2, neg2) =
     end
   | n -> n
 
-(** Test if expr always evaluates to value *)
-let is_always value =
-  let open Poly in
-  function
-  | State states, neg -> State.is_empty states && (neg = value)
-  | Zone (_, zs), neg -> Set.is_empty zs && (neg = value)
-  | Ports (_, _, ps), neg -> Set.is_empty ps && (neg = value)
-  | Protocol s, neg -> Set.is_empty s && neg = value
-  | TcpFlags (flags, mask), neg -> begin
-      match Set.diff flags mask |> Set.is_empty with
-      | true -> Set.is_empty mask && not neg = value
-      | false -> neg = value
-    end
-  (* Always false *)
-  | Ip6Set (_, s), neg -> not neg && Ip4.is_empty s && not value (* If we match no ip addresses its always false *)
-  | Ip4Set (_, s), neg -> not neg && Ip4.is_empty s && not value (* If we match no ip addresses its always false *)
-  | Interface (_, ifs), neg -> Set.is_empty ifs && (neg = value)
-  | If_group (_, if_groups), neg -> Set.is_empty if_groups && (neg = value)
-  | Icmp6 is, false when Set.is_empty is && not value -> true (* Implies ipv6. Always false *)
-  | Icmp6 _, _ -> false (* Implies ipv6 *)
-  | Icmp4 is, false when Set.is_empty is && not value -> true (* Implies ipv4. Always false *)
-  | Icmp4 _, _ -> false  (* Implies ipv4 *)
-  | Hoplimit cnts, false when Set.is_empty cnts && not value -> true (* Implies ipv6. Always false *)
-  | Hoplimit _, _ -> false (* Implies ipv6 *)
-  | True, neg -> not neg = value
-  | Mark (0, 0), neg -> neg <> value
-  | Mark (_, 0), neg -> neg = value
-  | Mark _, _ -> false
-  | Address_family a, neg ->
-    match Set.length a with
-    | 2 -> neg <> value
-    | 0 -> neg = value
-    | _ -> false
-
-
-type string = id [@@ocaml.warning "-34"]
-type int = mask [@@ocaml.warning "-34"]
-type bool = pol [@@ocaml.warning "-34"]
+type string = String.t [@@ocaml.warning "-34"]
+type int = Int.t [@@ocaml.warning "-34"]
+type bool = Bool.t [@@ocaml.warning "-34"]

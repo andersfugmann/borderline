@@ -2,7 +2,8 @@ zone guest {
      interface_group = "guest";
      network = 1111:2222:3333:2::/64;
      network = 10.0.1.0/24;
-     process filter { } policy log_allow;
+     network = local_networks; # Fully local network - not for p2p or vpns
+     process filter { } policy log_deny;
 }
 # Mark that the system will be handling dhcp requests from this zone
 define dhcp_server_zones += guest

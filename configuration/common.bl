@@ -3,13 +3,15 @@ define common = {
     # This is important as validate will othervice drop packets.
     rule { source zone = self; destination zone = self; } policy log_allow;
     rule { state = [ related, established ]; } policy log_allow;
+
+    # Anything below here will be either new or untracked.
+    use validate;
+
     rule {
         # Drop any martian packets. Martians defined as packets from unallocated networks
         rule { source zone = mars; } policy log_martian;
         rule { destination zone = mars; } policy log_martian;
     };
-    # Anything below here will be either new or untracked.
-    use validate;
 
     # For some reason, icmpv6 packets are not in connection tracking, so
     # they have ct state untracked.

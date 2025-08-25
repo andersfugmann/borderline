@@ -152,7 +152,7 @@ let gen_pred neg pred =
       | Ir.Port_type.Tcp -> "tcp"
       | Ir.Port_type.Udp -> "udp"
     in
-    sprintf "%s %s%s { %s }" classifier neg_str pred (string_of_int_set ports), None
+    sprintf "%s %s%s { %s }" classifier pred neg_str (string_of_int_set ports), None
   | Ir.Ip6Set (dir, ips) ->
     let classifier = match dir with
       | Ir.Direction.Source -> "saddr"

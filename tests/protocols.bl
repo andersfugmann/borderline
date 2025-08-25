@@ -1,37 +1,68 @@
 # Test protocol definitions to ensure no name clash
 import "../configuration/generic/l4proto.bl"
 
+# All ip addresses are gone.
+#
 process filter {
         rule {
+             source interface = "a";
              protocol = ipv6; #41
              address family = ipv4;
-        } policy { log "OK: Protocol 41 (ipv6) is allowed for ipv4" };
-
+        } policy { log "OK: a - Protocol 41 (ipv6) is allowed for ipv4"; accept };
         rule {
+             source interface = "b";
              address family = ipv6;
              address family = ipv4;
-        } policy { log "ERROR: cannot be both ipv4 and ipv6" };
+        } policy { log "ERROR: b - cannot be both ipv4 and ipv6"; accept };
 
         rule {
-             address family = ipv6; #58
-             protocol = [ ipv6-icmp ];
+             source interface = ["e1", "e2", "e3", "e4"];
+             address family = ipv6;
+             #protocol = [ ipv6-icmp ]; #58
              rule {
+                  source interface = "e1";
                   icmp6 = [ 1,2 ];
                   hoplimit != 255;
-              } policy { log "OK2" };
-             rule { source address = 1.1.1.1 } policy { log "ERROR: ipv4 kept" };
-             rule { source address = 1::1 } policy { log "OK: ipv6 kept" };
-        } policy { log "OK: No conflict on rules ipv6" };
+              } policy { log "OK: e1 - hoplimit only works for ipv6"; drop };
+             rule {
+                 source interface = "e2";
+                 source address = 1.1.1.3
+             } policy { log "ERROR: e2 - ipv4 kept"; reject };
+             rule {
+                 source interface = "e3";
+                 source address = 1::1
+             } policy { log "OK: e3 - ipv6 kept"; accept };
+        } policy { log "OK: e4 - No conflict on rules ipv6"; accept };
 
         rule {
+             source interface = ["g1", "g2", "g3", "g4", "g5"];
              address family = ipv4;
              rule {
+                  source interface = "g1";
                   hoplimit != 255;
-              } policy { log "ERROR: Hoplimit is ipv6" };
+             } policy { log "ERROR: g1 - Hoplimit is ipv6"; accept };
 
-             rule { source address = 1.1.1.1 } policy { log "OK: ipv4 kept" };
-             rule { source address = 1::1 } policy { log "ERROR: ipv6 kept" };
-         } policy { log "OK: No conflict on rules ipv4" };
+             rule {
+                 source interface = "g2";
+                 source address = 1.1.1.2;
+             } policy { log "OK: g2 - ipv4 kept"; accept };
+             rule {
+                 source interface = "g3";
+                 source address = 1::1
+             } policy { log "ERROR: g3 - ipv6 kept"; reject };
+             rule {
+                  source interface = "g4";
+             } policy { log "OK: No conflict on rules ipv4"; accept; }
+         } policy { reject };
+
+      rule {
+          source interface = ["x1", "x2", "x3"];
+          address family = ipv4;
+          rule {
+               source interface = "x1";
+               source address = 1.1.1.1;
+          } policy { log "OK: x12 accept ipv4"; accept; };
+      } policy { log "OK: accept ipv4"; drop };
 
 
 } policy deny

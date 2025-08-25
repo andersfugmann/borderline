@@ -12,6 +12,7 @@ install: release
 
 .PHONY: unittest
 unittest: build
+	dune test
 	dune exec bin/unit_test.exe
 
 .PHONY: test
@@ -29,7 +30,7 @@ integration:
 	@tail -n4 test.nft
 	@cat test.nft | sed 's/if[ ]* {/ifname {/g' | sed 's/ifgroup[ ]* {/ifname {/g' test.nft > integration.nft
 	rm test.nft
-	@[ "$${INSIDE_EMACS}" != "" ] || sudo /usr/sbin/nft -c -n -f integration.nft
+	@[ "$${INSIDE_EMACS}" != "" ] || sudo /usr/sbin/nft -o -c -n -f integration.nft
 
 
 .PHONY: build

@@ -5,7 +5,7 @@ open Borderline_lib
 let suite = "Borderline" >:::
             [
               Ipset.Test.unittest;
-              Optimize.Test.unittest;
+              Predicate.Test.unittest;
             ]
 
 let _ =
