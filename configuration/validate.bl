@@ -83,6 +83,7 @@ define validate = rule {
                 rule {
                     destination zone = global_zones;
                     rule { source address != [ ipv4_iana_global, ipv6_iana_global ] } policy { log_invalid };
+                    rule { source address != [ ipv4_iana_global, ipv6_iana_global ] } policy { log_invalid };
                 };
                 rule {
                     source zone = global_zones;
@@ -108,6 +109,17 @@ define validate = rule {
                     rule { destination address != [ ipv4_iana_global, ipv6_iana_global ] } policy { log_invalid };
                 };
             };
+        };
+        # Filter private networks.
+        rule {
+            rule {
+                source zone = global_zones;
+                source address = private_networks;
+            } policy { log_invalid };
+            rule {
+                destination zone = global_zones;
+                destination address = private_networks;
+            } policy { log_invalid };
         };
     };
 }

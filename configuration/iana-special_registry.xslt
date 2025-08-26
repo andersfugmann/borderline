@@ -71,6 +71,7 @@
 
       <!-- Main define line -->
       <xsl:choose>
+        <!-- Cannot filter on source in this case, as SNAT may be applied to the source address -->
         <xsl:when test="$name_raw = 'Private-Use'">
           <xsl:value-of select="concat('define ', $prefix, '_', $snake_case_name, ' += [',
                                 iana:address, '] # ', $name_raw, '&#10;')" />

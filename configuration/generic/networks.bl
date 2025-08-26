@@ -34,6 +34,7 @@ define ipv4_global = [ local_host_network, 255.255.255.255 ]
 define ipv4_local = [ ipv4_global, ipv4_multicast, broadcast ]
 
 define ipv4_private_networks = ipv4_iana_private_use
+define private_networks = [ ipv4_private_networks ]
 
 define ipv4_multicast                = 224.0.0.0/4
 
