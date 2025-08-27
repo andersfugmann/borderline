@@ -28,7 +28,7 @@ let chain_reference_count id chains =
   Map.fold ~init:0 ~f:(fun ~key:_ ~data:chn acc -> (count_references acc chn.rules)) chains
 
 (** Optimize rules in each chain. No chain insertion or removal is possible *)
-let map_chain_rules ~f chains =
+let map_rules ~f chains =
   Map.map ~f:(fun chn -> { chn with rules = f chn.rules }) chains
 
 let map_predicates ~f rules =
@@ -510,21 +510,6 @@ let push_predicates ~min_push chains =
     | _ -> chains
   ) chains
 
-(** Always inline chains when a chain ends with a jump *)
-let _tail_inline chains =
-  Map.keys chains
-  |> List.fold ~init:chains ~f:(fun chains chain_id ->
-    let chain = Map.find_exn chains chain_id in
-    let rules =
-      match List.rev chain.rules with
-      | ([], [], Ir.Jump target) :: rules_rev ->
-        let target = Map.find_exn chains target in
-        List.rev_append rules_rev target.rules
-      | rules -> List.rev rules
-    in
-    Map.set chains ~key:chain_id ~data:{ chain with rules }
-  )
-
 let inline_pure_jumps chains =
   get_ordered_chains chains
   |> List.fold ~init:chains ~f:(fun chains -> function
@@ -591,7 +576,7 @@ let merge_identical_chains chains =
   in
   let replace_map = inner (Map.empty (module Chain_id)) (Map.data chains) in
   (* Replace all jumps *)
-  map_chain_rules ~f:(fun rules ->
+  map_rules ~f:(fun rules ->
     List.map ~f:(function
       | (pred, effects, Jump id) when Map.mem replace_map id ->
         printf "M";
@@ -601,6 +586,20 @@ let merge_identical_chains chains =
     ) rules
   ) chains
 
+let rec join_rules = function
+  | (([pred], effects, target) as r1) :: (([pred'], effects', target') as r2) :: rules
+    when equal_effects effects effects' && equal_target target target' ->
+    begin
+      match P.merge_pred ~tpe:`Union pred pred' with
+      | Some pred -> join_rules (([pred], effects, target) :: rules)
+      | None -> r1 :: join_rules (r2 :: rules)
+    end
+  | r1 :: rules -> r1 :: join_rules rules
+  | [] -> []
+
+
+let reorder_preds preds =
+  List.stable_sort ~compare:(fun a b -> Int.compare (P.cost a) (P.cost b)) preds
 
 let optimize_pass ~stage chains =
   let (@@) a b = a ~f:b in
@@ -610,13 +609,14 @@ let optimize_pass ~stage chains =
       [1;       ], inline_chains ~max_rules:10000;
       [  2      ], inline_chains ~max_rules:3;
       [    3;4;5], inline_chains ~max_rules:1;
-      [1;2;3;4;5], map_chain_rules @@ map_predicates @@ P.inter_preds;
+      [1;2;3;4;5], map_rules @@ join_rules;
+      [1;2;3;4;5], map_rules @@ map_predicates @@ P.inter_preds;
       [1;2;3;4;5], map_rules_input @@ reduce_predicates;
       [1;2;    5], map_rules_input @@ remove_implied_predicates;
-      [1;2;3;4;5], map_chain_rules @@ remove_empty_rules;
+      [1;2;3;4;5], map_rules @@ remove_empty_rules;
       [1;2;3;4;5], map_rules_input @@ remove_unsatisfiable_rules;
-      [1;2;3;4;5], map_chain_rules @@ remove_true_predicates;
-      [1;2;3;4;5], map_chain_rules @@ eliminate_unreachable_rules;
+      [1;2;3;4;5], map_rules @@ remove_true_predicates;
+      [1;2;3;4;5], map_rules @@ eliminate_unreachable_rules;
       [1;2;3;4; ], push_predicates ~min_push:30;
       [1;2;3;4  ], map_rules_input @@ push_common_predicates_equal;
       [1;2;3;4  ], map_rules_input @@ push_common_predicates_equal;
@@ -624,9 +624,10 @@ let optimize_pass ~stage chains =
       [  2;3;4  ], remove_unreferenced_chains;
       [1;2;3;4  ], inline_pure_jumps;
       [1;  3;4  ], merge_identical_chains;
-      [1;  3;4  ], map_chain_rules @@ join_rules_with_same_target;
+      [1;  3;4  ], map_rules @@ join_rules_with_same_target;
       [1;      5], remove_unreferenced_chains;
       [1;      5], remap_chain_ids;
+      [        5], map_rules @@ map_predicates @@ reorder_preds;
     ]
   in
 
@@ -646,7 +647,7 @@ let dump_chains chains =
   )
 
 let max_stages = 5
-let rec optimize ?(stage=1) chains =
+let rec optimize ~stage chains =
   printf "\n#Stage: %d: (%d, %d, %d): " stage (Chain.count_rules chains) (Chain.count_predicates chains) (Chain.count_chains chains);
   let chains' = optimize_pass ~stage chains in
   match (stage >= max_stages) with
@@ -656,3 +657,9 @@ let rec optimize ?(stage=1) chains =
     printf "\n#Optimization done\n";
     chains'
     |> (fun chains -> dump_chains chains; chains)
+
+
+let optimize chains =
+  chains
+  |> optimize ~stage:1
+  |> optimize ~stage:1

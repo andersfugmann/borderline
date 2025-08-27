@@ -16,6 +16,27 @@ let string_of_predicates preds =
   |> Printf.sprintf "[ %s ]"
 
 
+let cost pred =
+  let h, l =
+    match fst pred with
+    | State s -> (10, Set.length s)
+    | Zone (_, s) -> (5, Set.length s)
+    | Ports (_, _, s) -> (20, Set.length s)
+    | Protocol s -> (6, Set.length s)
+    | TcpFlags _ -> (15, 0)
+    | Ip6Set (_, _) -> (30, 0)
+    | Ip4Set (_, _) -> (29, 0)
+    | Interface (_, s) -> 12, Set.length s
+    | If_group  (_, s) -> 11, Set.length s
+    | Icmp6 s -> 25, Set.length s
+    | Icmp4 s -> 24, Set.length s
+    | Hoplimit s -> 26, Set.length s
+    | True -> 0, 0
+    | Mark _ -> 1, 0
+    | Address_family _ -> 2, 0
+  in
+  h * 65535 + l
+
 (** List of predicates that always results in true *)
 let true_predicates =
   let true_predicates direction =
@@ -123,6 +144,18 @@ let merge_pred ?(tpe=`Inter) a b =
   let merge_ip6sets = merge Ip6.intersect Ip6.union Ip6.diff in
   let merge_ip4sets = merge Ip4.intersect Ip4.union Ip4.diff in
   let merge_sets a b = merge Set.inter Set.union Set.diff a b in
+
+  let all_address_families = Set.of_list [Ipv4; Ipv6] in
+
+  let invert = function
+    | State s, true -> (State (Set.diff State.all s), false)
+    | State s, false -> (State s, false)
+    | Address_family s, true ->
+      Address_family (Set.diff all_address_families s), false
+    | v -> v
+  in
+  let a = invert a in
+  let b = invert b in
 
   match a, b with
   | (State s, neg), (State s', neg') ->
