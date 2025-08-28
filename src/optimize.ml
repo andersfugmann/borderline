@@ -27,6 +27,9 @@ let chain_reference_count id chains =
   in
   Map.fold ~init:0 ~f:(fun ~key:_ ~data:chn acc -> (count_references acc chn.rules)) chains
 
+let equal_rule (preds, effects, target) (preds', effects', target') =
+  P.equal_predicates preds preds' && Ir.equal_effects effects effects' && Ir.equal_target target target'
+
 (** Optimize rules in each chain. No chain insertion or removal is possible *)
 let map_rules ~f chains =
   Map.map ~f:(fun chn -> { chn with rules = f chn.rules }) chains
@@ -566,9 +569,6 @@ let reduce_chain_indegree ~max_indegree chains =
     | _, _ -> chains
   ) chains
 
-let equal_rule (preds, effects, target) (preds', effects', target') =
-  P.equal_predicates preds preds' && Ir.equal_effects effects effects' && Ir.equal_target target target'
-
 
 let merge_identical_chains chains =
   let rec inner acc = function
@@ -601,6 +601,29 @@ let rec join_rules = function
   | r1 :: rules -> r1 :: join_rules rules
   | [] -> []
 
+let reorder_rules rules =
+  let order_target = function
+    | Ir.Accept -> 1
+    | Drop -> 2
+    | Reject _ -> 3
+    | Return -> 4
+    | Pass -> 5
+    | Jump _ -> 6
+  in
+  let rec inner acc = function
+    | [] -> List.rev acc
+    | ((preds, _effects, target) as rule1) :: ((preds', _effects', target') as rule2) :: rules
+      when
+        (Ir.equal_target target target' && P.costs preds' < P.costs preds) ||
+        (order_target target' < order_target target && P.disjoint preds preds')
+      ->
+      printf "^";
+      inner [] (List.rev_append acc (rule2 :: rule1 :: rules))
+    | rule :: rules ->
+      inner (rule :: acc) rules
+  in
+  inner [] rules
+
 
 let reorder_preds preds =
   List.stable_sort ~compare:(fun a b -> Int.compare (P.cost a) (P.cost b)) preds
@@ -632,6 +655,7 @@ let optimize_pass ~stage chains =
       [1;      5], remove_unreferenced_chains;
       [1;      5], remap_chain_ids;
       [        5], map_rules @@ map_predicates @@ reorder_preds;
+      [    3;4;5], map_rules @@ reorder_rules
     ]
   in
 

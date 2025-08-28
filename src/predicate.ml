@@ -15,7 +15,6 @@ let string_of_predicates preds =
   |> String.concat ~sep:"; "
   |> Printf.sprintf "[ %s ]"
 
-
 let cost pred =
   let h, l =
     match fst pred with
@@ -37,37 +36,9 @@ let cost pred =
   in
   h * 65535 + l
 
-(** List of predicates that always results in true *)
-let true_predicates =
-  let true_predicates direction =
-    [
-      (*
-         input/output will not have an interface name. I dont know how nft matches it, but should make no difference here. Maybe it will match the empty string (which is an element)
-
-         Interface (direction, Set.empty), true;
-         If_group (direction, Set.empty), true;
-      *)
-      Zone (direction, Set.empty), true;
-      Ports (direction, Port_type.Tcp, Set.empty), true;
-      Ports (direction, Port_type.Udp, Set.empty), true;
-      Ip6Set (direction, Ip6.empty), true;
-      Ip4Set (direction, Ip4.empty), true;
-    ]
-  in
-
-  [
-    State Set.empty, true;
-    Protocol Set.empty, true;
-    Icmp6 Set.empty, true;
-    Icmp4 Set.empty, true;
-    Mark (0, 0), false;
-    TcpFlags (Set.empty, Set.empty), false;
-    Hoplimit Set.empty, true;
-    Address_family Set.empty, true;
-    True, false;
-  ] @ true_predicates Direction.Destination @ true_predicates Direction.Source
-
-let false_predicates = List.map ~f:(fun (pred, neg) -> pred, not neg) true_predicates
+let costs preds =
+  (* Remember to filter implied preds *)
+  List.sum (module Int) ~f:cost preds
 
 (** Test if expr always evaluates to value *)
 let is_always value =
@@ -370,7 +341,6 @@ let equal_predicate a b =
 let equal_predicates p p' =
   subset_preds ~of_:p p' && subset_preds ~of_:p' p
 
-
 module Test = struct
   open OUnit2
   let equal_predicate_opt = function
@@ -502,24 +472,5 @@ module Test = struct
         assert_bool "ipv4' + none'" (equal_predicate res ipv4');
 
       end;
-
-      "is_true" >:: begin fun _ ->
-        List.iteri ~f:(fun i pred ->
-          let msg =
-            Printf.sprintf "Predicate %s (index %d) should always be true" (to_string pred) i
-          in
-          assert_bool msg (is_always true pred)
-        ) true_predicates
-      end;
-
-      "is_false" >:: begin fun _ ->
-        List.iteri ~f:(fun i pred ->
-          let msg =
-            Printf.sprintf "Predicate %s (index %d) should always be false" (to_string pred) i
-          in
-          assert_bool msg (is_always false pred)
-        ) false_predicates
-      end;
-
     ]
 end
