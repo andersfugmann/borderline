@@ -341,7 +341,7 @@ let union_preds preds_list =
     ) preds
 
 let is_subset b ~of_:a =
-  merge_pred ~tpe:`Union a b |> Option.value_map ~f:(eq_pred a) ~default:false
+  merge_pred ~tpe:`Diff b a |> Option.value_map ~f:(is_always false) ~default:false
 
 let is_satisfiable preds =
   inter_preds preds
@@ -357,23 +357,25 @@ let%test "Disjoint Address_family" =
   let ipv6 = Address_family (Set.singleton Ipv6) in
   disjoint [ipv4, false] [ipv6, false]
 
+let subset_preds ~of_:preds' preds =
+  List.for_all ~f:(fun p -> List.exists ~f:(fun p' -> is_subset ~of_:p' p) preds') preds
 
 let preds_all_true preds =
   inter_preds preds
   |> List.for_all ~f:(is_always true)
 
 let equal_predicate a b =
-  let res = is_subset a ~of_:b && is_subset b ~of_:a in
-  match res, eq_pred a b with
-  | true, _ -> true
-  | false, true -> failwith "Equal check"
-  | false, false -> false
+  is_subset a ~of_:b && is_subset b ~of_:a
+
+let equal_predicates p p' =
+  subset_preds ~of_:p p' && subset_preds ~of_:p' p
+
 
 module Test = struct
   open OUnit2
-  let eq_pred_opt = function
+  let equal_predicate_opt = function
     | Some m -> begin
-        function Some n -> Ir.eq_pred m n
+        function Some n -> equal_predicate m n
                | None -> false
       end
     | None -> begin
@@ -381,14 +383,14 @@ module Test = struct
                | Some _ -> false
       end
 
-  let unittest = "Optimize" >::: [
+  let unittest = "Predicates" >::: [
       "merge_diff" >:: begin fun _ ->
         let expect = Ir.Zone (Ir.Direction.Source, ["int"] |> Set.of_list), false in
         let a = Ir.Zone (Ir.Direction.Source, ["int"; "ext"] |> Set.of_list), false in
         let b = Ir.Zone (Ir.Direction.Source, ["ext"; "other"] |> Set.of_list), false in
         let res = merge_pred ~tpe:`Diff a b
         in
-        assert_equal ~cmp:eq_pred_opt ~msg:"Wrong result" res (Some expect);
+        assert_equal ~cmp:equal_predicate_opt ~msg:"Wrong result" res (Some expect);
       end;
 
       "merge_inter" >:: begin fun _ ->
@@ -397,7 +399,7 @@ module Test = struct
         let b = Ir.Zone (Ir.Direction.Source, ["ext"; "other"] |> Set.of_list), false in
         let res = merge_pred ~tpe:`Inter a b
         in
-        assert_equal ~cmp:eq_pred_opt ~msg:"Wrong result" res (Some expect);
+        assert_equal ~cmp:equal_predicate_opt ~msg:"Wrong result" res (Some expect);
       end;
 
       "subset|equal" >:: begin fun _ ->
@@ -433,10 +435,10 @@ module Test = struct
         let _ = ipv4, ipv4', ipv6, ipv6', all, all', none, none' in
 
         let res = merge_pred ipv4 ipv4 |> Option.value_exn in
-        assert_bool "ipv4 * ipv4" (eq_pred res ipv4);
+        assert_bool "ipv4 * ipv4" (equal_predicate res ipv4);
 
         let res = merge_pred ipv6 ipv6 |> Option.value_exn in
-        assert_bool "ipv6 * ipv6" (eq_pred res ipv6);
+        assert_bool "ipv6 * ipv6" (equal_predicate res ipv6);
 
         let res = merge_pred ipv4 ipv6 |> Option.value_exn in
         assert_bool "ipv4 * ipv6" (is_always false res);
@@ -450,9 +452,9 @@ module Test = struct
         assert_bool "none'" (is_always false none');
 
         let res = merge_pred ipv4 all |> Option.value_exn in
-        assert_bool "ipv4 * all" (eq_pred res ipv4);
+        assert_bool "ipv4 * all" (equal_predicate res ipv4);
         let res = merge_pred ipv4 all' |> Option.value_exn in
-        assert_bool "ipv4 * all'" (eq_pred res ipv4);
+        assert_bool "ipv4 * all'" (equal_predicate res ipv4);
 
         let res = merge_pred ipv4 none |> Option.value_exn in
         assert_bool "ipv4 * none" (is_always false res);
@@ -460,44 +462,44 @@ module Test = struct
         assert_bool "ipv4 * none'" (is_always false res);
 
         let res = merge_pred ipv6 all |> Option.value_exn in
-        assert_bool "ipv6 * all" (eq_pred res ipv6);
+        assert_bool "ipv6 * all" (equal_predicate res ipv6);
         let res = merge_pred ipv6 all' |> Option.value_exn in
-        assert_bool "ipv6 * all'" (eq_pred res ipv6);
+        assert_bool "ipv6 * all'" (equal_predicate res ipv6);
         let res = merge_pred ipv6 none |> Option.value_exn in
         assert_bool "ipv6 * none" (is_always false res);
         let res = merge_pred ipv6 none' |> Option.value_exn in
         assert_bool "ipv6 * none'" (is_always false res);
 
         let res = merge_pred ~tpe:`Diff all ipv4 |> Option.value_exn in
-        assert_bool "all / ipv4" (eq_pred res ipv6');
+        assert_bool "all / ipv4" (equal_predicate res ipv6');
         let res = merge_pred ~tpe:`Diff all ipv4' |> Option.value_exn in
-        assert_bool "all / ipv4'" (eq_pred res ipv6);
+        assert_bool "all / ipv4'" (equal_predicate res ipv6);
 
         let res = merge_pred ~tpe:`Diff all ipv6 |> Option.value_exn in
-        assert_bool "all / ipv6" (eq_pred res ipv4');
+        assert_bool "all / ipv6" (equal_predicate res ipv4');
         let res = merge_pred ~tpe:`Diff all ipv6' |> Option.value_exn in
-        assert_bool "all / ipv6'" (eq_pred res ipv4);
+        assert_bool "all / ipv6'" (equal_predicate res ipv4);
 
         let res = merge_pred ~tpe:`Union ipv4 ipv4 |> Option.value_exn in
-        assert_bool "ipv4 + ipv4" (eq_pred res ipv4);
+        assert_bool "ipv4 + ipv4" (equal_predicate res ipv4);
         let res = merge_pred ~tpe:`Union ipv4 ipv4' |> Option.value_exn in
-        assert_bool "ipv4 + ipv4'" (eq_pred res ipv4');
+        assert_bool "ipv4 + ipv4'" (equal_predicate res ipv4');
         let res = merge_pred ~tpe:`Union ipv4' ipv4 |> Option.value_exn in
-        assert_bool "ipv4' + ipv4" (eq_pred res ipv4');
+        assert_bool "ipv4' + ipv4" (equal_predicate res ipv4');
         let res = merge_pred ~tpe:`Union ipv4 all |> Option.value_exn in
-        assert_bool "ipv4 + all" (eq_pred res all);
+        assert_bool "ipv4 + all" (equal_predicate res all);
         let res = merge_pred ~tpe:`Union ipv4' all |> Option.value_exn in
-        assert_bool "ipv4' + all" (eq_pred res all);
+        assert_bool "ipv4' + all" (equal_predicate res all);
         let res = merge_pred ~tpe:`Union ipv4' all' |> Option.value_exn in
-        assert_bool "ipv4' + all'" (eq_pred res all);
+        assert_bool "ipv4' + all'" (equal_predicate res all);
         let res = merge_pred ~tpe:`Union ipv4 none |> Option.value_exn in
-        assert_bool "ipv4 + none" (eq_pred res ipv4);
+        assert_bool "ipv4 + none" (equal_predicate res ipv4);
         let res = merge_pred ~tpe:`Union ipv4 none' |> Option.value_exn in
-        assert_bool "ipv4 + none'" (eq_pred res ipv4');
+        assert_bool "ipv4 + none'" (equal_predicate res ipv4');
         let res = merge_pred ~tpe:`Union ipv4' none |> Option.value_exn in
-        assert_bool "ipv4' + none" (eq_pred res ipv4');
+        assert_bool "ipv4' + none" (equal_predicate res ipv4');
         let res = merge_pred ~tpe:`Union ipv4' none' |> Option.value_exn in
-        assert_bool "ipv4' + none'" (eq_pred res ipv4');
+        assert_bool "ipv4' + none'" (equal_predicate res ipv4');
 
       end;
 

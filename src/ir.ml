@@ -186,38 +186,6 @@ type rule = (predicate * bool) list * effects * target
 
 type chain = { id: Chain_id.t; rules : rule list; comment: string; }
 
-(** Test if two predicates are idential *)
-let eq_pred (x, n) (y, m) =
-  let (=) = Poly.equal in
-  let eq = function
-    | Interface (d, s) -> (function Interface (d', s') -> d = d' && Set.equal s s' | _ -> false)
-    | If_group (d, s) -> (function If_group (d', s') -> d = d' && Set.equal s s' | _ -> false)
-    | Zone (d, s) -> (function Zone (d', s') -> d = d' && Set.equal s s' | _ -> false)
-    | State s -> (function State s' -> State.equal s s' | _ -> false)
-    | Ports (d, t, s) -> (function Ports (d', t', s') -> d = d' && t = t' && Set.equal s s' | _ -> false)
-    | Ip6Set (d, s) -> (function Ip6Set (d', s') -> d = d' && Ip6.equal s s' | _ -> false)
-    | Ip4Set (d, s) -> (function Ip4Set (d', s') -> d = d' && Ip4.equal s s' | _ -> false)
-    | Protocol s -> (function Protocol s' -> Set.equal s s' | _ -> false)
-    | Icmp6 s -> (function Icmp6 s' -> Set.equal s s' | _ -> false)
-    | Icmp4 s -> (function Icmp4 s' -> Set.equal s s' | _ -> false)
-    | Mark (m1, m2) -> (function Mark (m1', m2') -> m1 = m1' && m2 = m2' | _ -> false)
-    | TcpFlags (s1, s2) -> (function TcpFlags (s1', s2') -> Set.equal s1 s1' && Set.equal s2 s2' | _ -> false)
-    | Hoplimit limit -> (function Hoplimit limit' -> Set.equal limit limit' | _ -> false)
-    | True -> (function True -> true | _ -> false)
-    | Address_family a -> (function Address_family a' -> Set.equal a a' | _ -> false)
-  in
-  Bool.equal n m && eq x y
-
-let eq_preds a b =
-  List.equal eq_pred a b
-
-let eq_rule (preds, effects, target) (preds', effects', target') =
-  equal_target target target' && equal_effects effects effects' && eq_preds preds preds'
-
-let eq_rules a b =
-  List.equal eq_rule a b
-
-
 let get_dir = function
   | Interface _ -> None
   | If_group _ -> None

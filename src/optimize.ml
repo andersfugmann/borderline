@@ -566,10 +566,14 @@ let reduce_chain_indegree ~max_indegree chains =
     | _, _ -> chains
   ) chains
 
+let equal_rule (preds, effects, target) (preds', effects', target') =
+  P.equal_predicates preds preds' && Ir.equal_effects effects effects' && Ir.equal_target target target'
+
+
 let merge_identical_chains chains =
   let rec inner acc = function
     | { id; rules; _ } :: chains ->
-      let to_merge, rest = List.partition_tf ~f:(fun { rules = rules'; _ } -> List.equal Ir.eq_rule rules rules') chains in
+      let to_merge, rest = List.partition_tf ~f:(fun { rules = rules'; _ } -> List.equal equal_rule rules rules') chains in
       let acc = List.fold ~init:acc ~f:(fun acc { id = id'; _ } -> Map.add_exn ~key:id' ~data:id acc) to_merge in
       inner acc rest
     | [] -> acc
