@@ -72,54 +72,59 @@ define validate = rule {
 
         # Iana rules
         rule {
+            # filter source addresses
             # Only consider networks mentioned in the iana tables
             source address = [ ipv4_iana_all, ipv6_iana_all ];
-            rule { source address != [ ipv4_iana_source, ipv6_iana_source ] } policy { log_invalid };
+            rule {
+                source address != [ ipv4_iana_source, ipv6_iana_source ]
+            } policy { log_invalid_source };
             rule {
                 # Ip addresses allowed forwaring.
                 source zone != self;
                 destination zone != self;
-                rule { source address != [ ipv4_iana_forwardable, ipv6_iana_forwardable ] } policy { log_invalid };
+                rule {
+                    source address != [ ipv4_iana_forwardable, ipv6_iana_forwardable ] } policy { log_invalid_source_forward };
                 rule {
                     destination zone = global_zones;
-                    rule { source address != [ ipv4_iana_global, ipv6_iana_global ] } policy { log_invalid };
-                    rule { source address != [ ipv4_iana_global, ipv6_iana_global ] } policy { log_invalid };
-                };
+                    source address != [ ipv4_iana_global, ipv6_iana_global ]
+                } policy { log_invalid_source_global_dest };
                 rule {
                     source zone = global_zones;
-                    rule { source address != [ ipv4_iana_global, ipv6_iana_global ] } policy { log_invalid };
-                };
+                    source address != [ ipv4_iana_global, ipv6_iana_global ]
+                } policy { log_invalid_source_global_source };
             };
         };
         rule {
-            #filter destination addresses
+            # filter destination addresses
             # Only consider networks mentioned in the iana tables
             destination address = [ ipv4_iana_all, ipv6_iana_all ];
-            rule { destination address != [ ipv4_iana_destination, ipv6_iana_destination ] } policy { log_invalid };
+            rule {
+                destination address != [ ipv4_iana_destination, ipv6_iana_destination ]
+            } policy { log_invalid_destination };
             rule {
                 source zone != self;
                 destination zone != self;
-                rule { destination address != [ ipv4_iana_forwardable, ipv6_iana_forwardable ] } policy { log_invalid };
+                rule {
+                   destination address != [ ipv4_iana_forwardable, ipv6_iana_forwardable ]
+                } policy { log_invalid_destination_forward };
                 rule {
                     destination zone = global_zones;
-                    rule { destination address != [ ipv4_iana_global, ipv6_iana_global ] } policy { log_invalid };
-                };
+                    destination address != [ ipv4_iana_global, ipv6_iana_global ]
+                } policy { log_invalid_destination_global_dest };
                 rule {
                     source zone = global_zones;
-                    rule { destination address != [ ipv4_iana_global, ipv6_iana_global ] } policy { log_invalid };
-                };
+                    destination address != [ ipv4_iana_global, ipv6_iana_global ]
+                } policy { log_invalid_destination_global_source };
             };
         };
         # Filter private networks.
         rule {
-            rule {
-                source zone = global_zones;
-                source address = private_networks;
-            } policy { log_invalid };
-            rule {
-                destination zone = global_zones;
-                destination address = private_networks;
-            } policy { log_invalid };
-        };
+            source zone = global_zones;
+            source address = private_networks;
+        } policy { log_invalid };
+        rule {
+            destination zone = global_zones;
+            destination address = private_networks;
+        } policy { log_invalid };
     };
 }

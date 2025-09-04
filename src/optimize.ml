@@ -636,15 +636,16 @@ let optimize_pass ~stage chains =
       [1;       ], inline_chains ~max_rules:10000;
       [  2      ], inline_chains ~max_rules:3;
       [    3;4;5], inline_chains ~max_rules:1;
-      [1;2;3;4;5], map_rules @@ join_rules;
       [1;2;3;4;5], map_rules @@ map_predicates @@ P.inter_preds;
+      [1;2;3;4;5], map_rules @@ join_rules;
       [1;2;3;4;5], map_rules_input @@ reduce_predicates;
-      [1;2;    5], map_rules_input @@ remove_implied_predicates;
+      [        5], map_rules_input @@ remove_implied_predicates;
       [1;2;3;4;5], map_rules @@ remove_empty_rules;
       [1;2;3;4;5], map_rules_input @@ remove_unsatisfiable_rules;
       [1;2;3;4;5], map_rules @@ remove_true_predicates;
       [1;2;3;4;5], map_rules @@ eliminate_unreachable_rules;
-      [1;2;3;4; ], push_predicates ~min_push:30;
+      [         ], push_predicates ~min_push:10;
+      [1;2;3;4  ], map_rules_input @@ push_common_predicates_equal;
       [1;2;3;4  ], map_rules_input @@ push_common_predicates_equal;
       [1;2;3;4  ], map_rules_input @@ push_common_predicates_equal;
       [         ], map_rules_input @@ push_common_predicates_union;
@@ -684,10 +685,9 @@ let rec optimize ~stage chains =
   | true ->
     printf "\n#Optimization done\n";
     chains'
-    |> (fun chains -> dump_chains chains; chains)
 
 
 let optimize chains =
   chains
   |> optimize ~stage:1
-  |> optimize ~stage:1
+  |> (fun chains -> dump_chains chains; chains)
