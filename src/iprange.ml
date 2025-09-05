@@ -22,6 +22,11 @@ module Make(Ip : Prefix) = struct
   type elt = Ip.t * Ip.t list
   type t = elt list
 
+  let ip_split ip =
+    let bits = Ip.bits ip + 1 in
+    Ip.subnets bits ip
+    |> Stdlib.List.of_seq
+
   (* Intersection between to lists of ips (sorted) *)
   let rec ip_intersection l1 l2 =
     match l1, l2 with
@@ -50,6 +55,19 @@ module Make(Ip : Prefix) = struct
       | [], ls
       | ls, [] -> ls
 
+
+  let rec ip_diff l1 l2 =
+    match l1, l2 with
+    | l :: ls, l' :: ls' when Ip.subset ~subnet:l ~network:l' ->
+      ip_diff ls (l' :: ls')
+    | l :: ls, l' :: ls' when Ip.subset ~subnet:l' ~network:l ->
+      ip_diff ((ip_split l) @ ls) (l' :: ls')
+    | l :: ls, l' :: ls' when Ip.compare l l' < 0 ->
+      ip_diff ls (l' :: ls')
+    | ls, _ :: ls' (* when Ip.compare l l' > 0 *) ->
+      ip_diff ls ls'
+    | ts, [] -> ts
+
   (*
   let ip_join_adjecent = function
     | n1 :: n2 :: ns ->
@@ -77,9 +95,7 @@ module Make(Ip : Prefix) = struct
   let is_empty = List.is_empty
 
   let split_elt (incl, excls) =
-    let bits = Ip.bits incl + 1 in
-    Ip.subnets bits incl
-    |> Stdlib.List.of_seq
+    ip_split incl
     |> List.map ~f:(fun network -> network, List.filter ~f:(fun subnet -> Ip.subset ~network ~subnet) excls)
 
   let rec reduce t =
@@ -101,34 +117,36 @@ module Make(Ip : Prefix) = struct
 
   let rec union t t' =
     match t, t' with
+    | ts, [] | [], ts -> ts
     | (incl, excls) :: ts, (incl', excls') :: ts' when Ip.subset ~subnet:incl' ~network:incl ->
-      union ((incl, ip_intersection excls excls') :: ts) ts'
+      let excls = ip_union (ip_intersection excls excls') (ip_diff excls [incl']) in
+      union ((incl, excls) :: ts) ts'
     | (incl, excls) :: ts, (incl', excls') :: ts' when Ip.subset ~subnet:incl ~network:incl' ->
-       union ts ((incl', ip_intersection excls excls') :: ts')
+      let excls' = ip_union (ip_intersection excls excls') (ip_diff excls' [incl]) in
+      union ts ((incl', excls') :: ts')
     | (incl, excls) :: ts, (incl', excls') :: ts' when Ip.compare incl incl' < 0 ->
       (incl, excls) :: union ts ((incl', excls') :: ts')
     | ts, (incl', excls') :: ts' (* when Ip.compare incl incl' > 0 *) ->
       (incl', excls') :: union ts ts'
-    | ts, [] -> ts
 
   let rec intersection t t' =
     match t, t' with
+    | [], _ | _, [] -> []
     | (incl, excls) :: ts, (incl', excls') :: ts' when Ip.subset ~subnet:incl' ~network:incl ->
-      (incl', ip_intersection [incl'] (ip_union excls excls')) :: intersection ts ts'
+      (incl', ip_intersection [incl'] (ip_union excls excls')) :: intersection ((incl, excls) :: ts) ts'
     | (incl, excls) :: ts, (incl', excls') :: ts' when Ip.subset ~subnet:incl ~network:incl' ->
-      (incl, ip_intersection [incl] (ip_union excls excls')) :: intersection ts ts'
+      (incl, ip_intersection [incl] (ip_union excls excls')) :: intersection ts ((incl', excls') :: ts')
     | (incl, _) :: ts, (incl', excls') :: ts' when Ip.compare incl incl' < 0 ->
-      union ts ((incl', excls') :: ts')
+      intersection ts ((incl', excls') :: ts')
     | ts, _ :: ts' (* when Ip.compare incl incl' > 0 *) ->
-      union ts ts'
-    | _, [] -> []
+      intersection ts ts'
 
   let rec diff t t' =
     match t, t' with
+    | [], _ -> []
+    | ts, [] -> ts
     | (incl, excls) :: ts, (incl', excls') :: ts' when Ip.subset ~subnet:incl ~network:incl' ->
-      (* All are excluded.
-         Its what-ever is not excluded - excls.
-      *)
+      (* All are excluded. Its what-ever is not excluded - excls. *)
       let incls =
         ip_intersection [incl] excls'
         |> List.map ~f:(fun incl -> (incl, ip_intersection [incl] excls))
@@ -148,18 +166,22 @@ module Make(Ip : Prefix) = struct
       (incl, excls) :: diff ts ((incl', excls') :: ts')
     | (incl, excls) :: ts, _ :: ts' (* when Ip.compare incl incl' > 0 *) ->
       diff ((incl, excls) :: ts) ts'
-    | [], _ -> []
-    | ts, [] -> ts
 
   let diff t t' =
     diff t t'
     |> reduce
 
+
+  let of_list l =
+    List.map ~f:singleton l
+    |> List.fold ~init:empty ~f:union
+
+
   let show t =
     let show_elt (incl, excls) =
       let excls = match excls with
         | [] -> ""
-        | excls -> List.map ~f:Ip.to_string excls |> String.concat ~sep:"; " |> sprintf "/[ %s ]"
+        | excls -> List.map ~f:Ip.to_string excls |> String.concat ~sep:"; " |> sprintf " \\ [ %s ]"
       in
       sprintf "%s%s" (Ip.to_string incl) excls
     in
@@ -230,9 +252,12 @@ let%expect_test "ip subnet" =
 
 
 let%expect_test "ip set operations" =
+  let of_list l =
+    List.map ~f:(fun net -> Ipaddr.V4.Prefix.of_string_exn net |> Ipaddr.V4.Prefix.prefix) l
+  in
   let test ~msg ~f a b =
-    let a' = List.map ~f:Ipaddr.V4.Prefix.of_string_exn a in
-    let b' = List.map ~f:Ipaddr.V4.Prefix.of_string_exn b in
+    let a' = of_list a in
+    let b' = of_list b in
     let res = f a' b' in
     printf "[%s] %s [%s] = [%s]\n"
       (String.concat ~sep:"; " a)
@@ -263,8 +288,11 @@ let%expect_test "Set operations" =
   let ( - ) a b = Ip4Set.diff a b in
   let test ~msg ~f ts =
     let f ts = List.fold ~init:Ip4Set.empty ~f:(fun acc elt -> f acc (singleton elt)) ts in
-    printf "%s: %s = %s\n" msg (String.concat ~sep:" x " ts)
+    printf "%s: %s = %s\n" msg (String.concat ~sep:" o " ts)
       (Ip4Set.show (f ts))
+  in
+  let print_set ~msg t =
+    printf "%s: -> %s\n" msg (Ip4Set.show t)
   in
   test ~msg:"union" ~f:Ip4Set.union ["10.0.0.12/32"; "10.0.0.11/32"];
   test ~msg:"union" ~f:Ip4Set.union ["10.0.0.10/32"; "10.0.0.11/32"; "10.0.0.0/24"];
@@ -272,30 +300,103 @@ let%expect_test "Set operations" =
   test ~msg:"union" ~f:Ip4Set.union ["10.0.0.10/8"; "10.0.0.11/8"];
   test ~msg:"diff" ~f:Ip4Set.diff ["10.0.0.0/8"; "10.0.0.11/24"];
   test ~msg:"diff" ~f:Ip4Set.diff ["10.0.0.11/24"; "10.0.0.0/8"];
-  let a = (?@"10.0.0.12/32" + ?@"10.0.0.13/32") - ?@"10.0.0.0/8" in
-  printf "diff: -> %s\n" (Ip4Set.show a);
-  let a = (?@"10.0.0.0/24" + ?@"10.0.10.0/24") - ?@"10.0.0.0/8" in
-  printf "diff: -> %s\n" (Ip4Set.show a);
-  let a = (?@"10.0.0.0/24" + ?@"10.0.1.0/24") - ?@"10.0.0.0/23" in
-  printf "diff: -> %s\n" (Ip4Set.show a);
-  let a = (?@"10.0.0.0/24" + ?@"10.0.1.0/24") - (?@"10.0.0.0/23" - ?@"10.0.0.0/25") in
-  printf "diff: -> %s\n" (Ip4Set.show a);
-  let a = (?@"10.0.0.0/24" + ?@"10.0.2.0/24") - (?@"10.0.0.0/23" - ?@"10.0.0.0/25") in
-  printf "diff: -> %s\n" (Ip4Set.show a);
+  print_set ~msg:"empty1" @@ (?@"10.0.0.12/32" + ?@"10.0.0.13/32") - ?@"10.0.0.0/8";
+  print_set ~msg:"empty2" @@ (?@"10.0.0.0/24" + ?@"10.0.10.0/24") - ?@"10.0.0.0/8";
+  print_set ~msg:"empty3" @@ (?@"10.0.0.0/24" + ?@"10.0.1.0/24") - ?@"10.0.0.0/23";
+  print_set ~msg:"diff with excl1" @@ (?@"10.0.0.0/24" + ?@"10.0.1.0/24") - (?@"10.0.0.0/23" - ?@"10.0.0.0/25");
+  print_set ~msg:"diff with excl2" @@ (?@"10.0.0.0/24" + ?@"10.0.2.0/24") - (?@"10.0.0.0/23" - ?@"10.0.0.0/25");
+  print_set ~msg:"diff with excl4" @@ (?@"10.0.0.0/24" - ?@"10.0.0.1/32") - (?@"10.0.0.0/25");
+  print_set ~msg:"diff with excl5" @@ (?@"10.0.0.0/24" - ?@"10.0.0.1/32") - (?@"10.0.0.0/25" - ?@"10.0.0.2/32");
+  print_set ~msg:"diff with excl6" @@ (?@"10.0.0.0/24" - ?@"10.0.0.1/32") - (?@"10.0.0.0/25" - ?@"10.0.0.0/31");
+  print_set ~msg:"diff with excl7" @@ (?@"10.0.0.0/24" - ?@"10.0.0.1/32") - (?@"10.0.0.0/25" - ?@"10.0.0.255/31");
+  print_set ~msg:"union" @@ (?@"10.0.0.0/8" - ?@"10.1.0.0/24" - ?@"10.0.0.1/32") + (?@"10.0.0.0/24");
+  print_set ~msg:"union" @@ (?@"10.0.0.0/8" - ?@"10.1.0.0/24" - ?@"10.0.0.1/32") + (?@"10.0.0.0/24" - ?@"10.0.0.1/32");
+  print_set ~msg:"union" @@ (?@"10.0.0.0/8" - ?@"10.1.0.0/24" - ?@"10.0.0.1/32") + (?@"10.0.0.0/24" - ?@"10.0.0.1/32" - ?@"10.0.0.2/32");
+  print_set ~msg:"union" @@ (?@"10.0.0.0/24") + (?@"10.0.0.0/8" - ?@"10.1.0.0/24" - ?@"10.0.0.1/32");
+  print_set ~msg:"union" @@ (?@"10.0.0.0/24" - ?@"10.0.0.1/32") + (?@"10.0.0.0/8" - ?@"10.1.0.0/24" - ?@"10.0.0.1/32");
+  print_set ~msg:"union" @@ (?@"10.0.0.0/24" - ?@"10.0.0.1/32" - ?@"10.0.0.2/32") + (?@"10.0.0.0/8" - ?@"10.1.0.0/24" - ?@"10.0.0.1/32");
   ();
 
   [%expect {|
-    union: 10.0.0.12/32 x 10.0.0.11/32 = [ 10.0.0.11/32; 10.0.0.12/32 ]
-    union: 10.0.0.10/32 x 10.0.0.11/32 x 10.0.0.0/24 = [ 10.0.0.0/24 ]
-    union: 10.0.0.10/24 x 10.0.0.11/8 = [ 10.0.0.0/8 ]
-    union: 10.0.0.10/8 x 10.0.0.11/8 = [ 10.0.0.0/8 ]
-    diff: 10.0.0.0/8 x 10.0.0.11/24 = [  ]
-    diff: 10.0.0.11/24 x 10.0.0.0/8 = [  ]
-    diff: -> [  ]
-    diff: -> [  ]
-    diff: -> [  ]
-    diff: -> [ 10.0.0.0/25 ]
-    diff: -> [ 10.0.0.0/25; 10.0.2.0/24 ]
+    union: 10.0.0.12/32 o 10.0.0.11/32 = [ 10.0.0.11/32; 10.0.0.12/32 ]
+    union: 10.0.0.10/32 o 10.0.0.11/32 o 10.0.0.0/24 = [ 10.0.0.0/24 ]
+    union: 10.0.0.10/24 o 10.0.0.11/8 = [ 10.0.0.0/8 ]
+    union: 10.0.0.10/8 o 10.0.0.11/8 = [ 10.0.0.0/8 ]
+    diff: 10.0.0.0/8 o 10.0.0.11/24 = [  ]
+    diff: 10.0.0.11/24 o 10.0.0.0/8 = [  ]
+    empty1: -> [  ]
+    empty2: -> [  ]
+    empty3: -> [  ]
+    diff with excl1: -> [ 10.0.0.0/25 ]
+    diff with excl2: -> [ 10.0.0.0/25; 10.0.2.0/24 ]
+    diff with excl4: -> [ 10.0.0.128/25 ]
+    diff with excl5: -> [ 10.0.0.0/24 \ [ 10.0.0.0/25; 10.0.0.128/25 ] ]
+    diff with excl6: -> [ 10.0.0.0/24 \ [ 10.0.0.0/25; 10.0.0.128/25 ] ]
+    diff with excl7: -> [ 10.0.0.128/25 ]
+    union: -> [ 10.0.0.0/8 \ [ 10.1.0.0/24 ] ]
+    union: -> [ 10.0.0.0/8 \ [ 10.0.0.1/32; 10.1.0.0/24 ] ]
+    union: -> [ 10.0.0.0/8 \ [ 10.0.0.1/32; 10.1.0.0/24 ] ]
+    union: -> [ 10.0.0.0/8 \ [ 10.1.0.0/24 ] ]
+    union: -> [ 10.0.0.0/8 \ [ 10.0.0.1/32; 10.1.0.0/24 ] ]
+    union: -> [ 10.0.0.0/8 \ [ 10.0.0.1/32; 10.1.0.0/24 ] ]
     |}]
 
-  (* Need to test exclusions. We can do that with diffing *)
+
+
+let%expect_test "Set operations - ipv6 " =
+  let of_string = Ipaddr.V6.Prefix.of_string_exn in
+  let test ~msg ~f ts =
+    let ts =
+      List.map ~f:(fun l ->
+        List.fold ~init:Ip6Set.empty ~f:(fun acc e ->
+          Ip6Set.union acc (Ip6Set.singleton (of_string e))
+        ) l
+      ) ts
+    in
+    let res = List.reduce_exn ~f ts in
+    printf "*****************\n%s\n    %s\n =  %s\n" msg
+      (List.map ~f:Ip6Set.show ts |> String.concat ~sep:"\n o  ")
+      (Ip6Set.show res)
+   in
+   let all =
+     [ "::/127"; "::ffff:0.0.0.0/96"; "64:ff9b::/96"; "64:ff9b:1::/48"; "100::/63";
+       "2001::/23"; "2001:db8::/32";
+       "2002::/16"; "2620:4f:8000::/48"; "3fff::/20"; "5f00::/16"; "fc00::/7"; "fe80::/10" ]
+   in
+   let sources =
+     [ "::/128"; "64:ff9b::/96"; "64:ff9b:1::/48"; "100::/63";
+       "2001::/32"; "2001:1::1/128"; "2001:1::2/127"; "2001:2::/48"; "2001:3::/32"; "2001:4:112::/48"; "2001:20::/27";
+       "2002::/16"; "2620:4f:8000::/48"; "5f00::/16"; "fc00::/7"; "fe80::/10" ]
+   in
+
+   test ~msg:"all" ~f:Ip6Set.diff [all];
+   test ~msg:"sources" ~f:Ip6Set.diff [sources];
+   test ~msg:"all \\ sources" ~f:Ip6Set.diff [all; sources];
+   test ~msg:"all >< sources" ~f:Ip6Set.intersection [all; sources];
+   test ~msg:"all >< sources (verify)" ~f:Ip6Set.intersection [["2001::/23"; "2001:db8::/32"]; ["2001::/32"; "2001:1::1/128"; "2001:1::2/127"; "2001:2::/48"; "2001:3::/32"; "2001:4:112::/48"; "2001:20::/27"]];
+   ();
+  [%expect {|
+    *****************
+    all
+        [ ::/127; ::ffff:0.0.0.0/96; 64:ff9b::/96; 64:ff9b:1::/48; 100::/63; 2001::/23; 2001:db8::/32; 2002::/16; 2620:4f:8000::/48; 3fff::/20; 5f00::/16; fc00::/7; fe80::/10 ]
+     =  [ ::/127; ::ffff:0.0.0.0/96; 64:ff9b::/96; 64:ff9b:1::/48; 100::/63; 2001::/23; 2001:db8::/32; 2002::/16; 2620:4f:8000::/48; 3fff::/20; 5f00::/16; fc00::/7; fe80::/10 ]
+    *****************
+    sources
+        [ ::/128; 64:ff9b::/96; 64:ff9b:1::/48; 100::/63; 2001::/32; 2001:1::1/128; 2001:1::2/127; 2001:2::/48; 2001:3::/32; 2001:4:112::/48; 2001:20::/27; 2002::/16; 2620:4f:8000::/48; 5f00::/16; fc00::/7; fe80::/10 ]
+     =  [ ::/128; 64:ff9b::/96; 64:ff9b:1::/48; 100::/63; 2001::/32; 2001:1::1/128; 2001:1::2/127; 2001:2::/48; 2001:3::/32; 2001:4:112::/48; 2001:20::/27; 2002::/16; 2620:4f:8000::/48; 5f00::/16; fc00::/7; fe80::/10 ]
+    *****************
+    all \ sources
+        [ ::/127; ::ffff:0.0.0.0/96; 64:ff9b::/96; 64:ff9b:1::/48; 100::/63; 2001::/23; 2001:db8::/32; 2002::/16; 2620:4f:8000::/48; 3fff::/20; 5f00::/16; fc00::/7; fe80::/10 ]
+     o  [ ::/128; 64:ff9b::/96; 64:ff9b:1::/48; 100::/63; 2001::/32; 2001:1::1/128; 2001:1::2/127; 2001:2::/48; 2001:3::/32; 2001:4:112::/48; 2001:20::/27; 2002::/16; 2620:4f:8000::/48; 5f00::/16; fc00::/7; fe80::/10 ]
+     =  [ ::1/128; ::ffff:0.0.0.0/96; 2001::/23 \ [ 2001::/32; 2001:1::1/128; 2001:1::2/127; 2001:2::/48; 2001:3::/32; 2001:4:112::/48; 2001:20::/27 ]; 2001:db8::/32; 3fff::/20 ]
+    *****************
+    all >< sources
+        [ ::/127; ::ffff:0.0.0.0/96; 64:ff9b::/96; 64:ff9b:1::/48; 100::/63; 2001::/23; 2001:db8::/32; 2002::/16; 2620:4f:8000::/48; 3fff::/20; 5f00::/16; fc00::/7; fe80::/10 ]
+     o  [ ::/128; 64:ff9b::/96; 64:ff9b:1::/48; 100::/63; 2001::/32; 2001:1::1/128; 2001:1::2/127; 2001:2::/48; 2001:3::/32; 2001:4:112::/48; 2001:20::/27; 2002::/16; 2620:4f:8000::/48; 5f00::/16; fc00::/7; fe80::/10 ]
+     =  [ ::/128; 64:ff9b::/96; 64:ff9b:1::/48; 100::/63; 2001::/32; 2001:1::1/128; 2001:1::2/127; 2001:2::/48; 2001:3::/32; 2001:4:112::/48; 2001:20::/27; 2002::/16; 2620:4f:8000::/48; 5f00::/16; fc00::/7; fe80::/10 ]
+    *****************
+    all >< sources (verify)
+        [ 2001::/23; 2001:db8::/32 ]
+     o  [ 2001::/32; 2001:1::1/128; 2001:1::2/127; 2001:2::/48; 2001:3::/32; 2001:4:112::/48; 2001:20::/27 ]
+     =  [ 2001::/32; 2001:1::1/128; 2001:1::2/127; 2001:2::/48; 2001:3::/32; 2001:4:112::/48; 2001:20::/27 ]
+    |}]
