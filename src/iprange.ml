@@ -15,6 +15,8 @@ module type Prefix = sig
   val subnets : int -> t -> t Stdlib.Seq.t
   val bits: t -> int
   val prefix: t -> t
+  val address: t -> addr
+  val make: int -> addr -> t
 end
 
 module Make(Ip : Prefix) = struct
@@ -26,6 +28,25 @@ module Make(Ip : Prefix) = struct
     let bits = Ip.bits ip + 1 in
     Ip.subnets bits ip
     |> Stdlib.List.of_seq
+
+  let ip_join_adjecent ip ip' =
+    let bits = Ip.bits ip in
+    match bits = Ip.bits ip' with
+    | false -> None
+    | true ->
+      let ip = Ip.make (bits-1) (Ip.address ip) in
+      match Ip.subset ~network:ip ~subnet:ip' with
+      | true -> Some ip
+      | false -> None
+
+  let rec ip_reduce = function
+    | i1 :: i2 :: is ->
+      begin
+        match ip_join_adjecent i1 i2 with
+        | Some ip -> ip :: ip_reduce is
+        | None -> i1 :: ip_reduce (i2 :: is)
+      end
+    | is -> is
 
   (* Intersection between to lists of ips (sorted) *)
   let rec ip_intersection l1 l2 =
@@ -55,6 +76,7 @@ module Make(Ip : Prefix) = struct
       | [], ls
       | ls, [] -> ls
 
+  let ip_union l1 l2 = ip_union l1 l2 |> ip_reduce
 
   let rec ip_diff l1 l2 =
     match l1, l2 with
@@ -67,15 +89,6 @@ module Make(Ip : Prefix) = struct
     | ls, _ :: ls' (* when Ip.compare l l' > 0 *) ->
       ip_diff ls ls'
     | ts, [] -> ts
-
-  (*
-  let ip_join_adjecent = function
-    | n1 :: n2 :: ns ->
-      (* So we want to make sure we are not holding the largest subset. *)
-      (* But we cannot if we reduce correctly *)
-      (* Where would 255.255.255.255/0 be? *)
-      (* Do we even have  a regular ordering here, so that all subsets are close? *)
-  *)
 
   let ip_subset ~of_:networks subnets =
     List.for_all ~f:(fun subnet ->
@@ -99,6 +112,15 @@ module Make(Ip : Prefix) = struct
     |> List.map ~f:(fun network -> network, List.filter ~f:(fun subnet -> Ip.subset ~network ~subnet) excls)
 
   let rec reduce t =
+    let rec inner = function
+      | (incl, excls) :: (incl', excls') :: ts ->
+        begin
+          match ip_join_adjecent incl incl' with
+          | Some incl -> (incl, (ip_union excls excls')) :: inner ts
+          | None -> (incl, excls) :: inner ((incl', excls') :: ts)
+        end
+      | ts -> ts
+    in
     t
     |> List.map ~f:(fun (incl, excls) ->
       let excls = ip_intersection [incl] excls in
@@ -113,6 +135,8 @@ module Make(Ip : Prefix) = struct
         | _ -> failwith "Precisely one element should be returned"
         end
       | elt -> elt)
+    |> inner
+
 
 
   let rec union t t' =
@@ -128,6 +152,7 @@ module Make(Ip : Prefix) = struct
       (incl, excls) :: union ts ((incl', excls') :: ts')
     | ts, (incl', excls') :: ts' (* when Ip.compare incl incl' > 0 *) ->
       (incl', excls') :: union ts ts'
+  let union t t' = union t t' |> reduce
 
   let rec intersection t t' =
     match t, t' with
@@ -167,9 +192,7 @@ module Make(Ip : Prefix) = struct
     | (incl, excls) :: ts, _ :: ts' (* when Ip.compare incl incl' > 0 *) ->
       diff ((incl, excls) :: ts) ts'
 
-  let diff t t' =
-    diff t t'
-    |> reduce
+  let diff t t' = diff t t' |> reduce
 
 
   let of_list l =
@@ -229,6 +252,17 @@ let%expect_test "compare" =
     compare 0.0.0.0/0 10.0.0.0/8 = -1
     |}]
 
+let%expect_test "decrease bits" =
+  let module P = Ipaddr.V4.Prefix in
+  let a = P.of_string_exn "10.0.0.0/8" in
+  let bits = P.bits a in
+  printf "Subnets of %s: " (P.to_string a);
+  P.subnets (bits - 1) a
+  |> Stdlib.Seq.iter (fun x -> printf "%s " (P.to_string x));
+  printf "\n";
+  ();
+  [%expect {| Subnets of 10.0.0.0/8: |}]
+
 let%expect_test "ip subnet" =
   let test ~subnet:subnet_s ~network:network_s =
     let subnet = Ipaddr.V4.Prefix.of_string_exn subnet_s in
@@ -265,6 +299,7 @@ let%expect_test "ip set operations" =
       (String.concat ~sep:"; " b)
       (List.map ~f:Ipaddr.V4.Prefix.to_string res |> String.concat ~sep:"; ")
   in
+  test ~msg:"union" ~f:Ip4Set.ip_union ["10.0.0.0/32"] ["10.0.0.1/32"];
   test ~msg:"union" ~f:Ip4Set.ip_union ["10.0.0.1/32"] ["10.0.0.2/32"];
   test ~msg:"union" ~f:Ip4Set.ip_union ["10.0.0.9/32"] ["10.0.0.10/32"; "10.0.0.11/32"];
   test ~msg:"union" ~f:Ip4Set.ip_union ["10.0.0.9/32";"10.0.0.10/32"; "10.0.0.11/32"] ["10.0.0.0/16"];
@@ -272,6 +307,7 @@ let%expect_test "ip set operations" =
   test ~msg:"intersection" ~f:Ip4Set.ip_intersection ["10.0.0.0/24"; "10.0.0.0/8"] ["10.0.1.0/24"; "10.0.4.0/24"];
 
   [%expect {|
+    [10.0.0.0/32] union [10.0.0.1/32] = [10.0.0.0/31]
     [10.0.0.1/32] union [10.0.0.2/32] = [10.0.0.1/32; 10.0.0.2/32]
     [10.0.0.9/32] union [10.0.0.10/32; 10.0.0.11/32] = [10.0.0.9/32; 10.0.0.10/32; 10.0.0.11/32]
     [10.0.0.9/32; 10.0.0.10/32; 10.0.0.11/32] union [10.0.0.0/16] = [10.0.0.0/16]
@@ -357,11 +393,23 @@ let%expect_test "Set operations - ipv6 " =
     printf "*****************\n%s\n    %s\n =  %s\n" msg
       (List.map ~f:Ip6Set.show ts |> String.concat ~sep:"\n o  ")
       (Ip6Set.show res)
-   in
+  in
+
+
+
    let all =
-     [ "::/127"; "::ffff:0.0.0.0/96"; "64:ff9b::/96"; "64:ff9b:1::/48"; "100::/63";
-       "2001::/23"; "2001:db8::/32";
-       "2002::/16"; "2620:4f:8000::/48"; "3fff::/20"; "5f00::/16"; "fc00::/7"; "fe80::/10" ]
+     [ "::1/128"; "::/128"; "::ffff:0:0/96"; "64:ff9b::/96"; "64:ff9b:1::/48";
+       "100::/64"; "100:0:0:1::/64";
+       "2001::/23"; "2001::/32"; "2001:1::1/128"; "2001:1::2/128"; "2001:1::3/128"; "2001:2::/48";
+       "2001:3::/32"; "2001:4:112::/48"; "2001:10::/28"; "2001:20::/28"; "2001:30::/28"; "2001:db8::/32";
+       "2002::/16"; "2620:4f:8000::/48";
+       "3fff::/20"; "5f00::/16"; "fc00::/7"; "fe80::/10" ]
+  in
+
+  let all' =
+    [ "::/127"; "::ffff:0.0.0.0/96"; "64:ff9b::/96"; "64:ff9b:1::/48"; "100::/63";
+      "2001::/23"; "2001:db8::/32";
+      "2002::/16"; "2620:4f:8000::/48"; "3fff::/20"; "5f00::/16"; "fc00::/7"; "fe80::/10" ]
    in
    let sources =
      [ "::/128"; "64:ff9b::/96"; "64:ff9b:1::/48"; "100::/63";
@@ -369,6 +417,7 @@ let%expect_test "Set operations - ipv6 " =
        "2002::/16"; "2620:4f:8000::/48"; "5f00::/16"; "fc00::/7"; "fe80::/10" ]
    in
 
+   test ~msg:"all'" ~f:Ip6Set.diff [all'];
    test ~msg:"all" ~f:Ip6Set.diff [all];
    test ~msg:"sources" ~f:Ip6Set.diff [sources];
    test ~msg:"all \\ sources" ~f:Ip6Set.diff [all; sources];
@@ -377,23 +426,27 @@ let%expect_test "Set operations - ipv6 " =
    ();
   [%expect {|
     *****************
-    all
+    all'
         [ ::/127; ::ffff:0.0.0.0/96; 64:ff9b::/96; 64:ff9b:1::/48; 100::/63; 2001::/23; 2001:db8::/32; 2002::/16; 2620:4f:8000::/48; 3fff::/20; 5f00::/16; fc00::/7; fe80::/10 ]
      =  [ ::/127; ::ffff:0.0.0.0/96; 64:ff9b::/96; 64:ff9b:1::/48; 100::/63; 2001::/23; 2001:db8::/32; 2002::/16; 2620:4f:8000::/48; 3fff::/20; 5f00::/16; fc00::/7; fe80::/10 ]
+    *****************
+    all
+        [ ::/128; ::1/128; ::ffff:0.0.0.0/96; 64:ff9b::/96; 64:ff9b:1::/48; 100::/64; 100:0:0:1::/64; 2001::/23; 2001:db8::/32; 2002::/16; 2620:4f:8000::/48; 3fff::/20; 5f00::/16; fc00::/7; fe80::/10 ]
+     =  [ ::/128; ::1/128; ::ffff:0.0.0.0/96; 64:ff9b::/96; 64:ff9b:1::/48; 100::/64; 100:0:0:1::/64; 2001::/23; 2001:db8::/32; 2002::/16; 2620:4f:8000::/48; 3fff::/20; 5f00::/16; fc00::/7; fe80::/10 ]
     *****************
     sources
         [ ::/128; 64:ff9b::/96; 64:ff9b:1::/48; 100::/63; 2001::/32; 2001:1::1/128; 2001:1::2/127; 2001:2::/48; 2001:3::/32; 2001:4:112::/48; 2001:20::/27; 2002::/16; 2620:4f:8000::/48; 5f00::/16; fc00::/7; fe80::/10 ]
      =  [ ::/128; 64:ff9b::/96; 64:ff9b:1::/48; 100::/63; 2001::/32; 2001:1::1/128; 2001:1::2/127; 2001:2::/48; 2001:3::/32; 2001:4:112::/48; 2001:20::/27; 2002::/16; 2620:4f:8000::/48; 5f00::/16; fc00::/7; fe80::/10 ]
     *****************
     all \ sources
-        [ ::/127; ::ffff:0.0.0.0/96; 64:ff9b::/96; 64:ff9b:1::/48; 100::/63; 2001::/23; 2001:db8::/32; 2002::/16; 2620:4f:8000::/48; 3fff::/20; 5f00::/16; fc00::/7; fe80::/10 ]
+        [ ::/128; ::1/128; ::ffff:0.0.0.0/96; 64:ff9b::/96; 64:ff9b:1::/48; 100::/64; 100:0:0:1::/64; 2001::/23; 2001:db8::/32; 2002::/16; 2620:4f:8000::/48; 3fff::/20; 5f00::/16; fc00::/7; fe80::/10 ]
      o  [ ::/128; 64:ff9b::/96; 64:ff9b:1::/48; 100::/63; 2001::/32; 2001:1::1/128; 2001:1::2/127; 2001:2::/48; 2001:3::/32; 2001:4:112::/48; 2001:20::/27; 2002::/16; 2620:4f:8000::/48; 5f00::/16; fc00::/7; fe80::/10 ]
      =  [ ::1/128; ::ffff:0.0.0.0/96; 2001::/23 \ [ 2001::/32; 2001:1::1/128; 2001:1::2/127; 2001:2::/48; 2001:3::/32; 2001:4:112::/48; 2001:20::/27 ]; 2001:db8::/32; 3fff::/20 ]
     *****************
     all >< sources
-        [ ::/127; ::ffff:0.0.0.0/96; 64:ff9b::/96; 64:ff9b:1::/48; 100::/63; 2001::/23; 2001:db8::/32; 2002::/16; 2620:4f:8000::/48; 3fff::/20; 5f00::/16; fc00::/7; fe80::/10 ]
+        [ ::/128; ::1/128; ::ffff:0.0.0.0/96; 64:ff9b::/96; 64:ff9b:1::/48; 100::/64; 100:0:0:1::/64; 2001::/23; 2001:db8::/32; 2002::/16; 2620:4f:8000::/48; 3fff::/20; 5f00::/16; fc00::/7; fe80::/10 ]
      o  [ ::/128; 64:ff9b::/96; 64:ff9b:1::/48; 100::/63; 2001::/32; 2001:1::1/128; 2001:1::2/127; 2001:2::/48; 2001:3::/32; 2001:4:112::/48; 2001:20::/27; 2002::/16; 2620:4f:8000::/48; 5f00::/16; fc00::/7; fe80::/10 ]
-     =  [ ::/128; 64:ff9b::/96; 64:ff9b:1::/48; 100::/63; 2001::/32; 2001:1::1/128; 2001:1::2/127; 2001:2::/48; 2001:3::/32; 2001:4:112::/48; 2001:20::/27; 2002::/16; 2620:4f:8000::/48; 5f00::/16; fc00::/7; fe80::/10 ]
+     =  [ ::/128; 64:ff9b::/96; 64:ff9b:1::/48; 100::/64; 100:0:0:1::/64; 2001::/32; 2001:1::1/128; 2001:1::2/127; 2001:2::/48; 2001:3::/32; 2001:4:112::/48; 2001:20::/27; 2002::/16; 2620:4f:8000::/48; 5f00::/16; fc00::/7; fe80::/10 ]
     *****************
     all >< sources (verify)
         [ 2001::/23; 2001:db8::/32 ]
