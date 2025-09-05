@@ -139,9 +139,9 @@ module Make(Ip : Ip) = struct
       | xs, [] -> xs
       | [], ys -> ys
       | x :: xs, y :: ys when Ip.Prefix.subset ~subnet:x ~network:y ->
-          y :: inner (xs, ys)
+          inner (xs, y :: ys)
       | x :: xs, y :: ys when Ip.Prefix.subset ~subnet:y ~network:x ->
-          x :: inner (xs, ys)
+          inner (x :: xs, ys)
       | x :: xs, y :: ys when Ip.Prefix.compare x y < 0 ->
           x :: inner (xs, y :: ys)
       | x :: xs, y :: ys when Ip.Prefix.compare x y > 0 ->

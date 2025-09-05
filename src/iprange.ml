@@ -20,8 +20,8 @@ module type Prefix = sig
 end
 
 module Make(Ip : Prefix) = struct
-  (* Why the exclusions as a subset of ip.t. If we want that, we can very easily generate that *)
-  type elt = Ip.t * Ip.t list
+  type ip = Ip.t
+  type elt = ip * ip list
   type t = elt list
 
   let ip_split ip =
@@ -137,8 +137,6 @@ module Make(Ip : Prefix) = struct
       | elt -> elt)
     |> inner
 
-
-
   let rec union t t' =
     match t, t' with
     | ts, [] | [], ts -> ts
@@ -200,6 +198,11 @@ module Make(Ip : Prefix) = struct
     |> List.fold ~init:empty ~f:union
 
 
+  let to_networks l =
+    let incls, excls = List.unzip l in
+    let excls = List.concat excls in
+    incls, excls
+
   let show t =
     let show_elt (incl, excls) =
       let excls = match excls with
@@ -211,8 +214,26 @@ module Make(Ip : Prefix) = struct
     sprintf "[ %s ]" (List.map ~f:show_elt t |> String.concat ~sep:"; ")
 end
 
+
 module Ip4Set = Make(Ipaddr.V4.Prefix)
 module Ip6Set = Make(Ipaddr.V6.Prefix)
+
+module type IpSet = sig
+  type ip
+  type elt
+  type t
+  val empty : t
+  val singleton : Ipaddr.V6.Prefix.t -> (Ipaddr.V6.Prefix.t * 'a list) list
+  val is_empty : t -> bool
+  val union : t -> t -> t
+  val intersection : t -> t -> t
+  val diff : t -> t -> t
+  val of_list : ip list -> t
+  val to_networks : t -> ip list * ip list
+  val show : t -> string
+end
+
+module X : (IpSet with type ip = Ipaddr.V6.Prefix.t) = Make(Ipaddr.V6.Prefix)
 
 let%expect_test "compare" =
   let open Ipaddr.V4.Prefix in
