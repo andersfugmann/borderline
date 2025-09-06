@@ -74,13 +74,10 @@ let is_always value =
 
 
 let merge_pred ?(tpe=`Inter) a b =
-  (* !A => !B => X   =>  !(A | B) => X
-
-     A => B => X     => A U B => X
-
-     A => !B => X    => (A / B) => X
-     !A => B => X    => (B / A) => X
-
+  (* !A => !B => X => !(A | B) => X
+      A => B  => X =>   A U B  => X
+      A => !B => X =>  (A / B) => X
+     !A => B  => X =>  (B / A) => X
   *)
   let merge_inter inter union diff a b =
     match a, b with
@@ -100,10 +97,10 @@ let merge_pred ?(tpe=`Inter) a b =
   (* What a matches but not what b matches *)
   let merge_diff inter union diff a b =
     match a, b with
-    | (a, false), (b, false) -> (diff  a b, false) (* OK *)
-    | (a, true),  (b, true)  -> (diff  b a, false) (* OK *)
-    | (a, false), (b, true)  -> (inter a b, false) (* OK *)
-    | (a, true),  (b, false) -> (union a b, true)  (* OK *)
+    | (a, false), (b, false) -> (diff  a b, false)
+    | (a, true),  (b, true)  -> (diff  b a, false)
+    | (a, false), (b, true)  -> (inter a b, false)
+    | (a, true),  (b, false) -> (union a b, true)
   in
 
   let merge = match tpe with

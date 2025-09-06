@@ -1,11 +1,4 @@
 (** Ip Sets *)
-(* How do I negate? when emitting rules?*)
-(* Easiest is to create a new chain *)
-(* 10.0.0.0/8 \ 10.0.0.1 Is _not_ 10.0.0.1 ^ !10.0.0.8 *)
-(* Negation can be done by negating with 0.0.0.0/0 *)
-(* But that will break into a lot of smaller groups *)
-
-
 open Base
 let sprintf = Printf.sprintf
 let printf = Stdio.printf
@@ -26,6 +19,9 @@ module type Prefix = sig
   val make: int -> addr -> t
   val mask: int -> addr
 end
+
+(* For larger sets, we should see if we can reduce by excluding some ranges *)
+(* Try increasing the bits by two and partition all networks. O(n^2) algorithm, and its not complete *)
 
 module Make(Ip : Prefix) = struct
   module IpSet = struct
@@ -194,11 +190,13 @@ module Make(Ip : Prefix) = struct
     List.map ~f:singleton l
     |> List.fold ~init:empty ~f:union
 
-
   let to_networks l =
     let incls, excls = List.unzip l in
     let excls = List.concat excls in
     incls, excls
+
+  let cardinal l =
+    List.fold ~init:0 ~f:(fun acc (_, excl) -> acc + 1 + List.length excl) l
 
   let show t =
     let show_elt (incl, excls) =
@@ -217,7 +215,6 @@ module Ip6Set = Make(Ipaddr.V6.Prefix)
 
 module type IpSet = sig
   type ip
-  type elt
   type t
   val empty : t
   val singleton : Ipaddr.V6.Prefix.t -> (Ipaddr.V6.Prefix.t * 'a list) list
@@ -228,6 +225,7 @@ module type IpSet = sig
   val of_list : ip list -> t
   val to_networks : t -> ip list * ip list
   val show : t -> string
+  val cardinal : t -> int
 end
 
 module X : (IpSet with type ip = Ipaddr.V6.Prefix.t) = Make(Ipaddr.V6.Prefix)
@@ -280,18 +278,6 @@ let%expect_test "decrease bits" =
   printf "\n";
   ();
   [%expect {| Subnets of 10.0.0.0/8: |}]
-
-let%expect_test "any" =
-  let module P = Ipaddr.V4.Prefix in
-  P.mask 0 |> Ipaddr.V4.to_string |> printf "Mask 0: %s\n";
-  Ip4Set.(any |> singleton |> show |> printf "Any: %s\n");
-  Ip6Set.(any |> singleton |> show |> printf "Any: %s\n");
-  ();
-  [%expect {|
-    Mask 0: 0.0.0.0
-    Any: [ 0.0.0.0/0 ]
-    Any: [ ::/0 ]
-    |}]
 
 let%expect_test "ip subnet" =
   let test ~subnet:subnet_s ~network:network_s =
@@ -446,40 +432,36 @@ let%expect_test "Set operations - ipv6 " =
        "2001::/32"; "2001:1::1/128"; "2001:1::2/127"; "2001:2::/48"; "2001:3::/32"; "2001:4:112::/48"; "2001:20::/27";
        "2002::/16"; "2620:4f:8000::/48"; "5f00::/16"; "fc00::/7"; "fe80::/10" ]
    in
-
-   test ~msg:"all'" ~f:Ip6Set.diff [all'];
-   test ~msg:"all" ~f:Ip6Set.diff [all];
-   test ~msg:"sources" ~f:Ip6Set.diff [sources];
+   test ~msg:"all' \\ all" ~f:Ip6Set.diff [all'; all];
+   test ~msg:"all \\ all'" ~f:Ip6Set.diff [all; all'];
+   test ~msg:"sources \\ all" ~f:Ip6Set.diff [sources; all];
    test ~msg:"all \\ sources" ~f:Ip6Set.diff [all; sources];
-   test ~msg:"all >< sources" ~f:Ip6Set.intersection [all; sources];
-   test ~msg:"all >< sources (verify)" ~f:Ip6Set.intersection [["2001::/23"; "2001:db8::/32"]; ["2001::/32"; "2001:1::1/128"; "2001:1::2/127"; "2001:2::/48"; "2001:3::/32"; "2001:4:112::/48"; "2001:20::/27"]];
+   test ~msg:"all ∩ sources" ~f:Ip6Set.intersection [all; sources];
    ();
   [%expect {|
     *****************
-    all'
+    all' \ all
         [ ::/127; ::ffff:0.0.0.0/96; 64:ff9b::/96; 64:ff9b:1::/48; 100::/63; 2001::/23; 2001:db8::/32; 2002::/16; 2620:4f:8000::/48; 3fff::/20; 5f00::/16; fc00::/7; fe80::/10 ]
-     =  [ ::/127; ::ffff:0.0.0.0/96; 64:ff9b::/96; 64:ff9b:1::/48; 100::/63; 2001::/23; 2001:db8::/32; 2002::/16; 2620:4f:8000::/48; 3fff::/20; 5f00::/16; fc00::/7; fe80::/10 ]
+     o  [ ::/127; ::ffff:0.0.0.0/96; 64:ff9b::/96; 64:ff9b:1::/48; 100::/63; 2001::/23; 2001:db8::/32; 2002::/16; 2620:4f:8000::/48; 3fff::/20; 5f00::/16; fc00::/7; fe80::/10 ]
+     =  [  ]
     *****************
-    all
+    all \ all'
         [ ::/127; ::ffff:0.0.0.0/96; 64:ff9b::/96; 64:ff9b:1::/48; 100::/63; 2001::/23; 2001:db8::/32; 2002::/16; 2620:4f:8000::/48; 3fff::/20; 5f00::/16; fc00::/7; fe80::/10 ]
-     =  [ ::/127; ::ffff:0.0.0.0/96; 64:ff9b::/96; 64:ff9b:1::/48; 100::/63; 2001::/23; 2001:db8::/32; 2002::/16; 2620:4f:8000::/48; 3fff::/20; 5f00::/16; fc00::/7; fe80::/10 ]
+     o  [ ::/127; ::ffff:0.0.0.0/96; 64:ff9b::/96; 64:ff9b:1::/48; 100::/63; 2001::/23; 2001:db8::/32; 2002::/16; 2620:4f:8000::/48; 3fff::/20; 5f00::/16; fc00::/7; fe80::/10 ]
+     =  [  ]
     *****************
-    sources
+    sources \ all
         [ ::/128; 64:ff9b::/96; 64:ff9b:1::/48; 100::/63; 2001::/32; 2001:1::1/128; 2001:1::2/127; 2001:2::/48; 2001:3::/32; 2001:4:112::/48; 2001:20::/27; 2002::/16; 2620:4f:8000::/48; 5f00::/16; fc00::/7; fe80::/10 ]
-     =  [ ::/128; 64:ff9b::/96; 64:ff9b:1::/48; 100::/63; 2001::/32; 2001:1::1/128; 2001:1::2/127; 2001:2::/48; 2001:3::/32; 2001:4:112::/48; 2001:20::/27; 2002::/16; 2620:4f:8000::/48; 5f00::/16; fc00::/7; fe80::/10 ]
+     o  [ ::/127; ::ffff:0.0.0.0/96; 64:ff9b::/96; 64:ff9b:1::/48; 100::/63; 2001::/23; 2001:db8::/32; 2002::/16; 2620:4f:8000::/48; 3fff::/20; 5f00::/16; fc00::/7; fe80::/10 ]
+     =  [  ]
     *****************
     all \ sources
         [ ::/127; ::ffff:0.0.0.0/96; 64:ff9b::/96; 64:ff9b:1::/48; 100::/63; 2001::/23; 2001:db8::/32; 2002::/16; 2620:4f:8000::/48; 3fff::/20; 5f00::/16; fc00::/7; fe80::/10 ]
      o  [ ::/128; 64:ff9b::/96; 64:ff9b:1::/48; 100::/63; 2001::/32; 2001:1::1/128; 2001:1::2/127; 2001:2::/48; 2001:3::/32; 2001:4:112::/48; 2001:20::/27; 2002::/16; 2620:4f:8000::/48; 5f00::/16; fc00::/7; fe80::/10 ]
      =  [ ::1/128; ::ffff:0.0.0.0/96; 2001::/23 \ [ 2001::/32; 2001:1::1/128; 2001:1::2/127; 2001:2::/48; 2001:3::/32; 2001:4:112::/48; 2001:20::/27 ]; 2001:db8::/32; 3fff::/20 ]
     *****************
-    all >< sources
+    all ∩ sources
         [ ::/127; ::ffff:0.0.0.0/96; 64:ff9b::/96; 64:ff9b:1::/48; 100::/63; 2001::/23; 2001:db8::/32; 2002::/16; 2620:4f:8000::/48; 3fff::/20; 5f00::/16; fc00::/7; fe80::/10 ]
      o  [ ::/128; 64:ff9b::/96; 64:ff9b:1::/48; 100::/63; 2001::/32; 2001:1::1/128; 2001:1::2/127; 2001:2::/48; 2001:3::/32; 2001:4:112::/48; 2001:20::/27; 2002::/16; 2620:4f:8000::/48; 5f00::/16; fc00::/7; fe80::/10 ]
      =  [ ::/128; 64:ff9b::/96; 64:ff9b:1::/48; 100::/63; 2001::/32; 2001:1::1/128; 2001:1::2/127; 2001:2::/48; 2001:3::/32; 2001:4:112::/48; 2001:20::/27; 2002::/16; 2620:4f:8000::/48; 5f00::/16; fc00::/7; fe80::/10 ]
-    *****************
-    all >< sources (verify)
-        [ 2001::/23; 2001:db8::/32 ]
-     o  [ 2001::/32; 2001:1::1/128; 2001:1::2/127; 2001:2::/48; 2001:3::/32; 2001:4:112::/48; 2001:20::/27 ]
-     =  [ 2001::/32; 2001:1::1/128; 2001:1::2/127; 2001:2::/48; 2001:3::/32; 2001:4:112::/48; 2001:20::/27 ]
     |}]
