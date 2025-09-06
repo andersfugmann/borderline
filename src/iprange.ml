@@ -28,6 +28,86 @@ module type Prefix = sig
 end
 
 module Make(Ip : Prefix) = struct
+  module IpSet = struct
+    (* Should move into a sub-module *)
+    let subset ~of_:networks subnets =
+      List.for_all ~f:(fun subnet ->
+        List.exists ~f:(fun network -> Ip.subset ~subnet ~network) networks
+      ) subnets
+
+    let split ip =
+      let bits = Ip.bits ip + 1 in
+      Ip.subnets bits ip
+      |> Stdlib.List.of_seq
+
+    let join_adjecent ip ip' =
+      let bits = Ip.bits ip in
+      match bits = Ip.bits ip' with
+      | false -> None
+      | true ->
+        let ip = Ip.make (bits-1) (Ip.address ip) in
+        match Ip.subset ~network:ip ~subnet:ip' with
+        | true -> Some ip
+        | false -> None
+
+    let rec reduce = function
+      | n1 :: n2 :: ns when Ip.subset ~network:n1 ~subnet:n2 ->
+        reduce (n1 :: ns)
+      | n1 :: n2 :: ns when Ip.subset ~network:n2 ~subnet:n1 ->
+        reduce (n2 :: ns)
+      | n1 :: n2 :: ns ->
+        begin
+          match join_adjecent n1 n2 with
+          | Some ip -> reduce (ip :: ns)
+          | None -> n1 :: reduce (n2 :: ns)
+        end
+      | ns -> ns
+
+    (* Intersection between to lists of ips (sorted) *)
+    let rec intersection l1 l2 =
+      match l1, l2 with
+      | l :: ls, l' :: ls' when Ip.subset ~subnet:l' ~network:l ->
+        l' :: intersection (l :: ls) ls'
+      | l :: ls, l' :: ls' when Ip.subset ~subnet:l ~network:l' ->
+        l :: intersection ls (l' :: ls')
+      | l :: ls, l' :: ls' when Ip.compare l l' < 0 ->
+        intersection ls (l' :: ls')
+      | l :: ls, _ :: ls' (* when Ip.compare l l' > 0 *) ->
+        intersection (l :: ls) ls'
+      | [], _
+      | _, [] -> []
+    let intersection l1 l2 = intersection l1 l2 |> reduce
+
+
+    (* Union between to lists of ips (sorted) *)
+    let rec union l1 l2 =
+      match l1, l2 with
+      | l :: ls, l' :: ls' when Ip.subset ~subnet:l' ~network:l ->
+        union (l :: ls) ls'
+      | l :: ls, l' :: ls' when Ip.subset ~subnet:l ~network:l' ->
+        union ls (l' :: ls')
+      | l :: ls, l' :: ls' when Ip.compare l l' < 0 ->
+        l :: union ls (l' :: ls')
+      | l :: ls, l' :: ls' (* when Ip.compare l l' > 0 *) ->
+        l' :: union (l :: ls) ls'
+      | [], ls
+      | ls, [] -> ls
+    let union l1 l2 = union l1 l2 |> reduce
+
+    let rec diff l1 l2 =
+      match l1, l2 with
+      | l :: ls, l' :: ls' when Ip.subset ~subnet:l ~network:l' ->
+        diff ls (l' :: ls')
+      | l :: ls, l' :: ls' when Ip.subset ~subnet:l' ~network:l ->
+        diff ((split l) @ ls) (l' :: ls')
+      | l :: ls, l' :: ls' when Ip.compare l l' < 0 ->
+        diff ls (l' :: ls')
+      | ls, _ :: ls' (* when Ip.compare l l' > 0 *) ->
+        diff ls ls'
+      | ts, [] -> ts
+    let diff l1 l2 = diff l1 l2 |> reduce
+  end
+
   type ip = Ip.t
   type elt = ip * ip list
   type t = elt list
@@ -37,97 +117,18 @@ module Make(Ip : Prefix) = struct
   let singleton ip = [ (Ip.prefix ip, []) ]
   let is_empty = List.is_empty
 
-
-  (* Should move into a sub-module *)
-  let ip_subset ~of_:networks subnets =
-    List.for_all ~f:(fun subnet ->
-      List.exists ~f:(fun network -> Ip.subset ~subnet ~network) networks
-    ) subnets
-
-  let ip_split ip =
-    let bits = Ip.bits ip + 1 in
-    Ip.subnets bits ip
-    |> Stdlib.List.of_seq
-
-  let ip_join_adjecent ip ip' =
-    let bits = Ip.bits ip in
-    match bits = Ip.bits ip' with
-    | false -> None
-    | true ->
-      let ip = Ip.make (bits-1) (Ip.address ip) in
-      match Ip.subset ~network:ip ~subnet:ip' with
-      | true -> Some ip
-      | false -> None
-
-  let rec ip_reduce = function
-    | n1 :: n2 :: ns when Ip.subset ~network:n1 ~subnet:n2 ->
-      ip_reduce (n1 :: ns)
-    | n1 :: n2 :: ns when Ip.subset ~network:n2 ~subnet:n1 ->
-      ip_reduce (n2 :: ns)
-    | n1 :: n2 :: ns ->
-      begin
-        match ip_join_adjecent n1 n2 with
-        | Some ip -> ip_reduce (ip :: ns)
-        | None -> n1 :: ip_reduce (n2 :: ns)
-      end
-    | ns -> ns
-
-  (* Intersection between to lists of ips (sorted) *)
-  let rec ip_intersection l1 l2 =
-    match l1, l2 with
-      | l :: ls, l' :: ls' when Ip.subset ~subnet:l' ~network:l ->
-        l' :: ip_intersection (l :: ls) ls'
-      | l :: ls, l' :: ls' when Ip.subset ~subnet:l ~network:l' ->
-        l :: ip_intersection ls (l' :: ls')
-      | l :: ls, l' :: ls' when Ip.compare l l' < 0 ->
-        ip_intersection ls (l' :: ls')
-      | l :: ls, _ :: ls' (* when Ip.compare l l' > 0 *) ->
-        ip_intersection (l :: ls) ls'
-      | [], _
-      | _, [] -> []
-  let ip_intersection l1 l2 = ip_intersection l1 l2 |> ip_reduce
-
-
-  (* Union between to lists of ips (sorted) *)
-  let rec ip_union l1 l2 =
-    match l1, l2 with
-      | l :: ls, l' :: ls' when Ip.subset ~subnet:l' ~network:l ->
-        ip_union (l :: ls) ls'
-      | l :: ls, l' :: ls' when Ip.subset ~subnet:l ~network:l' ->
-        ip_union ls (l' :: ls')
-      | l :: ls, l' :: ls' when Ip.compare l l' < 0 ->
-        l :: ip_union ls (l' :: ls')
-      | l :: ls, l' :: ls' (* when Ip.compare l l' > 0 *) ->
-        l' :: ip_union (l :: ls) ls'
-      | [], ls
-      | ls, [] -> ls
-  let ip_union l1 l2 = ip_union l1 l2 |> ip_reduce
-
-  let rec ip_diff l1 l2 =
-    match l1, l2 with
-    | l :: ls, l' :: ls' when Ip.subset ~subnet:l ~network:l' ->
-      ip_diff ls (l' :: ls')
-    | l :: ls, l' :: ls' when Ip.subset ~subnet:l' ~network:l ->
-      ip_diff ((ip_split l) @ ls) (l' :: ls')
-    | l :: ls, l' :: ls' when Ip.compare l l' < 0 ->
-      ip_diff ls (l' :: ls')
-    | ls, _ :: ls' (* when Ip.compare l l' > 0 *) ->
-      ip_diff ls ls'
-    | ts, [] -> ts
-  let ip_diff l1 l2 = ip_diff l1 l2 |> ip_reduce
-
   let split_elt (incl, excls) =
-    ip_split incl
+    IpSet.split incl
     |> List.map ~f:(fun network -> network, List.filter ~f:(fun subnet -> Ip.subset ~network ~subnet) excls)
 
   let rec reduce = function
     | (incl, excls) :: ts when List.exists ~f:(fun excl -> Ip.subset ~network:excl ~subnet:incl) excls ->
       reduce ts
-    | (incl, excls) :: (incl', excls') :: ts when ip_join_adjecent incl incl' |> Option.is_some ->
-      let incl = ip_join_adjecent incl incl' |> Option.value_exn in
-      reduce ((incl, (ip_union excls excls')) ::ts)
+    | (incl, excls) :: (incl', excls') :: ts when IpSet.join_adjecent incl incl' |> Option.is_some ->
+      let incl = IpSet.join_adjecent incl incl' |> Option.value_exn in
+      reduce ((incl, (IpSet.union excls excls')) ::ts)
     | (incl, excls) :: ts when List.exists ~f:(fun excl -> Ip.bits excl - 1 = Ip.bits incl) excls ->
-      let ts' = List.map (ip_split incl) ~f:(fun incl -> (incl, ip_intersection [incl] excls)) in
+      let ts' = List.map (IpSet.split incl) ~f:(fun incl -> (incl, IpSet.intersection [incl] excls)) in
       reduce (ts' @ ts)
     | t :: ts -> t :: reduce ts
     | [] -> []
@@ -136,10 +137,10 @@ module Make(Ip : Prefix) = struct
     match t, t' with
     | ts, [] | [], ts -> ts
     | (incl, excls) :: ts, (incl', excls') :: ts' when Ip.subset ~subnet:incl' ~network:incl ->
-      let excls = ip_union (ip_intersection excls excls') (ip_diff excls [incl']) in
+      let excls = IpSet.union (IpSet.intersection excls excls') (IpSet.diff excls [incl']) in
       union ((incl, excls) :: ts) ts'
     | (incl, excls) :: ts, (incl', excls') :: ts' when Ip.subset ~subnet:incl ~network:incl' ->
-      let excls' = ip_union (ip_intersection excls excls') (ip_diff excls' [incl]) in
+      let excls' = IpSet.union (IpSet.intersection excls excls') (IpSet.diff excls' [incl]) in
       union ts ((incl', excls') :: ts')
     | (incl, excls) :: ts, (incl', excls') :: ts' when Ip.compare incl incl' < 0 ->
       (incl, excls) :: union ts ((incl', excls') :: ts')
@@ -151,9 +152,9 @@ module Make(Ip : Prefix) = struct
     match t, t' with
     | [], _ | _, [] -> []
     | (incl, excls) :: ts, (incl', excls') :: ts' when Ip.subset ~subnet:incl' ~network:incl ->
-      (incl', ip_intersection [incl'] (ip_union excls excls')) :: intersection ((incl, excls) :: ts) ts'
+      (incl', IpSet.intersection [incl'] (IpSet.union excls excls')) :: intersection ((incl, excls) :: ts) ts'
     | (incl, excls) :: ts, (incl', excls') :: ts' when Ip.subset ~subnet:incl ~network:incl' ->
-      (incl, ip_intersection [incl] (ip_union excls excls')) :: intersection ts ((incl', excls') :: ts')
+      (incl, IpSet.intersection [incl] (IpSet.union excls excls')) :: intersection ts ((incl', excls') :: ts')
     | (incl, _) :: ts, (incl', excls') :: ts' when Ip.compare incl incl' < 0 ->
       intersection ts ((incl', excls') :: ts')
     | ts, _ :: ts' (* when Ip.compare incl incl' > 0 *) ->
@@ -167,15 +168,15 @@ module Make(Ip : Prefix) = struct
     | (incl, excls) :: ts, (incl', excls') :: ts' when Ip.subset ~subnet:incl ~network:incl' ->
       (* All are excluded. Its what-ever is not excluded - excls. *)
       let incls =
-        ip_intersection [incl] excls'
-        |> List.map ~f:(fun incl -> (incl, ip_intersection [incl] excls))
+        IpSet.intersection [incl] excls'
+        |> List.map ~f:(fun incl -> (incl, IpSet.intersection [incl] excls))
       in
       incls @ diff ts ((incl', excls') :: ts')
     | (incl, excls) :: ts, (incl', excls') :: ts' when Ip.subset ~subnet:incl' ~network:incl -> begin
-        match ip_subset ~of_:excls excls' with
+        match IpSet.subset ~of_:excls excls' with
         | true ->
           (* If excl is smaller, we would just add incl' to the exclude list, but only if excl' is a subset of excl. *)
-          let excls = ip_union excls [incl'] in
+          let excls = IpSet.union excls [incl'] in
           diff ((incl, excls) :: ts) ts'
         | false ->
           let ts' = split_elt (incl, excls) @ ts' in
@@ -286,7 +287,11 @@ let%expect_test "any" =
   Ip4Set.(any |> singleton |> show |> printf "Any: %s\n");
   Ip6Set.(any |> singleton |> show |> printf "Any: %s\n");
   ();
-  [%expect {| Mask 0: 0.0.0.0 |}]
+  [%expect {|
+    Mask 0: 0.0.0.0
+    Any: [ 0.0.0.0/0 ]
+    Any: [ ::/0 ]
+    |}]
 
 let%expect_test "ip subnet" =
   let test ~subnet:subnet_s ~network:network_s =
@@ -324,12 +329,12 @@ let%expect_test "ip set operations" =
       (String.concat ~sep:"; " b)
       (List.map ~f:Ipaddr.V4.Prefix.to_string res |> String.concat ~sep:"; ")
   in
-  test ~msg:"union" ~f:Ip4Set.ip_union ["10.0.0.0/32"] ["10.0.0.1/32"];
-  test ~msg:"union" ~f:Ip4Set.ip_union ["10.0.0.1/32"] ["10.0.0.2/32"];
-  test ~msg:"union" ~f:Ip4Set.ip_union ["10.0.0.9/32"] ["10.0.0.10/32"; "10.0.0.11/32"];
-  test ~msg:"union" ~f:Ip4Set.ip_union ["10.0.0.9/32";"10.0.0.10/32"; "10.0.0.11/32"] ["10.0.0.0/16"];
-  test ~msg:"intersection" ~f:Ip4Set.ip_intersection ["10.0.0.11/32"] ["10.0.0.11/32"; "10.0.0.12/32"];
-  test ~msg:"intersection" ~f:Ip4Set.ip_intersection ["10.0.0.0/24"; "10.0.0.0/8"] ["10.0.1.0/24"; "10.0.4.0/24"];
+  test ~msg:"union" ~f:Ip4Set.IpSet.union ["10.0.0.0/32"] ["10.0.0.1/32"];
+  test ~msg:"union" ~f:Ip4Set.IpSet.union ["10.0.0.1/32"] ["10.0.0.2/32"];
+  test ~msg:"union" ~f:Ip4Set.IpSet.union ["10.0.0.9/32"] ["10.0.0.10/32"; "10.0.0.11/32"];
+  test ~msg:"union" ~f:Ip4Set.IpSet.union ["10.0.0.9/32";"10.0.0.10/32"; "10.0.0.11/32"] ["10.0.0.0/16"];
+  test ~msg:"intersection" ~f:Ip4Set.IpSet.intersection ["10.0.0.11/32"] ["10.0.0.11/32"; "10.0.0.12/32"];
+  test ~msg:"intersection" ~f:Ip4Set.IpSet.intersection ["10.0.0.0/24"; "10.0.0.0/8"] ["10.0.1.0/24"; "10.0.4.0/24"];
 
   [%expect {|
     [10.0.0.0/32] union [10.0.0.1/32] = [10.0.0.0/31]
