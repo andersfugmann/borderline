@@ -1,4 +1,11 @@
-(* Ip ranges *)
+(** Ip Sets *)
+(* How do I negate? when emitting rules?*)
+(* Easiest is to create a new chain *)
+(* 10.0.0.0/8 \ 10.0.0.1 Is _not_ 10.0.0.1 ^ !10.0.0.8 *)
+(* Negation can be done by negating with 0.0.0.0/0 *)
+(* But that will break into a lot of smaller groups *)
+
+
 open Base
 let sprintf = Printf.sprintf
 let printf = Stdio.printf
@@ -17,12 +24,25 @@ module type Prefix = sig
   val prefix: t -> t
   val address: t -> addr
   val make: int -> addr -> t
+  val mask: int -> addr
 end
 
 module Make(Ip : Prefix) = struct
   type ip = Ip.t
   type elt = ip * ip list
   type t = elt list
+
+  let any = Ip.(make 0 (mask 0))
+  let empty = [ ]
+  let singleton ip = [ (Ip.prefix ip, []) ]
+  let is_empty = List.is_empty
+
+
+  (* Should move into a sub-module *)
+  let ip_subset ~of_:networks subnets =
+    List.for_all ~f:(fun subnet ->
+      List.exists ~f:(fun network -> Ip.subset ~subnet ~network) networks
+    ) subnets
 
   let ip_split ip =
     let bits = Ip.bits ip + 1 in
@@ -40,13 +60,17 @@ module Make(Ip : Prefix) = struct
       | false -> None
 
   let rec ip_reduce = function
-    | i1 :: i2 :: is ->
+    | n1 :: n2 :: ns when Ip.subset ~network:n1 ~subnet:n2 ->
+      ip_reduce (n1 :: ns)
+    | n1 :: n2 :: ns when Ip.subset ~network:n2 ~subnet:n1 ->
+      ip_reduce (n2 :: ns)
+    | n1 :: n2 :: ns ->
       begin
-        match ip_join_adjecent i1 i2 with
-        | Some ip -> ip :: ip_reduce is
-        | None -> i1 :: ip_reduce (i2 :: is)
+        match ip_join_adjecent n1 n2 with
+        | Some ip -> ip_reduce (ip :: ns)
+        | None -> n1 :: ip_reduce (n2 :: ns)
       end
-    | is -> is
+    | ns -> ns
 
   (* Intersection between to lists of ips (sorted) *)
   let rec ip_intersection l1 l2 =
@@ -61,6 +85,8 @@ module Make(Ip : Prefix) = struct
         ip_intersection (l :: ls) ls'
       | [], _
       | _, [] -> []
+  let ip_intersection l1 l2 = ip_intersection l1 l2 |> ip_reduce
+
 
   (* Union between to lists of ips (sorted) *)
   let rec ip_union l1 l2 =
@@ -75,7 +101,6 @@ module Make(Ip : Prefix) = struct
         l' :: ip_union (l :: ls) ls'
       | [], ls
       | ls, [] -> ls
-
   let ip_union l1 l2 = ip_union l1 l2 |> ip_reduce
 
   let rec ip_diff l1 l2 =
@@ -89,53 +114,23 @@ module Make(Ip : Prefix) = struct
     | ls, _ :: ls' (* when Ip.compare l l' > 0 *) ->
       ip_diff ls ls'
     | ts, [] -> ts
-
-  let ip_subset ~of_:networks subnets =
-    List.for_all ~f:(fun subnet ->
-      List.exists ~f:(fun network -> Ip.subset ~subnet ~network) networks
-    ) subnets
-
-  let rec ip_reduce = function
-    | n1 :: n2 :: ns when Ip.subset ~network:n1 ~subnet:n2 ->
-      ip_reduce (n1 :: ns)
-    | n1 :: n2 :: ns when Ip.subset ~network:n2 ~subnet:n1 ->
-      ip_reduce (n2 :: ns)
-    | n :: ns -> n :: ip_reduce ns
-    | [] -> []
-
-  let empty = [ ]
-  let singleton ip = [ (Ip.prefix ip, []) ]
-  let is_empty = List.is_empty
+  let ip_diff l1 l2 = ip_diff l1 l2 |> ip_reduce
 
   let split_elt (incl, excls) =
     ip_split incl
     |> List.map ~f:(fun network -> network, List.filter ~f:(fun subnet -> Ip.subset ~network ~subnet) excls)
 
-  let rec reduce t =
-    let rec inner = function
-      | (incl, excls) :: (incl', excls') :: ts ->
-        begin
-          match ip_join_adjecent incl incl' with
-          | Some incl -> (incl, (ip_union excls excls')) :: inner ts
-          | None -> (incl, excls) :: inner ((incl', excls') :: ts)
-        end
-      | ts -> ts
-    in
-    t
-    |> List.map ~f:(fun (incl, excls) ->
-      let excls = ip_intersection [incl] excls in
-      incl, excls)
-    |> List.filter ~f:(fun (incl, excls) ->
-      not (ip_subset ~of_:excls [incl]))
-    |> List.map ~f:(function
-      | incl, [ excl ] when Ip.bits incl + 1 = Ip.bits excl ->
-        (* So excl could also be large *)
-        begin match reduce (split_elt (incl, [ excl ])) with
-        | [elt] -> elt
-        | _ -> failwith "Precisely one element should be returned"
-        end
-      | elt -> elt)
-    |> inner
+  let rec reduce = function
+    | (incl, excls) :: ts when List.exists ~f:(fun excl -> Ip.subset ~network:excl ~subnet:incl) excls ->
+      reduce ts
+    | (incl, excls) :: (incl', excls') :: ts when ip_join_adjecent incl incl' |> Option.is_some ->
+      let incl = ip_join_adjecent incl incl' |> Option.value_exn in
+      reduce ((incl, (ip_union excls excls')) ::ts)
+    | (incl, excls) :: ts when List.exists ~f:(fun excl -> Ip.bits excl - 1 = Ip.bits incl) excls ->
+      let ts' = List.map (ip_split incl) ~f:(fun incl -> (incl, ip_intersection [incl] excls)) in
+      reduce (ts' @ ts)
+    | t :: ts -> t :: reduce ts
+    | [] -> []
 
   let rec union t t' =
     match t, t' with
@@ -163,6 +158,7 @@ module Make(Ip : Prefix) = struct
       intersection ts ((incl', excls') :: ts')
     | ts, _ :: ts' (* when Ip.compare incl incl' > 0 *) ->
       intersection ts ts'
+
 
   let rec diff t t' =
     match t, t' with
@@ -283,6 +279,14 @@ let%expect_test "decrease bits" =
   printf "\n";
   ();
   [%expect {| Subnets of 10.0.0.0/8: |}]
+
+let%expect_test "any" =
+  let module P = Ipaddr.V4.Prefix in
+  P.mask 0 |> Ipaddr.V4.to_string |> printf "Mask 0: %s\n";
+  Ip4Set.(any |> singleton |> show |> printf "Any: %s\n");
+  Ip6Set.(any |> singleton |> show |> printf "Any: %s\n");
+  ();
+  [%expect {| Mask 0: 0.0.0.0 |}]
 
 let%expect_test "ip subnet" =
   let test ~subnet:subnet_s ~network:network_s =
