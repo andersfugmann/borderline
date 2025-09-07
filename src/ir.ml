@@ -3,9 +3,8 @@ open Base
 module Set = Set.Poly
 
 open Common
-module Ip6 = Ipset.Ip6
-module Ip4 = Ipset.Ip4
-
+module Ip6Set = Ipset.Ip6Set
+module Ip4Set = Ipset.Ip4Set
 
 module Ipaddr = struct
   include Ipaddr
@@ -107,8 +106,8 @@ type predicate = Interface of Direction.t * id Set.t
                | Zone of Direction.t * zone Set.t
                | State of State.t
                | Ports of Direction.t * Port_type.t * int Set.t (* Implies tcp or udp *)
-               | Ip6Set of Direction.t * Ip6.t (* Implies ipv6 *)
-               | Ip4Set of Direction.t * Ip4.t (* Implies ipv4 *)
+               | Ip6Set of Direction.t * Ip6Set.t (* Implies ipv6 *)
+               | Ip4Set of Direction.t * Ip4Set.t (* Implies ipv4 *)
                | Protocol of int Set.t
                | Icmp6 of int Set.t (* Implies ipv6 *)
                | Icmp4 of int Set.t (* Implies ipv4 *)
@@ -141,8 +140,8 @@ let predicate_to_string =
   | Zone (dir, zs) -> sprintf "Zone (%s, [%s])" (string_of_dir dir) (Set.to_list zs |> String.concat ~sep:";")
   | State states -> sprintf "State [%s]" (Set.to_list states |> List.map ~f:State.show_state |> String.concat ~sep:";")
   | Ports (dir, tpe, ports) -> sprintf "Ports (%s, %s, %s)" (string_of_dir dir) (Port_type.to_string tpe) (int_set_to_list ports)
-  | Ip6Set (d, s) -> sprintf "Ip6Set (%d),%s" (Ip6.IpSet.length s) (string_of_dir d)
-  | Ip4Set (d, s) -> sprintf "Ip4Set (%d),%s" (Ip6.IpSet.length s) (string_of_dir d)
+  | Ip6Set (d, s) -> sprintf "Ip6Set (%d),%s" (Ip6Set.cardinal s) (string_of_dir d)
+  | Ip4Set (d, s) -> sprintf "Ip4Set (%d),%s" (Ip4Set.cardinal s) (string_of_dir d)
   | Protocol s -> Printf.sprintf "Protocol %s" (int_set_to_list s)
   | Icmp6 _ -> "Icmp6"
   | Icmp4 _ -> "Icmp4"

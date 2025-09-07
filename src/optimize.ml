@@ -2,8 +2,8 @@ open Base
 module Set = Set.Poly
 open Ir
 open Poly
-module Ip6 = Ipset.Ip6
-module Ip4 = Ipset.Ip4
+module Ip6Set = Ipset.Ip6Set
+module Ip4Set = Ipset.Ip4Set
 module P = Predicate
 
 let printf = Stdio.printf

@@ -5,8 +5,8 @@
 open Base
 open Stdio
 open Printf
-module Ip6 = Ipset.Ip6
-module Ip4 = Ipset.Ip4
+module Ip6Set = Ipset.Ip6Set
+module Ip4Set = Ipset.Ip4Set
 
 let zone_bits = 8 (* Number of zones *)
 let zone_mask = 1 lsl zone_bits - 1
@@ -96,6 +96,36 @@ let string_or_int_set s =
   |> String.concat ~sep:", "
 
 let gen_pred neg pred =
+  let gen_ipset_filter: type t. (module Ipset.IpSet with type t = t) -> string -> Ir.Direction.t -> t -> bool -> string =
+    fun (module IpSet) tpe dir ipset neg ->
+      (* Ipv4 and ipv6 sets are identical. Move to a generic function *)
+      let classifier = match dir with
+        | Ir.Direction.Source -> "saddr"
+        | Ir.Direction.Destination  -> "daddr"
+      in
+      let string_of_list l =
+        List.map ~f:IpSet.ip_to_string l
+        |> String.concat ~sep:", "
+      in
+      let filter =
+        match IpSet.to_networks ipset with
+        | [incl], [] when IpSet.is_any incl ->
+          sprintf "%s" tpe
+        | incl, [] when neg ->
+          sprintf "%s %s != { %s }" tpe classifier (string_of_list incl)
+        | [incl], excl when neg && IpSet.is_any incl ->
+          (* Exclude everything except excl *)
+          sprintf "%s %s = { %s }" tpe classifier (string_of_list excl)
+        | _, _ when neg ->
+          failwith "Not supported currently. Consider diffing with any network"
+        | incl, excl (* when not neg *) ->
+          let incl = string_of_list incl in
+          let excl = string_of_list excl in
+          sprintf "%s %s = { %s } %s != { %s }" tpe classifier incl classifier excl
+      in
+      filter
+  in
+
   let neg_str = match neg with
     | true -> "!= "
     | false -> ""
@@ -154,27 +184,9 @@ let gen_pred neg pred =
     in
     sprintf "%s %s%s { %s }" classifier pred neg_str (string_of_int_set ports), None
   | Ir.Ip6Set (dir, ips) ->
-    let classifier = match dir with
-      | Ir.Direction.Source -> "saddr"
-      | Ir.Direction.Destination  -> "daddr"
-    in
-    let ips = Ip6.to_list ips
-              |> Ip6.reduce
-              |> List.map ~f:Ipaddr.V6.Prefix.to_string
-              |> String.concat ~sep:", "
-       in
-    sprintf "ip6 %s %s{ %s }" classifier neg_str ips, None
+    gen_ipset_filter (module Ip6Set) "ip6" dir ips neg, None
   | Ir.Ip4Set (dir, ips) ->
-    let classifier = match dir with
-      | Ir.Direction.Source -> "saddr"
-      | Ir.Direction.Destination  -> "daddr"
-    in
-    let ips = Ip4.to_list ips
-              |> Ip4.reduce
-              |> List.map ~f:Ipaddr.V4.Prefix.to_string
-              |> String.concat ~sep:", "
-    in
-    sprintf "ip %s %s{ %s }" classifier neg_str ips, None
+    gen_ipset_filter (module Ip4Set) "ip4" dir ips neg, None
   | Ir.Protocol p ->
     let set = Set.to_list p |> List.map ~f:Int.to_string |> String.concat ~sep:"," in
     sprintf "meta l4proto %s{ %s }" neg_str set, None
@@ -309,48 +321,6 @@ let emit_nat_rules rules =
   { Ir.id = Ir.Chain_id.Builtin Ir.Chain_type.Post_routing; rules; comment = "Nat" }
   |> emit_chain
 
-let emit_ip_sets () =
-  let ip_sets = !sets in
-  (* New sets must not overlap with existing sets *)
-  sets := (
-    match !sets with
-    | [] -> []
-    | (id, _, _, _) :: _ -> [ (id, "placeholder", Ir.Ip4.empty, Ir.Ip6.empty) ]
-  );
-
-  List.concat_map ~f:(fun (_id, set_name, ipv4, ipv6) ->
-    let set_type = match Ir.Ip4.is_empty ipv4, Ir.Ip6.is_empty ipv6 with
-      | true, true -> None
-      | false, true -> Some "type ipv4_addr"
-      | true, false -> Some "type ipv6_addr"
-      | false, false -> Some "typeof ip saddr" (* ip saddr derived the type based on the match, which can be both ipv4 and ipv6 *)
-    in
-    match set_type with
-    | None -> []
-    | Some set_type ->
-      let addresses =
-        []
-        |> (fun acc ->
-          Ip4.to_list ipv4
-          |> Ip4.reduce
-          |> List.fold ~init:acc ~f:(fun acc ip4 -> Ipaddr.V4.Prefix.to_string ip4 :: acc)
-        )
-        |> (fun acc ->
-          Ip6.to_list ipv6
-          |> Ip6.reduce
-          |> List.fold ~init:acc ~f:(fun acc ip4 -> Ipaddr.V6.Prefix.to_string ip4 :: acc)
-        )
-        |> String.concat ~sep:", "
-      in
-      (sprintf "set %s {" set_name) ::
-      (sprintf "  %s;" set_type) ::
-      (sprintf "  flags interval;") ::
-      (sprintf "  elements = { %s }" addresses) ::
-      (sprintf "}") ::
-      []
-  ) (List.rev ip_sets)
-
-
 let rec pp_rules ?(acc = []) ?(indent = "") ?(indent_level = "    ")= function
   | [] -> List.rev acc
   | line :: lines ->
@@ -376,7 +346,6 @@ let emit rules =
       sprintf "   iifname \"%s\" meta mark 0x%04x comment \"Zone %s\"" zone id zone)
   in
   "table inet borderline {" ::
-  (emit_ip_sets ()) @
   "  chain zones { " ::
   "    comment \"zone ids\"" :: zones @
   "  }" :: rules @

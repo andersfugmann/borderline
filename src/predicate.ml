@@ -2,8 +2,8 @@ open Base
 module Set = Set.Poly
 open Ir
 open Poly
-module Ip6 = Ipset.Ip6
-module Ip4 = Ipset.Ip4
+module Ip6Set = Ipset.Ip6Set
+module Ip4Set = Ipset.Ip4Set
 
 type t = Ir.predicate * bool
 
@@ -52,10 +52,10 @@ let is_always value =
   | TcpFlags (flags, mask), neg when Set.is_empty flags && Set.is_empty mask -> neg <> value
   | TcpFlags (flags, mask), neg when not (Set.is_subset ~of_:mask flags) -> neg = value
   | TcpFlags _, _ -> false
-  | Ip6Set (_, s), neg when Ip6.equal s (Ip6.singleton (Ipaddr.V6.Prefix.of_string_exn "::/0")) -> neg <> value
-  | Ip6Set (_, s), neg -> Ip6.is_empty s && (neg = value)
-  | Ip4Set (_, s), neg when Ip4.equal s (Ip4.singleton (Ipaddr.V4.Prefix.of_string_exn "0.0.0.0/0")) -> neg <> value
-  | Ip4Set (_, s), neg -> Ip4.is_empty s && (neg = value)
+  | Ip6Set (_, s), neg when Ip6Set.equal s Ip6Set.any -> neg <> value
+  | Ip6Set (_, s), neg -> Ip6Set.is_empty s && (neg = value)
+  | Ip4Set (_, s), neg when Ip4Set.equal s Ip4Set.any -> neg <> value
+  | Ip4Set (_, s), neg -> Ip4Set.is_empty s && (neg = value)
   | Interface (_, ifs), neg -> Set.is_empty ifs && (neg = value)
   | If_group  (_, ifs), neg -> Set.is_empty ifs && (neg = value)
   | Icmp6 is, neg -> Set.is_empty is && (neg = value)
@@ -109,8 +109,8 @@ let merge_pred ?(tpe=`Inter) a b =
     | `Diff -> merge_diff
   in
   let merge_states = merge State.intersect State.union State.diff in
-  let merge_ip6sets = merge Ip6.intersect Ip6.union Ip6.diff in
-  let merge_ip4sets = merge Ip4.intersect Ip4.union Ip4.diff in
+  let merge_ip6sets = merge Ip6Set.intersection Ip6Set.union Ip6Set.diff in
+  let merge_ip4sets = merge Ip4Set.intersection Ip4Set.union Ip4Set.diff in
   let merge_sets a b = merge Set.inter Set.union Set.diff a b in
 
   let all_address_families = Set.of_list [Ipv4; Ipv6] in
@@ -197,8 +197,8 @@ let cardinal_of_pred = function
   | Protocol p, _ -> Set.length p
   | Icmp6 types, _ -> Set.length types
   | Icmp4 types, _ -> Set.length types
-  | Ip6Set (_, set), _ -> Ip6.IpSet.length set
-  | Ip4Set (_, set), _ -> Ip4.IpSet.length set
+  | Ip6Set (_, set), _ -> Ip6Set.cardinal set
+  | Ip4Set (_, set), _ -> Ip4Set.cardinal set
   | Zone (_, zones), _ -> Set.length zones
   | TcpFlags (f, _), _ -> Set.length f
   | True, _ -> 1

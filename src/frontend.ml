@@ -1,7 +1,7 @@
 (** Type and utility function for the frontend *)
 open Base
-module Ip6 = Ipset.Ip6
-module Ip4 = Ipset.Ip4
+module Ip6Set = Ipset.Ip6Set
+module Ip4Set = Ipset.Ip4Set
 
 type prefix = string
 type id = string * Lexing.position
@@ -10,7 +10,7 @@ module Process = struct
   type t = Mangle | Filter | Nat
 end
 
-type ip = Ipv6 of Ip6.elt | Ipv4 of Ip4.elt
+type ip = Ipv6 of Ip6Set.ip | Ipv4 of Ip4Set.ip
 
 type policytype = Counter
                 | Allow
@@ -18,7 +18,7 @@ type policytype = Counter
                 | Reject of (string * Lexing.position) option
                 | Log of prefix
                 | Ref of id
-                | Snat of Ip4.elt option
+                | Snat of Ip4Set.ip option
                 | User_chain of id
                 | Comment of id
 
@@ -34,7 +34,7 @@ and zone_stm = Interface of data list
              | If_group of data list
              | Network of data list
              | ZoneRules of id * rule_stm list * policytype list
-             | ZoneSnat of data list * Ip4.elt option
+             | ZoneSnat of data list * Ip4Set.ip option
 
 and filter_stm = Address of data list
                | Ports of id * data list

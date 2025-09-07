@@ -2,8 +2,8 @@ open! Base
 open! Stdio
 module Set = Set.Poly
 open Common
-module Ip6 = Ipset.Ip6
-module Ip4 = Ipset.Ip4
+module Ip6Set = Ipset.Ip6Set
+module Ip4Set = Ipset.Ip4Set
 module F = Frontend
 
 
@@ -112,11 +112,11 @@ let create_zone_chain direction (id, nodes) =
         in
         let ip4_rule =
           Option.some_if (List.is_empty ip4 |> not)
-            ([(Ir.Ip4Set(direction, Ip4.of_list ip4), false)], [], Ir.Jump chain.Ir.id)
+            ([(Ir.Ip4Set(direction, Ip4Set.of_list ip4), false)], [], Ir.Jump chain.Ir.id)
         in
         let ip6_rule =
           Option.some_if (List.is_empty ip6 |> not)
-            ([(Ir.Ip6Set(direction, Ip6.of_list ip6), false)], [], Ir.Jump chain.Ir.id)
+            ([(Ir.Ip6Set(direction, Ip6Set.of_list ip6), false)], [], Ir.Jump chain.Ir.id)
         in
         [ip4_rule; ip6_rule] |> List.filter_opt
 

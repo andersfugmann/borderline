@@ -2,8 +2,8 @@ open Base
 module Set = Set.Poly
 open Common
 module F = Frontend
-module Ip4 = Ipset.Ip4
-module Ip6 = Ipset.Ip6
+module Ip4Set = Ipset.Ip4Set
+module Ip6Set = Ipset.Ip6Set
 
 type t = Predicate.t list * Ir.effects * Ir.target
 
@@ -51,7 +51,7 @@ let list2ints : F.data list -> int list = fun l ->
       | F.Id (s, pos) -> parse_errorf ~pos "Unable to resolve '%s' to an integer" s
     ) ~init:[] l
 
-let list2ip : F.data list -> Ip4.elt list * Ip6.elt list = fun l ->
+let list2ip : F.data list -> Ip4Set.ip list * Ip6Set.ip list = fun l ->
   List.fold_left ~f:(fun (ip4, ip6) -> function
       | F.Number (d, pos) -> parse_errorf ~pos "Found integer '%d', expected ip address while parsing list item" d
       | F.String (s, pos) -> parse_errorf ~pos "Found string \"%s\", expected ip address while parsing list item" s
@@ -94,8 +94,8 @@ let process_rule _table (rules, targets') =
         (* Neg in this case needs to be chained *)
         (* Verify that this actually works as expected. I could mean that filters are exclusive. *)
         Chain.create [
-          [Ir.Address_family (Set.singleton Ir.Ipv6), false; Ir.Ip6Set (Ir.Direction.of_string dir, Ipset.Ip6.of_list ip6), neg], [], Ir.Jump chain.Ir.id;
-          [Ir.Address_family (Set.singleton Ir.Ipv4), false; Ir.Ip4Set (Ir.Direction.of_string dir, Ipset.Ip4.of_list ip4), neg], [], Ir.Jump chain.Ir.id;
+          [Ir.Address_family (Set.singleton Ir.Ipv6), false; Ir.Ip6Set (Ir.Direction.of_string dir, Ip6Set.of_list ip6), neg], [], Ir.Jump chain.Ir.id;
+          [Ir.Address_family (Set.singleton Ir.Ipv4), false; Ir.Ip4Set (Ir.Direction.of_string dir, Ip4Set.of_list ip4), neg], [], Ir.Jump chain.Ir.id;
         ] "Expanded ipset match"
     | F.Filter(dir, F.FZone(ids), neg) :: xs ->
         gen_op targets ((Ir.Zone(Ir.Direction.of_string dir,
