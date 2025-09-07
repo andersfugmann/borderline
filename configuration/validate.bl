@@ -77,21 +77,21 @@ define validate = rule {
             source address = [ ipv4_iana_all, ipv6_iana_all ];
             rule {
                 source address != [ ipv4_iana_source, ipv6_iana_source ]
-            } policy { log_invalid_source };
+            } policy { log_invalid };
             rule {
                 # Ip addresses allowed forwaring.
                 source zone != self;
                 destination zone != self;
                 rule {
-                    source address != [ ipv4_iana_forwardable, ipv6_iana_forwardable ] } policy { log_invalid_source_forward };
+                    source address != [ ipv4_iana_forwardable, ipv6_iana_forwardable ] } policy { log_invalid };
                 rule {
                     destination zone = global_zones;
                     source address != [ ipv4_iana_global, ipv6_iana_global ]
-                } policy { log_invalid_source_global_dest };
+                } policy { log_invalid };
                 rule {
                     source zone = global_zones;
                     source address != [ ipv4_iana_global, ipv6_iana_global ]
-                } policy { log_invalid_source_global_source };
+                } policy { log_invalid };
             };
         };
         rule {
@@ -100,21 +100,21 @@ define validate = rule {
             destination address = [ ipv4_iana_all, ipv6_iana_all ];
             rule {
                 destination address != [ ipv4_iana_destination, ipv6_iana_destination ]
-            } policy { log_invalid_destination };
+            } policy { log_invalid };
             rule {
                 source zone != self;
                 destination zone != self;
                 rule {
                    destination address != [ ipv4_iana_forwardable, ipv6_iana_forwardable ]
-                } policy { log_invalid_destination_forward };
+                } policy { log_invalid };
                 rule {
                     destination zone = global_zones;
                     destination address != [ ipv4_iana_global, ipv6_iana_global ]
-                } policy { log_invalid_destination_global_dest };
+                } policy { log_invalid };
                 rule {
                     source zone = global_zones;
                     destination address != [ ipv4_iana_global, ipv6_iana_global ]
-                } policy { log_invalid_destination_global_source };
+                } policy { log_invalid };
             };
         };
         # Filter private networks.

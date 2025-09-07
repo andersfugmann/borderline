@@ -13,13 +13,3 @@ define nolog_martian  = policy { deny; }
 define nolog_invalid  = policy { deny; }
 define nolog_missed   = policy { deny; }
 define nolog_bogon    = policy { deny; }
-
-
-define log_invalid_source = policy { log "log_invalid_source"; deny; }
-define log_invalid_source_forward = policy { log "log_invalid_source_forward"; deny; }
-define log_invalid_source_global_dest = policy { log "log_invalid_source_global_dest"; deny; }
-define log_invalid_source_global_source = policy { log "log_invalid_source_global_source"; deny; }
-define log_invalid_destination = policy { log "log_invalid_destination"; deny; }
-define log_invalid_destination_forward = policy { log "log_invalid_destination_forward"; deny; }
-define log_invalid_destination_global_dest = policy { log "log_invalid_destination_global_dest"; deny; }
-define log_invalid_destination_global_source = policy { log "log_invalid_destination_global_source"; deny; }
