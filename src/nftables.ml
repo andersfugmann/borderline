@@ -96,6 +96,11 @@ let string_or_int_set s =
   |> String.concat ~sep:", "
 
 let gen_pred neg pred =
+  let neg_str = match neg with
+    | true -> "!= "
+    | false -> ""
+  in
+
   let gen_ipset_filter: type t. (module Ipset.IpSet with type t = t) -> string -> Ir.Direction.t -> t -> bool -> string =
     fun (module IpSet) tpe dir ipset neg ->
       (* Ipv4 and ipv6 sets are identical. Move to a generic function *)

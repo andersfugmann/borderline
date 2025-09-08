@@ -138,11 +138,25 @@ module Make(Ip : Prefix) = struct
     | (incl, excls) :: ts when List.exists ~f:(fun excl -> Ip.bits excl - 1 = Ip.bits incl) excls ->
       let ts' = List.map (IpSet.split incl) ~f:(fun incl -> (incl, IpSet.intersection [incl] excls)) in
       reduce (ts' @ ts)
-    | (incl, excls) :: (incl', excls') :: ts when IpSet.join_adjecent incl incl' |> Option.is_some ->
-      let incl = IpSet.join_adjecent incl incl' |> Option.value_exn in
-      reduce ((incl, (IpSet.union excls excls')) :: ts)
+    | (incl, excls) :: (incl', excls') :: ts when Ip.bits incl = Ip.bits incl' && Ip.bits incl > 0 ->
+      begin
+        let network = Ip.make (Ip.bits incl - 1) (Ip.prefix incl |> Ip.address) in
+        match Ip.subset ~subnet:incl' ~network with
+        | true ->
+          reduce ((network, IpSet.union excls excls') :: ts)
+        | false ->
+          (incl, excls) :: reduce ((incl', excls') :: ts)
+      end
     | t :: ts -> t :: reduce ts
     | [] -> []
+  let reduce l =
+    let rec inner l =
+      let l' = reduce l in
+      match List.length l' = List.length l with
+      | true -> l'
+      | false -> inner l'
+    in
+    inner l
 
   let rec union t t' =
     match t, t' with
@@ -205,10 +219,7 @@ module Make(Ip : Prefix) = struct
   let of_list l =
     List.concat_map ~f:singleton l
     |> List.sort ~compare:(fun (a, _) (b, _) -> Ip.compare a b)
-    |> reduce (* This step is not good enough. Also we should test merging of 4 elements. 0,1,2,3 can all be merged
-                 So we really need a better way to merge those elements looking further ahead.
-                 It may be a recursive reduction *)
-
+    |> reduce
 
   let to_networks l =
     let incls, excls = List.unzip l in
@@ -360,6 +371,7 @@ let%expect_test "Set operations" =
   let singleton  s = Ip4Set.singleton (of_string s) in
   let _union t elt = Ip4Set.union t (singleton elt) in
   let ( ?@ ) a = singleton a in
+  let ( ! ) a =  Ipaddr.V4.Prefix.of_string_exn a in
   let ( + ) a b = Ip4Set.union a b in
   let ( - ) a b = Ip4Set.diff a b in
   let test ~msg ~f ts =
@@ -370,6 +382,9 @@ let%expect_test "Set operations" =
   let print_set ~msg t =
     printf "%s: -> %s\n" msg (Ip4Set.show t)
   in
+  print_set ~msg:"of_list" (Ip4Set.of_list [ !"10.0.0.0/32"; !"10.0.0.1/32"; !"10.0.0.2/32"]);
+  print_set ~msg:"of_list" (Ip4Set.of_list [ !"10.0.0.0/32"; !"10.0.0.2/32"; !"10.0.0.1/32"]);
+  print_set ~msg:"of_list" (Ip4Set.of_list [ !"10.0.0.0/32"; !"10.0.0.1/32"; !"10.0.0.2/32"; !"10.0.0.3/32"]);
   test ~msg:"union" ~f:Ip4Set.union ["10.0.0.12/32"; "10.0.0.11/32"];
   test ~msg:"union" ~f:Ip4Set.union ["10.0.0.10/32"; "10.0.0.11/32"; "10.0.0.0/24"];
   test ~msg:"union" ~f:Ip4Set.union ["10.0.0.10/24"; "10.0.0.11/8"];
@@ -394,6 +409,9 @@ let%expect_test "Set operations" =
   ();
 
   [%expect {|
+    of_list: -> [ 10.0.0.0/31; 10.0.0.2/32 ]
+    of_list: -> [ 10.0.0.0/31; 10.0.0.2/32 ]
+    of_list: -> [ 10.0.0.0/30 ]
     union: 10.0.0.12/32 o 10.0.0.11/32 = [ 10.0.0.11/32; 10.0.0.12/32 ]
     union: 10.0.0.10/32 o 10.0.0.11/32 o 10.0.0.0/24 = [ 10.0.0.0/24 ]
     union: 10.0.0.10/24 o 10.0.0.11/8 = [ 10.0.0.0/8 ]
