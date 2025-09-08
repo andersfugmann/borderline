@@ -36,16 +36,6 @@ module Make(Ip : Prefix) = struct
       Ip.subnets bits ip
       |> Stdlib.List.of_seq
 
-    let join_adjecent ip ip' =
-      let bits = Ip.bits ip in
-      match bits = Ip.bits ip' with
-      | false -> None
-      | true ->
-        let ip = Ip.make (bits-1) (Ip.address ip) in
-        match Ip.subset ~network:ip ~subnet:ip' with
-        | true -> Some ip
-        | false -> None
-
     let rec reduce = function
       | ns when not enable_reduce -> ns
       | n1 :: n2 :: ns when Ip.subset ~network:n1 ~subnet:n2 ->
@@ -131,32 +121,29 @@ module Make(Ip : Prefix) = struct
     IpSet.split incl
     |> List.map ~f:(fun network -> network, List.filter ~f:(fun subnet -> Ip.subset ~network ~subnet) excls)
 
-  let rec reduce = function
-    | ts when not enable_reduce -> ts
-    | (incl, excls) :: ts when List.exists ~f:(fun excl -> Ip.subset ~network:excl ~subnet:incl) excls ->
-      reduce ts
-    | (incl, excls) :: ts when List.exists ~f:(fun excl -> Ip.bits excl - 1 = Ip.bits incl) excls ->
-      let ts' = List.map (IpSet.split incl) ~f:(fun incl -> (incl, IpSet.intersection [incl] excls)) in
-      reduce (ts' @ ts)
-    | (incl, excls) :: (incl', excls') :: ts when Ip.bits incl = Ip.bits incl' && Ip.bits incl > 0 ->
-      begin
-        let network = Ip.make (Ip.bits incl - 1) (Ip.prefix incl |> Ip.address) in
-        match Ip.subset ~subnet:incl' ~network with
-        | true ->
-          reduce ((network, IpSet.union excls excls') :: ts)
-        | false ->
-          (incl, excls) :: reduce ((incl', excls') :: ts)
-      end
-    | t :: ts -> t :: reduce ts
-    | [] -> []
   let reduce l =
-    let rec inner l =
-      let l' = reduce l in
-      match List.length l' = List.length l with
-      | true -> l'
-      | false -> inner l'
+    let rec inner = function
+      | (incl, excls) :: ts when List.exists ~f:(fun excl -> Ip.subset ~network:excl ~subnet:incl) excls ->
+        inner ts
+      | (incl, excls) :: ts when List.exists ~f:(fun excl -> Ip.bits excl - 1 = Ip.bits incl) excls ->
+        let ts' = List.map (IpSet.split incl) ~f:(fun incl -> (incl, IpSet.intersection [incl] excls)) in
+        inner (ts' @ ts)
+      | (incl, excls) :: (incl', excls') :: ts when Ip.bits incl = Ip.bits incl' && Ip.bits incl > 0 ->
+        begin
+          let network = Ip.make (Ip.bits incl - 1) (Ip.prefix incl |> Ip.address) in
+          match Ip.subset ~subnet:incl' ~network with
+          | true ->
+            (network, IpSet.union excls excls') :: ts
+          | false ->
+            (incl, excls) :: inner ((incl', excls') :: ts)
+        end
+      | t :: ts -> t :: inner ts
+      | [] -> []
     in
-    inner l
+    let l' = inner l in
+    match List.length l' = List.length l with
+    | true -> l'
+    | false -> inner l'
 
   let rec union t t' =
     match t, t' with
