@@ -2,6 +2,7 @@
 open Base
 let sprintf = Printf.sprintf
 let printf = Stdio.printf
+let eprintf = Stdio.printf
 
 module type Prefix = sig
   type t
@@ -25,7 +26,7 @@ let enable_reduce = true
 
 module Make(Ip : Prefix) = struct
   module IpSet = struct
-    (* Should move into a sub-module *)
+    (* This can be done smarter! *)
     let subset ~of_:networks subnets =
       List.for_all ~f:(fun subnet ->
         List.exists ~f:(fun network -> Ip.subset ~subnet ~network) networks
@@ -121,29 +122,35 @@ module Make(Ip : Prefix) = struct
     IpSet.split incl
     |> List.map ~f:(fun network -> network, List.filter ~f:(fun subnet -> Ip.subset ~network ~subnet) excls)
 
-  let reduce l =
+  let rec reduce l =
+    let rec merge = function
+      | (incl, excls) :: (incl', excls') :: ts when Ip.bits incl = Ip.bits incl' && Ip.bits incl > 0 ->
+        begin
+          let network = Ip.make (Ip.bits incl - 1) (Ip.prefix incl |> Ip.address) in
+          match Ip.subset ~subnet:incl' ~network with
+          | true ->
+            merge ((network, IpSet.union excls excls') :: ts)
+          | false ->
+            (incl, excls) :: merge ((incl', excls') :: ts)
+        end
+      | t :: ts -> t :: merge ts
+      | [] -> []
+    in
+
     let rec inner = function
       | (incl, excls) :: ts when List.exists ~f:(fun excl -> Ip.subset ~network:excl ~subnet:incl) excls ->
         inner ts
       | (incl, excls) :: ts when List.exists ~f:(fun excl -> Ip.bits excl - 1 = Ip.bits incl) excls ->
         let ts' = List.map (IpSet.split incl) ~f:(fun incl -> (incl, IpSet.intersection [incl] excls)) in
         inner (ts' @ ts)
-      | (incl, excls) :: (incl', excls') :: ts when Ip.bits incl = Ip.bits incl' && Ip.bits incl > 0 ->
-        begin
-          let network = Ip.make (Ip.bits incl - 1) (Ip.prefix incl |> Ip.address) in
-          match Ip.subset ~subnet:incl' ~network with
-          | true ->
-            (network, IpSet.union excls excls') :: ts
-          | false ->
-            (incl, excls) :: inner ((incl', excls') :: ts)
-        end
       | t :: ts -> t :: inner ts
       | [] -> []
     in
-    let l' = inner l in
+    let l = inner l in
+    let l' = merge l in
     match List.length l' = List.length l with
     | true -> l'
-    | false -> inner l'
+    | false -> reduce l'
 
   let rec union t t' =
     match t, t' with
@@ -172,32 +179,33 @@ module Make(Ip : Prefix) = struct
     | ts, _ :: ts' (* when Ip.compare incl incl' > 0 *) ->
       intersection ts ts'
 
-
   let rec diff t t' =
     match t, t' with
     | [], _ -> []
     | ts, [] -> ts
     | (incl, excls) :: ts, (incl', excls') :: ts' when Ip.subset ~subnet:incl ~network:incl' ->
-      (* All are excluded. Its what-ever is not excluded - excls. *)
+      (* Complete range excluded. Its what-ever is not excluded within incl, and keep excls *)
       let incls =
         IpSet.intersection [incl] excls'
         |> List.map ~f:(fun incl -> (incl, IpSet.intersection [incl] excls))
       in
       incls @ diff ts ((incl', excls') :: ts')
     | (incl, excls) :: ts, (incl', excls') :: ts' when Ip.subset ~subnet:incl' ~network:incl -> begin
+        (* Parts of incl is excluded.
+           If we should not exclude what is already excluded, then we can ignore excls, and just add incl' to the list of exclusions
+           Reduce will break it up into smaller bits if needed
+        *)
         match IpSet.subset ~of_:excls excls' with
         | true ->
-          (* If excl is smaller, we would just add incl' to the exclude list, but only if excl' is a subset of excl. *)
           let excls = IpSet.union excls [incl'] in
           diff ((incl, excls) :: ts) ts'
-        | false ->
-          let ts' = split_elt (incl, excls) @ ts' in
-          diff ((incl, excls) :: ts) ts'
+        | false -> (* Split into two smaller elements and repeat *)
+          diff (split_elt (incl, excls) @ ts) ((incl', excls') :: ts')
       end
     | (incl, excls) :: ts, (incl', excls') :: ts' when Ip.compare incl incl' < 0 ->
       (incl, excls) :: diff ts ((incl', excls') :: ts')
-    | (incl, excls) :: ts, _ :: ts' (* when Ip.compare incl incl' > 0 *) ->
-      diff ((incl, excls) :: ts) ts'
+    | ts, _ :: ts' (* when Ip.compare incl incl' > 0 *) ->
+      diff ts ts'
   let diff t t' = diff t t' |> reduce
 
   let equal t t' =
@@ -362,22 +370,24 @@ let%expect_test "Set operations" =
   let ( + ) a b = Ip4Set.union a b in
   let ( - ) a b = Ip4Set.diff a b in
   let test ~msg ~f ts =
-    let f ts = List.fold ~init:Ip4Set.empty ~f:(fun acc elt -> f acc (singleton elt)) ts in
+    let ts' = List.map ~f:singleton ts in
+    let f ts = List.reduce ~f ts |> Option.value ~default:Ip4Set.empty in
     printf "%s: %s = %s\n" msg (String.concat ~sep:" o " ts)
-      (Ip4Set.show (f ts))
+      (Ip4Set.show (f ts'))
   in
   let print_set ~msg t =
     printf "%s: -> %s\n" msg (Ip4Set.show t)
   in
-  print_set ~msg:"of_list" (Ip4Set.of_list [ !"10.0.0.0/32"; !"10.0.0.1/32"; !"10.0.0.2/32"]);
-  print_set ~msg:"of_list" (Ip4Set.of_list [ !"10.0.0.0/32"; !"10.0.0.2/32"; !"10.0.0.1/32"]);
-  print_set ~msg:"of_list" (Ip4Set.of_list [ !"10.0.0.0/32"; !"10.0.0.1/32"; !"10.0.0.2/32"; !"10.0.0.3/32"]);
+  test ~msg:"diff" ~f:Ip4Set.diff ["0.0.0.0/0"; "0.0.0.0/0"];
+  test ~msg:"diff" ~f:Ip4Set.diff ["10.0.0.0/8"; "10.0.0.11/24"];
+  test ~msg:"diff" ~f:Ip4Set.diff ["10.0.0.11/24"; "10.0.0.0/8"];
   test ~msg:"union" ~f:Ip4Set.union ["10.0.0.12/32"; "10.0.0.11/32"];
   test ~msg:"union" ~f:Ip4Set.union ["10.0.0.10/32"; "10.0.0.11/32"; "10.0.0.0/24"];
   test ~msg:"union" ~f:Ip4Set.union ["10.0.0.10/24"; "10.0.0.11/8"];
   test ~msg:"union" ~f:Ip4Set.union ["10.0.0.10/8"; "10.0.0.11/8"];
-  test ~msg:"diff" ~f:Ip4Set.diff ["10.0.0.0/8"; "10.0.0.11/24"];
-  test ~msg:"diff" ~f:Ip4Set.diff ["10.0.0.11/24"; "10.0.0.0/8"];
+  print_set ~msg:"of_list" (Ip4Set.of_list [ !"10.0.0.0/32"; !"10.0.0.1/32"; !"10.0.0.2/32"]);
+  print_set ~msg:"of_list" (Ip4Set.of_list [ !"10.0.0.0/32"; !"10.0.0.2/32"; !"10.0.0.1/32"]);
+  print_set ~msg:"of_list" (Ip4Set.of_list [ !"10.0.0.0/32"; !"10.0.0.1/32"; !"10.0.0.2/32"; !"10.0.0.3/32"]);
   print_set ~msg:"empty1" @@ (?@"10.0.0.12/32" + ?@"10.0.0.13/32") - ?@"10.0.0.0/8";
   print_set ~msg:"empty2" @@ (?@"10.0.0.0/24" + ?@"10.0.10.0/24") - ?@"10.0.0.0/8";
   print_set ~msg:"empty3" @@ (?@"10.0.0.0/24" + ?@"10.0.1.0/24") - ?@"10.0.0.0/23";
@@ -396,23 +406,24 @@ let%expect_test "Set operations" =
   ();
 
   [%expect {|
-    of_list: -> [ 10.0.0.0/31; 10.0.0.2/32 ]
-    of_list: -> [ 10.0.0.0/31; 10.0.0.2/32 ]
-    of_list: -> [ 10.0.0.0/30 ]
+    diff: 0.0.0.0/0 o 0.0.0.0/0 = [  ]
+    diff: 10.0.0.0/8 o 10.0.0.11/24 = [ 10.0.0.0/8 \ [ 10.0.0.0/24 ] ]
+    diff: 10.0.0.11/24 o 10.0.0.0/8 = [  ]
     union: 10.0.0.12/32 o 10.0.0.11/32 = [ 10.0.0.11/32; 10.0.0.12/32 ]
     union: 10.0.0.10/32 o 10.0.0.11/32 o 10.0.0.0/24 = [ 10.0.0.0/24 ]
     union: 10.0.0.10/24 o 10.0.0.11/8 = [ 10.0.0.0/8 ]
     union: 10.0.0.10/8 o 10.0.0.11/8 = [ 10.0.0.0/8 ]
-    diff: 10.0.0.0/8 o 10.0.0.11/24 = [  ]
-    diff: 10.0.0.11/24 o 10.0.0.0/8 = [  ]
+    of_list: -> [ 10.0.0.0/31; 10.0.0.2/32 ]
+    of_list: -> [ 10.0.0.0/31; 10.0.0.2/32 ]
+    of_list: -> [ 10.0.0.0/30 ]
     empty1: -> [  ]
     empty2: -> [  ]
     empty3: -> [  ]
     diff with excl1: -> [ 10.0.0.0/25 ]
     diff with excl2: -> [ 10.0.0.0/25; 10.0.2.0/24 ]
     diff with excl4: -> [ 10.0.0.128/25 ]
-    diff with excl5: -> [  ]
-    diff with excl6: -> [  ]
+    diff with excl5: -> [ 10.0.0.2/32; 10.0.0.128/25 ]
+    diff with excl6: -> [ 10.0.0.0/32; 10.0.0.128/25 ]
     diff with excl7: -> [ 10.0.0.128/25 ]
     union: -> [ 10.0.0.0/8 \ [ 10.1.0.0/24 ] ]
     union: -> [ 10.0.0.0/8 \ [ 10.0.0.1/32; 10.1.0.0/24 ] ]
