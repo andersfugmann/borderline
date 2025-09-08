@@ -114,26 +114,19 @@ let gen_pred neg pred =
       in
       let filter =
         match IpSet.to_networks ipset with
-        | [incl], [] when IpSet.is_any incl ->
-          sprintf "%s" tpe
-        | incl, [] when neg ->
-          sprintf "%s %s != { %s }" tpe classifier (string_of_list incl)
+        | incls, [] ->
+          sprintf "%s %s %s{ %s }" tpe classifier neg_str (string_of_list incls)
         | [incl], excl when neg && IpSet.is_any incl ->
           (* Exclude everything except excl *)
-          sprintf "%s %s = { %s }" tpe classifier (string_of_list excl)
+          sprintf "%s %s { %s }" tpe classifier (string_of_list excl)
         | _, _ when neg ->
           failwith "Not supported currently. Consider diffing with any network"
         | incl, excl (* when not neg *) ->
           let incl = string_of_list incl in
           let excl = string_of_list excl in
-          sprintf "%s %s = { %s } %s != { %s }" tpe classifier incl classifier excl
+          sprintf "%s %s { %s } %s != { %s }" tpe classifier incl classifier excl
       in
       filter
-  in
-
-  let neg_str = match neg with
-    | true -> "!= "
-    | false -> ""
   in
   match pred with
   | Ir.Interface (dir, interfaces) ->
@@ -191,7 +184,7 @@ let gen_pred neg pred =
   | Ir.Ip6Set (dir, ips) ->
     gen_ipset_filter (module Ip6Set) "ip6" dir ips neg, None
   | Ir.Ip4Set (dir, ips) ->
-    gen_ipset_filter (module Ip4Set) "ip4" dir ips neg, None
+    gen_ipset_filter (module Ip4Set) "ip" dir ips neg, None
   | Ir.Protocol p ->
     let set = Set.to_list p |> List.map ~f:Int.to_string |> String.concat ~sep:"," in
     sprintf "meta l4proto %s{ %s }" neg_str set, None
