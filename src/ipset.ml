@@ -52,14 +52,24 @@ module Make(Ip : Prefix) = struct
         reduce (n1 :: ns)
       | n1 :: n2 :: ns when Ip.subset ~network:n2 ~subnet:n1 ->
         reduce (n2 :: ns)
-      | n1 :: n2 :: ns when false ->
+      | n1 :: n2 :: ns when Ip.bits n1 = Ip.bits n2 && Ip.bits n1 > 0 ->
         begin
-          match join_adjecent n1 n2 with
-          | Some ip -> reduce (ip :: ns)
-          | None -> n1 :: reduce (n2 :: ns)
+          let network = Ip.make (Ip.bits n1 - 1) (Ip.prefix n1 |> Ip.address) in
+          match Ip.subset ~subnet:n2 ~network with
+          | true ->
+            reduce (network :: ns)
+          | false -> n1 :: reduce (n2 :: ns)
         end
       | n :: ns -> n :: reduce ns
       | [] -> []
+    let reduce l =
+      let rec inner l =
+        let l' = reduce l in
+        match List.length l' = List.length l with
+        | true -> l
+        | false -> inner l'
+      in
+      inner l
 
     (* Intersection between to lists of ips (sorted) *)
     let rec intersection l1 l2 =
@@ -195,7 +205,10 @@ module Make(Ip : Prefix) = struct
   let of_list l =
     List.concat_map ~f:singleton l
     |> List.sort ~compare:(fun (a, _) (b, _) -> Ip.compare a b)
-    |> reduce (* This step is not good enough *)
+    |> reduce (* This step is not good enough. Also we should test merging of 4 elements. 0,1,2,3 can all be merged
+                 So we really need a better way to merge those elements looking further ahead.
+                 It may be a recursive reduction *)
+
 
   let to_networks l =
     let incls, excls = List.unzip l in
