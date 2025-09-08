@@ -18,6 +18,8 @@ module type Prefix = sig
   val mask: int -> addr
 end
 
+let enable_reduce = true
+
 (* For larger sets, we should see if we can reduce by excluding some ranges *)
 (* Try increasing the bits by two and partition all networks. O(n^2) algorithm, and its not complete *)
 
@@ -45,7 +47,7 @@ module Make(Ip : Prefix) = struct
         | false -> None
 
     let rec reduce = function
-      | ns when true -> ns
+      | ns when not enable_reduce -> ns
       | n1 :: n2 :: ns when Ip.subset ~network:n1 ~subnet:n2 ->
         reduce (n1 :: ns)
       | n1 :: n2 :: ns when Ip.subset ~network:n2 ~subnet:n1 ->
@@ -73,7 +75,6 @@ module Make(Ip : Prefix) = struct
       | [], _
       | _, [] -> []
     let intersection l1 l2 = intersection l1 l2 |> reduce
-
 
     (* Union between to lists of ips (sorted) *)
     let rec union l1 l2 =
@@ -121,15 +122,15 @@ module Make(Ip : Prefix) = struct
     |> List.map ~f:(fun network -> network, List.filter ~f:(fun subnet -> Ip.subset ~network ~subnet) excls)
 
   let rec reduce = function
-    | ts when true -> ts (* No reduction *)
+    | ts when not enable_reduce -> ts
     | (incl, excls) :: ts when List.exists ~f:(fun excl -> Ip.subset ~network:excl ~subnet:incl) excls ->
       reduce ts
-    | (incl, excls) :: (incl', excls') :: ts when IpSet.join_adjecent incl incl' |> Option.is_some ->
-      let incl = IpSet.join_adjecent incl incl' |> Option.value_exn in
-      reduce ((incl, (IpSet.union excls excls')) :: ts)
     | (incl, excls) :: ts when List.exists ~f:(fun excl -> Ip.bits excl - 1 = Ip.bits incl) excls ->
       let ts' = List.map (IpSet.split incl) ~f:(fun incl -> (incl, IpSet.intersection [incl] excls)) in
       reduce (ts' @ ts)
+    | (incl, excls) :: (incl', excls') :: ts when IpSet.join_adjecent incl incl' |> Option.is_some ->
+      let incl = IpSet.join_adjecent incl incl' |> Option.value_exn in
+      reduce ((incl, (IpSet.union excls excls')) :: ts)
     | t :: ts -> t :: reduce ts
     | [] -> []
 
@@ -186,15 +187,15 @@ module Make(Ip : Prefix) = struct
       (incl, excls) :: diff ts ((incl', excls') :: ts')
     | (incl, excls) :: ts, _ :: ts' (* when Ip.compare incl incl' > 0 *) ->
       diff ((incl, excls) :: ts) ts'
-
   let diff t t' = diff t t' |> reduce
 
   let equal t t' =
     diff t t' |> is_empty && diff t' t |> is_empty
 
   let of_list l =
-    List.map ~f:singleton l
-    |> List.fold ~init:empty ~f:union
+    List.concat_map ~f:singleton l
+    |> List.sort ~compare:(fun (a, _) (b, _) -> Ip.compare a b)
+    |> reduce (* This step is not good enough *)
 
   let to_networks l =
     let incls, excls = List.unzip l in
