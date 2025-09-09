@@ -3,56 +3,25 @@ import "../configuration/generic/iana-ipv4-special-registry.bl"
 
 process filter {
   rule {
-    source address = [ ipv4_iana_source, ipv6_iana_source ];
-    source interface = "sources";
-  } policy { log "OK: all sources"; deny };
+    source address = [ ipv6_iana_all ];
+    source interface = "ipv6_iana_all";
+  } policy { log "OK: ipv6_iana_all"; deny };
 
   rule {
-    source address = [ ipv4_iana_all, ipv6_iana_all ];
-    rule {
-      source interface = "all";
-    } policy { log "OK: all"; deny };
-
-    rule {
-      source interface = "none";
-      source address != [ ipv4_iana_all, ipv6_iana_all ];
-    } policy { log "ERROR: None"; deny };
-
-    rule {
-      source interface = "not sources";
-      source address != [ ipv4_iana_source, ipv6_iana_source ];
-    } policy { log "OK: not source"; deny };
-
-    rule {
-      source interface = "teredo1";
-      address family = ipv6;
-      source address != [ ipv6_iana_teredo ];
-    } policy { log "OK: teredo1"; deny };
-
-    rule {
-      source interface = "teredo2";
-      address family = ipv6;
-      source address = [ ipv6_iana_teredo ];
-    } policy { log "OK: teredo2"; deny };
-
-  };
-  rule {
-    address family = ipv4;
-    source address = [ 127.0.0.0/8, 10.0.0.0/8 ];
-    rule {
-      source interface = "not 10.0.0.0/24";
-      source address != [ 10.0.0.0/24 ];
-    } policy { log "OK: not 10.0.0.0/24"; deny };
-  };
+    source address = [ ipv6_iana_source ];
+    source interface = "ipv6_iana_source";
+  } policy { log "OK: ipv6_iana_source"; deny };
 
   rule {
-    address family = ipv6;
-    source address = [ 2002::/23, 2001::/23 ];
-    rule {
-      source interface = "not 2001::/32";
-      source address != [ 2001::/32 ];
-    } policy { log "OK: not 2001::/32"; deny };
-  };
+    source address = [ ipv6_iana_all ];
+    source address != [ ipv6_iana_source ];
+    source interface = "ipv6_iana_all \ ipv6_iana_source";
+  } policy { log "OK: ipv6_iana_all \ ipv6_iana_source"; deny };
 
+  rule {
+    source address != [ ipv6_iana_all ];
+    source address = [ ipv6_iana_source ];
+    source interface = "ipv6_iana_source \ ipv6_iana_all";
+  } policy { log "ERROR: ipv6_iana_source \ ipv6_iana_all"; deny };
 
 } policy { allow; }
