@@ -103,30 +103,31 @@ let gen_pred neg pred =
 
   let gen_ipset_filter: type t. (module Ipset.IpSet with type t = t) -> string -> Ir.Direction.t -> t -> bool -> string =
     fun (module IpSet) tpe dir ipset neg ->
-      (* Ipv4 and ipv6 sets are identical. Move to a generic function *)
       let classifier = match dir with
         | Ir.Direction.Source -> "saddr"
         | Ir.Direction.Destination  -> "daddr"
       in
+      let classifier = sprintf "%s %s" tpe classifier in
+
       let string_of_list l =
         List.map ~f:IpSet.ip_to_string l
         |> String.concat ~sep:", "
       in
-      let filter =
+      let rec gen_filter (ipset, neg) =
         match IpSet.to_networks ipset with
         | incls, [] ->
-          sprintf "%s %s %s{ %s }" tpe classifier neg_str (string_of_list incls)
+          sprintf "%s %s{ %s }" classifier neg_str (string_of_list incls)
         | [incl], excl when neg && IpSet.is_any incl ->
           (* Exclude everything except excl *)
-          sprintf "%s %s { %s }" tpe classifier (string_of_list excl)
+          sprintf "%s { %s }" classifier (string_of_list excl)
         | _, _ when neg ->
-          failwith "Not supported currently. Consider diffing with any network"
+          gen_filter (IpSet.diff IpSet.any ipset, false)
         | incl, excl (* when not neg *) ->
           let incl = string_of_list incl in
           let excl = string_of_list excl in
-          sprintf "%s %s { %s } %s != { %s }" tpe classifier incl classifier excl
+          sprintf "%s { %s } %s != { %s }" classifier incl classifier excl
       in
-      filter
+      gen_filter (ipset, neg)
   in
   match pred with
   | Ir.Interface (dir, interfaces) ->
