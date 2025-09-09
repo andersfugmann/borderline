@@ -26,41 +26,62 @@ let enable_reduce = true
 
 module Make(Ip : Prefix) = struct
   module IpSet = struct
-    (* This can be done smarter! *)
-    let subset ~of_:networks subnets =
-      List.for_all ~f:(fun subnet ->
-        List.exists ~f:(fun network -> Ip.subset ~subnet ~network) networks
-      ) subnets
-
     let split ip =
       let bits = Ip.bits ip + 1 in
       Ip.subnets bits ip
       |> Stdlib.List.of_seq
 
-    let rec reduce = function
-      | ns when not enable_reduce -> ns
-      | n1 :: n2 :: ns when Ip.subset ~network:n1 ~subnet:n2 ->
-        reduce (n1 :: ns)
-      | n1 :: n2 :: ns when Ip.subset ~network:n2 ~subnet:n1 ->
-        reduce (n2 :: ns)
-      | n1 :: n2 :: ns when Ip.bits n1 = Ip.bits n2 && Ip.bits n1 > 0 ->
-        begin
-          let network = Ip.make (Ip.bits n1 - 1) (Ip.prefix n1 |> Ip.address) in
-          match Ip.subset ~subnet:n2 ~network with
-          | true ->
-            reduce (network :: ns)
-          | false -> n1 :: reduce (n2 :: ns)
-        end
-      | n :: ns -> n :: reduce ns
-      | [] -> []
-    let reduce l =
-      let rec inner l =
-        let l' = reduce l in
-        match List.length l' = List.length l with
-        | true -> l
-        | false -> inner l'
+    let subset ~of_:networks subnets =
+      let rec inner networks subnets =
+        match networks, subnets with
+        | _, [] ->
+          true
+        | n :: ns, s :: ss when Ip.subset ~subnet:s ~network:n ->
+          inner (n :: ns) (ss)
+        | n :: ns, s :: ss when Ip.subset ~subnet:n ~network:s ->
+          inner (n :: ns) (split s @ ss)
+        | n :: ns, s :: ss when Ip.compare n s < 0 ->
+          inner ns (s :: ss)
+        | _ -> false
       in
-      inner l
+      inner networks subnets
+
+    (* This reduce is too slow! Why is that *)
+    let reduce l =
+      let rec reduce = function
+        | n1 :: n2 :: ns when Ip.subset ~network:n1 ~subnet:n2 ->
+          reduce (n1 :: ns)
+        | n1 :: n2 :: ns when Ip.subset ~network:n2 ~subnet:n1 ->
+          reduce (n2 :: ns)
+        | n :: ns -> n :: reduce ns
+        | [] -> []
+      in
+      let merge l =
+        let updated = ref false in
+        let rec inner = function
+          | [] -> []
+          | n1 :: n2 :: ns when Ip.bits n1 = Ip.bits n2 && Ip.bits n1 > 0 ->
+            begin
+              let network = Ip.make (Ip.bits n1 - 1) (Ip.prefix n1 |> Ip.address) in
+              match Ip.subset ~subnet:n2 ~network with
+              | true ->
+                updated := true;
+                inner (network :: ns)
+              | false -> n1 :: inner (n2 :: ns)
+            end
+          | n :: ns -> n :: inner ns
+        in
+        let rec loop l =
+          let l' = inner l in
+          match !updated with
+          | true ->
+            updated := false;
+            loop l'
+          | false -> l
+        in
+        loop l
+      in
+      reduce l |> merge
 
     (* Intersection between to lists of ips (sorted) *)
     let rec intersection l1 l2 =
@@ -122,19 +143,33 @@ module Make(Ip : Prefix) = struct
     IpSet.split incl
     |> List.map ~f:(fun network -> network, List.filter ~f:(fun subnet -> Ip.subset ~network ~subnet) excls)
 
-  let rec reduce l =
-    let rec merge = function
-      | (incl, excls) :: (incl', excls') :: ts when Ip.bits incl = Ip.bits incl' && Ip.bits incl > 0 ->
-        begin
-          let network = Ip.make (Ip.bits incl - 1) (Ip.prefix incl |> Ip.address) in
-          match Ip.subset ~subnet:incl' ~network with
-          | true ->
-            merge ((network, IpSet.union excls excls') :: ts)
+  let reduce l =
+    let merge l =
+      let updated = ref false in
+      let rec inner = function
+        | (incl, excls) :: (incl', excls') :: ts when Ip.bits incl = Ip.bits incl' && Ip.bits incl > 0 ->
+          begin
+            let network = Ip.make (Ip.bits incl - 1) (Ip.prefix incl |> Ip.address) in
+            match Ip.subset ~subnet:incl' ~network with
+            | true ->
+              updated := true;
+              inner ((network, IpSet.union excls excls') :: ts)
           | false ->
-            (incl, excls) :: merge ((incl', excls') :: ts)
-        end
-      | t :: ts -> t :: merge ts
-      | [] -> []
+            (incl, excls) :: inner ((incl', excls') :: ts)
+          end
+        | t :: ts -> t :: inner ts
+        | [] -> []
+      in
+      let rec loop l =
+        let l' = inner l in
+        match !updated with
+        | true ->
+          updated := false;
+          loop l'
+        | false ->
+          l
+      in
+      loop l
     in
 
     let rec inner = function
@@ -146,11 +181,7 @@ module Make(Ip : Prefix) = struct
       | t :: ts -> t :: inner ts
       | [] -> []
     in
-    let l = inner l in
-    let l' = merge l in
-    match List.length l' = List.length l with
-    | true -> l'
-    | false -> reduce l'
+    inner l |> merge
 
   let rec union t t' =
     match t, t' with
@@ -212,9 +243,10 @@ module Make(Ip : Prefix) = struct
     diff t t' |> is_empty && diff t' t |> is_empty
 
   let of_list l =
-    List.concat_map ~f:singleton l
-    |> List.sort ~compare:(fun (a, _) (b, _) -> Ip.compare a b)
-    |> reduce
+    List.map ~f:Ip.prefix l
+    |> List.sort ~compare:Ip.compare
+    |> IpSet.reduce
+    |> List.map ~f:(fun ip -> (ip, []))
 
   let to_networks l =
     let incls, excls = List.unzip l in
