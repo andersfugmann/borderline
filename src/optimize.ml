@@ -9,6 +9,8 @@ module P = Predicate
 let printf = Stdio.printf
 let sprintf = Printf.sprintf [@@ocaml.warning "-32"]
 
+(** Minimum sequence of predicates to push *)
+let min_push_seq = 3
 
 type string = id [@@ocaml.warning "-34"]
 
@@ -340,12 +342,12 @@ let rec push_common_predicates ~find_pred chains input (rules : Rule.t list) =
     |> reduce
   in
 
-  let rank (_, _, seq, _) = List.length seq in
+  let rank (pred, _, seq, _) = Predicate.cardinal_of_pred pred * List.length seq in
   let sequence =
     List.concat_map ~f:(fun input ->
       get_seqeuences ~input [] rules
     ) input_predicates
-    |> List.filter ~f:(fun (_, _, seq, _) -> List.length seq >= 2)
+    |> List.filter ~f:(fun (_, _, seq, _) -> List.length seq >= min_push_seq)
     (* Remove predicates that have already been matched as part of input *)
     |> List.filter ~f:(fun (pred, _, _, _) -> List.exists ~f:(fun input -> P.equal_predicate pred input) input |> not)
     |> List.filter ~f:(fun (pred, _, _, _) -> not (P.is_always true pred))
@@ -645,11 +647,14 @@ let optimize_pass ~stage chains =
       [1;2;3;4;5], map_rules @@ remove_true_predicates;
       [1;2;3;4;5], map_rules @@ eliminate_unreachable_rules;
       [         ], push_predicates ~min_push:10;
-      [1;2;3;4  ], map_rules_input @@ push_common_predicates_equal;
-      [1;2;3;4  ], map_rules_input @@ push_common_predicates_equal;
-      [1;2;3;4  ], map_rules_input @@ push_common_predicates_equal;
-      [         ], map_rules_input @@ push_common_predicates_union;
-      [  2;3;4  ], remove_unreferenced_chains;
+      [1;2;3;   ], map_rules_input @@ remove_implied_predicates;
+      [1;2;3;   ], map_rules_input @@ push_common_predicates_union;
+      [1;2;3;   ], map_rules_input @@ push_common_predicates_union;
+      [1;2;3;   ], map_rules_input @@ push_common_predicates_union;
+      [  2;3;4  ], map_rules_input @@ push_common_predicates_equal;
+      [    3;4  ], map_rules_input @@ push_common_predicates_equal;
+      [    3;4  ], map_rules_input @@ push_common_predicates_equal;
+      [1;2;3;4  ], remove_unreferenced_chains;
       [1;2;3;4  ], inline_pure_jumps;
       [1;  3;4  ], merge_identical_chains;
       [1;  3;4  ], map_rules @@ join_rules_with_same_target;

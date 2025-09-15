@@ -23,8 +23,8 @@ let cost pred =
     | Ports (_, _, s) -> (20, Set.length s)
     | Protocol s -> (6, Set.length s)
     | TcpFlags _ -> (15, 0)
-    | Ip6Set (_, _) -> (30, 0)
-    | Ip4Set (_, _) -> (29, 0)
+    | Ip6Set (_, s) -> (30, Ip6Set.cardinal s)
+    | Ip4Set (_, s) -> (29, Ip4Set.cardinal s)
     | Interface (_, s) -> 12, Set.length s
     | If_group  (_, s) -> 11, Set.length s
     | Icmp6 s -> 25, Set.length s

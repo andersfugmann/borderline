@@ -181,7 +181,7 @@ let gen_pred neg pred =
       | Ir.Port_type.Tcp -> "tcp"
       | Ir.Port_type.Udp -> "udp"
     in
-    sprintf "%s %s%s { %s }" classifier pred neg_str (string_of_int_set ports), None
+    sprintf "%s %s %s{ %s }" classifier pred neg_str (string_of_int_set ports), None
   | Ir.Ip6Set (dir, ips) ->
     gen_ipset_filter (module Ip6Set) "ip6" dir ips neg, None
   | Ir.Ip4Set (dir, ips) ->
