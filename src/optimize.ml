@@ -603,6 +603,67 @@ let rec join_rules = function
   | r1 :: rules -> r1 :: join_rules rules
   | [] -> []
 
+(** filter rules that a a subset of a later or previous rule.
+    When doing a forward pass, we can safely remove any rule that is a subset.
+    When doing a backward pass (rollup) both effects and target must be the same.
+*)
+let filter_covered_subset chains =
+  let subset_match ~of_ preds =
+    List.for_all ~f:(fun of_ -> List.exists ~f:(fun pred -> P.is_subset ~of_ pred) preds) of_
+  in
+  let rec get_rules = function
+    | (preds, effects, Jump chain_id) ->
+      let chain = Map.find_exn chains chain_id in
+      List.concat_map ~f:get_rules chain.rules
+      |> List.map ~f:(fun (preds', effects', target) -> (preds @ preds', effects @ effects', target))
+    | rule -> [rule]
+  in
+
+  let can_rollup (preds, effects, target) rules =
+    List.for_all ~f:(fun (preds', effects', target') ->
+      equal_effects effects effects' &&
+      Ir.equal_target target target' &&
+      subset_match ~of_:preds preds'
+    ) rules
+  in
+  let rec forward ((matched_preds, _, _) as rule) = function
+    | (preds, _, _) :: rs
+      when subset_match ~of_:matched_preds preds ->
+      printf "F";
+      forward rule rs
+    | r :: rs -> r :: forward rule rs
+    | [] -> []
+  in
+  (* If a jump only has the same targets, and all are subsets we can drop the jump *)
+  let rec rollup ((preds, _effects, _target) as rule) =
+    function
+    | [] -> []
+    | r :: rs ->
+      let rules = get_rules r in
+      match can_rollup rule rules with
+      | true ->
+        printf "R";
+        rollup rule rs
+      | false when List.for_all ~f:(fun (preds', _, _) -> Predicate.disjoint preds preds') rules ->
+        r :: rollup rule rs
+      | false -> r :: rs
+  in
+
+  let rec loop ~f = function
+    | (_, _, target) as rule :: rules when is_terminal target ->
+      let rest = f rule rules in
+      rule :: loop ~f rest
+    | rule :: rules -> rule :: loop ~f rules
+    | [] -> []
+  in
+  let map_rules rules =
+    loop ~f:forward rules
+    |> List.rev
+    |> loop ~f:rollup
+    |> List.rev
+  in
+  Map.map ~f:(fun chn -> { chn with rules = map_rules chn.rules }) chains
+
 let reorder_rules rules =
   let order_target = function
     | Ir.Accept -> 1
@@ -646,6 +707,7 @@ let optimize_pass ~stage chains =
       [1;2;3;4;5], map_rules_input @@ remove_unsatisfiable_rules;
       [1;2;3;4;5], map_rules @@ remove_true_predicates;
       [1;2;3;4;5], map_rules @@ eliminate_unreachable_rules;
+      [1;2;3;4;5], filter_covered_subset;
       [         ], push_predicates ~min_push:10;
       [1;2;3;   ], map_rules_input @@ remove_implied_predicates;
       [1;2;3;   ], map_rules_input @@ push_common_predicates_union;
