@@ -136,14 +136,14 @@ let gen_pred neg pred =
       | Ir.Direction.Source -> "iifname"
       | Ir.Direction.Destination -> "oifname"
     in
-    sprintf "%s %s { %s }" classifier neg_str interfaces, None
+    sprintf "%s%s { %s }" classifier neg_str interfaces, None
   | Ir.If_group (dir, if_groups) ->
     let if_groups = string_or_int_set if_groups in
     let classifier = match dir with
       | Ir.Direction.Source -> "iifgroup"
       | Ir.Direction.Destination -> "oifgroup"
     in
-    sprintf "%s %s { %s }" classifier neg_str if_groups, None
+    sprintf "%s%s { %s }" classifier neg_str if_groups, None
   | Ir.Zone (dir, zones) ->
     let shift = match dir with
       | Ir.Direction.Source -> 0
@@ -266,18 +266,19 @@ let gen_rule = function
         |> List.unzip
       in
       let comments = List.filter_opt comments in
-      String.concat ~sep:" " preds, comments
+      preds, comments
     in
     let comments', effects = List.partition_map ~f:(function Ir.Comment c -> Either.First c | effect_ -> Either.Second effect_ ) effects in
     (* Need to filter out comments, and place them at the end *)
     let comment_string =
       match comments @ comments' |> List.stable_dedup ~compare:String.compare with
       | [] -> ""
-      | comments -> sprintf " comment \"%s\"" (String.concat ~sep:" && " comments)
+      | comments -> sprintf "comment \"%s\"" (String.concat ~sep:" && " comments)
     in
-    let effects = List.map ~f:gen_effect effects |> String.concat ~sep:" " in
+    let effects = List.map ~f:gen_effect effects in
     let target = gen_target target in
-    sprintf "%s %s %s%s;" preds effects target comment_string
+    let elements = preds @ effects @ [target] @ [comment_string] |> List.filter ~f:(fun s -> not (String.is_empty s)) in
+    sprintf "%s;" (String.concat ~sep:" " elements)
 
 (* Essentially we dont split at all *)
 let expand_rule (rls, effects, target) =
