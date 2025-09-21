@@ -694,8 +694,8 @@ let optimize_pass ~stage chains =
     [
       [1;       ], reduce_chain_indegree ~max_indegree:1;
       [1;       ], inline_chains ~max_rules:10000;
-      [  2      ], inline_chains ~max_rules:3;
-      [    3;4;5], inline_chains ~max_rules:1;
+      [  2;3;4  ], inline_chains ~max_rules:3;
+      [        5], inline_chains ~max_rules:2;
       [1;2;3;4;5], map_rules @@ map_predicates @@ P.inter_preds;
       [1;2;3;4;5], map_rules @@ join_rules;
       [1;2;3;4;5], map_rules_input @@ reduce_predicates;
@@ -705,7 +705,7 @@ let optimize_pass ~stage chains =
       [1;2;3;4;5], map_rules @@ remove_true_predicates;
       [1;2;3;4;5], map_rules @@ eliminate_unreachable_rules;
       [1;2;3;4;5], filter_covered_subset;
-      [         ], push_predicates ~min_push:10;
+      [  2;3    ], push_predicates ~min_push:2;
       [1;2;3;   ], map_rules_input @@ remove_implied_predicates;
       [1;2;3;   ], map_rules_input @@ push_common_predicates_union;
       [1;2;3;   ], map_rules_input @@ push_common_predicates_union;
@@ -753,5 +753,6 @@ let rec optimize ~stage chains =
 
 let optimize chains =
   chains
+  |> optimize ~stage:1
   |> optimize ~stage:1
   |> (fun chains -> dump_chains chains; chains)
