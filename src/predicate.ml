@@ -325,8 +325,11 @@ let%test "Disjoint Address_family" =
   let ipv6 = Address_family (Set.singleton Ipv6) in
   disjoint [ipv4, false] [ipv6, false]
 
-let subset_preds ~of_:preds' preds =
-  List.for_all ~f:(fun p -> List.exists ~f:(fun p' -> is_subset ~of_:p' p) preds') preds
+(** True if [preds] matches a subset of that [of_] matches.
+    This means that [subset_preds ~of:[] preds] will always return true
+*)
+let subset_preds ~of_ preds =
+  List.for_all ~f:(fun of_ -> List.exists ~f:(fun pred -> is_subset ~of_ pred) preds) of_
 
 let preds_all_true preds =
   inter_preds preds

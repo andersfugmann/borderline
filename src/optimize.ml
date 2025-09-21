@@ -608,9 +608,6 @@ let rec join_rules = function
     When doing a backward pass (rollup) both effects and target must be the same.
 *)
 let filter_covered_subset chains =
-  let subset_match ~of_ preds =
-    List.for_all ~f:(fun of_ -> List.exists ~f:(fun pred -> P.is_subset ~of_ pred) preds) of_
-  in
   let rec get_rules = function
     | (preds, effects, Jump chain_id) ->
       let chain = Map.find_exn chains chain_id in
@@ -623,12 +620,12 @@ let filter_covered_subset chains =
     List.for_all ~f:(fun (preds', effects', target') ->
       equal_effects effects effects' &&
       Ir.equal_target target target' &&
-      subset_match ~of_:preds preds'
+      P.subset_preds ~of_:preds preds'
     ) rules
   in
   let rec forward ((matched_preds, _, _) as rule) = function
     | (preds, _, _) :: rs
-      when subset_match ~of_:matched_preds preds ->
+      when P.subset_preds ~of_:matched_preds preds ->
       printf "F";
       forward rule rs
     | r :: rs -> r :: forward rule rs
