@@ -185,52 +185,6 @@ type rule = (predicate * bool) list * effects * target
 
 type chain = { id: Chain_id.t; rules : rule list; comment: string; }
 
-let get_dir = function
-  | Interface _ -> None
-  | If_group _ -> None
-  | Zone (direction, _) -> Some direction
-  | State _ -> None
-  | Ports (direction, _, _) -> Some direction
-  | Ip6Set (direction, _) -> Some direction
-  | Ip4Set (direction, _) -> Some direction
-  | Protocol _ -> None
-  | Icmp6 _ -> None
-  | Icmp4 _ -> None
-  | Mark _ -> None
-  | TcpFlags _ -> None
-  | Hoplimit _ -> None
-  | True -> None
-  | Address_family _ -> None
-
-let enumerate_pred = function
-  | Interface _ -> 1
-  | If_group _ -> 1
-  | Zone _ -> 2
-  | State _ -> 3
-  | Ports _ -> 4
-  | Ip6Set _ -> 5
-  | Ip4Set _ -> 6
-  | Protocol _ -> 7
-  | Icmp6 _ -> 8
-  | Icmp4 _ -> 9
-  | Address_family _ -> 10
-  | TcpFlags _ -> 11
-  | Mark _ -> 12
-  | Hoplimit _ -> 13
-  | True -> 14
-
-let pred_type_identical pred1 pred2 =
-  (enumerate_pred pred1) = (enumerate_pred pred2)
-
-let compare_predicate (pred1, neg1) (pred2, neg2) =
-  match compare (enumerate_pred pred1) (enumerate_pred pred2) with
-  | 0 -> begin
-      match Bool.compare neg1 neg2 with
-      | 0 -> Poly.compare pred1 pred2
-      | n -> n
-    end
-  | n -> n
-
 type string = String.t [@@ocaml.warning "-34"]
 type int = Int.t [@@ocaml.warning "-34"]
 type bool = Bool.t [@@ocaml.warning "-34"]

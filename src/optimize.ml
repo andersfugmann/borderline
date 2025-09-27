@@ -459,9 +459,7 @@ let push_predicates ~min_push chains =
   in
 
   let has_conflict pred pred' =
-    match pred_type_identical (fst pred) (fst pred') with
-    | true -> can_merge pred pred' |> not
-    | false -> false
+    can_merge pred pred' |> not
   in
 
   let can_merge_rules rules pred =
