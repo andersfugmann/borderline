@@ -46,9 +46,8 @@ module Make(Ip : Prefix) = struct
       in
       inner networks subnets
 
-    (* This reduce is too slow! Why is that *)
     let reduce l =
-      let rec reduce = function
+      let[@tail_mod_cons] rec reduce = function
         | n1 :: n2 :: ns when Ip.subset ~network:n1 ~subnet:n2 ->
           reduce (n1 :: ns)
         | n1 :: n2 :: ns when Ip.subset ~network:n2 ~subnet:n1 ->
@@ -58,7 +57,7 @@ module Make(Ip : Prefix) = struct
       in
       let merge l =
         let updated = ref false in
-        let rec inner = function
+        let[@tail_mod_cons] rec inner = function
           | [] -> []
           | n1 :: n2 :: ns when Ip.bits n1 = Ip.bits n2 && Ip.bits n1 > 0 ->
             begin
@@ -84,7 +83,7 @@ module Make(Ip : Prefix) = struct
       reduce l |> merge
 
     (* Intersection between to lists of ips (sorted) *)
-    let rec intersection l1 l2 =
+    let[@tail_mod_cons] rec intersection l1 l2 =
       match l1, l2 with
       | l :: ls, l' :: ls' when Ip.subset ~subnet:l' ~network:l ->
         l' :: intersection (l :: ls) ls'
@@ -99,7 +98,7 @@ module Make(Ip : Prefix) = struct
     let intersection l1 l2 = intersection l1 l2 |> reduce
 
     (* Union between to lists of ips (sorted) *)
-    let rec union l1 l2 =
+    let[@tail_mod_cons] rec union l1 l2 =
       match l1, l2 with
       | l :: ls, l' :: ls' when Ip.subset ~subnet:l' ~network:l ->
         union (l :: ls) ls'
@@ -113,7 +112,7 @@ module Make(Ip : Prefix) = struct
       | ls, [] -> ls
     let union l1 l2 = union l1 l2 |> reduce
 
-    let rec diff l1 l2 =
+    let[@tail_mod_cons] rec diff l1 l2 =
       match l1, l2 with
       | l :: ls, l' :: ls' when Ip.subset ~subnet:l ~network:l' ->
         diff ls (l' :: ls')
@@ -146,7 +145,7 @@ module Make(Ip : Prefix) = struct
   let reduce l =
     let merge l =
       let updated = ref false in
-      let rec inner = function
+      let[@tail_mod_cons]  rec inner = function
         | (incl, excls) :: (incl', excls') :: ts when Ip.bits incl = Ip.bits incl' && Ip.bits incl > 0 ->
           begin
             let network = Ip.make (Ip.bits incl - 1) (Ip.prefix incl |> Ip.address) in
@@ -172,6 +171,12 @@ module Make(Ip : Prefix) = struct
       loop l
     in
 
+    (* Move exclusions that are outside the inclusion *)
+    let canonical (incl, excls) =
+      (incl, List.filter ~f:(fun excl -> Ip.subset ~network:incl ~subnet:excl) excls)
+    in
+
+
     let rec inner = function
       | (incl, excls) :: ts when List.exists ~f:(fun excl -> Ip.subset ~network:excl ~subnet:incl) excls ->
         inner ts
@@ -182,8 +187,9 @@ module Make(Ip : Prefix) = struct
       | [] -> []
     in
     inner l |> merge
+    |> List.map ~f:canonical
 
-  let rec union t t' =
+  let[@tail_mod_cons] rec union t t' =
     match t, t' with
     | ts, [] | [], ts -> ts
     | (incl, excls) :: ts, (incl', excls') :: ts' when Ip.subset ~subnet:incl' ~network:incl ->
@@ -196,9 +202,9 @@ module Make(Ip : Prefix) = struct
       (incl, excls) :: union ts ((incl', excls') :: ts')
     | ts, (incl', excls') :: ts' (* when Ip.compare incl incl' > 0 *) ->
       (incl', excls') :: union ts ts'
-  let union t t' = union t t' |> reduce
+  let union t t' = union t t'
 
-  let rec intersection t t' =
+  let[@tail_mod_cons] rec intersection t t' =
     match t, t' with
     | [], _ | _, [] -> []
     | (incl, excls) :: ts, (incl', excls') :: ts' when Ip.subset ~subnet:incl' ~network:incl ->
@@ -209,8 +215,9 @@ module Make(Ip : Prefix) = struct
       intersection ts ((incl', excls') :: ts')
     | ts, _ :: ts' (* when Ip.compare incl incl' > 0 *) ->
       intersection ts ts'
+  let intersections t t' = intersection t t' |> reduce
 
-  let rec diff t t' =
+  let[@tail_mod_cons] rec diff t t' =
     match t, t' with
     | [], _ -> []
     | ts, [] -> ts
@@ -239,7 +246,28 @@ module Make(Ip : Prefix) = struct
       diff ts ts'
   let diff t t' = diff t t' |> reduce
 
-  let equal t t' =
+  (* Can we optimize this? *)
+  let rec equal t t' =
+    match t, t' with
+    | [], [] -> true
+    | _, [] | [], _ -> false
+    | (incl, excls) :: ts, (incl', excls') :: ts' when Ip.compare incl incl' = 0 ->
+      begin
+        match IpSet.subset ~of_:excls excls' && IpSet.subset ~of_:excls' excls with
+        | false -> false
+        | true ->
+          equal ts ts'
+      end
+    | (incl, excls) :: ts, (incl', excls') :: ts' when Ip.subset ~subnet:incl' ~network:incl ->
+      let ts = split_elt (incl, excls) @ ts in
+      equal ts ((incl', excls') :: ts')
+    | (incl, excls) :: ts, (incl', excls') :: ts' when Ip.subset ~subnet:incl ~network:incl' ->
+      let ts' = split_elt (incl', excls') @ ts' in
+      equal ((incl, excls) :: ts) ts'
+    | _ -> false
+
+
+  let _equal t t' =
     diff t t' |> is_empty && diff t' t |> is_empty
 
   let of_list l =
@@ -249,7 +277,9 @@ module Make(Ip : Prefix) = struct
     |> List.map ~f:(fun ip -> (ip, []))
 
   let to_networks l =
-    let incls, excls = List.unzip l in
+    let incls, excls =
+      reduce l |> List.unzip
+    in
     let excls = List.concat excls in
     incls, excls
 
