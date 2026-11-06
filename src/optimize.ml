@@ -291,56 +291,45 @@ let remove_empty_rules rules =
     | _ -> true
   ) rules
 
-let rec join_rules_with_same_target =
-  let is_union_true pred pred' =
-    P.merge_pred ~tpe:`Union pred pred'
-    |> Option.value_map ~f:(P.is_always true) ~default:false
-  in
+let union_rule_predicates preds preds' =
+  let contains pred = List.exists ~f:(P.equal_predicate pred) in
+  let common = List.filter preds ~f:(fun pred -> contains pred preds') in
+  let unique preds = List.filter preds ~f:(fun pred -> not (contains pred common)) in
+  match unique preds, unique preds' with
+  | [], _ | _, [] -> Some common
+  (* Predicate.merge_pred does not implement unions for TCP flags. *)
+  | [((TcpFlags _ | True), _)], _
+  | _, [((TcpFlags _ | True), _)] -> None
+  | [a], [b] ->
+    P.merge_pred ~tpe:`Union a b
+    |> Option.map ~f:(fun union -> P.inter_preds (union :: common))
+  | _ -> None
 
-  let common preds preds' =
-    List.filter ~f:(fun pred ->
-      List.exists ~f:(P.equal_predicate pred) preds'
-    ) preds
-  in
-  (* Return common, uniq_a, uniq_b *)
-  let mutual_differences preds1 preds2 =
-    let exclusive p p' =
-      List.filter ~f:(fun pred ->
-        List.exists ~f:(P.equal_predicate pred) p' |> not)
-        p
-    in
-    let common = common preds1 preds2 in
-    let preds1' = exclusive preds1 common in
-    let preds2' = exclusive preds2 common in
-    common, preds1', preds2'
-  in
+let merge_rules (preds, effects, target) (preds', effects', target') =
+  if is_terminal target && equal_target target target' &&
+     List.equal equal_effect_ effects effects'
+  then
+    union_rule_predicates preds preds'
+    |> Option.map ~f:(fun preds -> preds, effects, target)
+  else None
 
-  let can_merge (preds, effects, target) = function
-    | (preds', effects', target') when
-        is_terminal target &&
-        equal_target target target' &&
-        equal_effects effects effects' ->
-      begin
-        match mutual_differences preds preds' with
-        | (_common, [pred], [pred']) -> is_union_true pred pred'
-        | (_common, [], _)
-        | (_common, _, []) -> true
-        | _ -> false
-      end
-    | _ -> false
-  in
-
-  function
-  | ((preds1, effects, target) as rule1) :: ((preds2, _, _) as rule2) :: rules when can_merge rule1 rule2 ->
-    let common = common preds1 preds2 in
-    join_rules_with_same_target ((common, effects, target) :: rules)
-  | ((preds1, effects, target) as rule1) :: ((preds3, _, _) as rule3) :: ((preds2, _, _) as rule2) :: rules
-    when can_merge rule1 rule2 && P.disjoint preds3 preds2 ->
-    let common = common preds1 preds2 in
-    join_rules_with_same_target ((common, effects, target) :: rule3 :: rules)
-  | rule :: rules ->
-    rule :: join_rules_with_same_target rules
-  | [] -> []
+let rec join_rules_with_same_target = function
+  | rule :: ((next_preds, _, _) as next) :: rest ->
+    begin match merge_rules rule next with
+    | Some merged -> join_rules_with_same_target (merged :: rest)
+    | None ->
+      let across_next = match rest with
+        | ((preds, _, _) as later) :: tail
+          when Dependencies.independent next later &&
+               P.disjoint next_preds preds ->
+          Option.map (merge_rules rule later) ~f:(fun merged ->
+            join_rules_with_same_target (merged :: next :: tail))
+        | _ -> None
+      in
+      Option.value_or_thunk across_next ~default:(fun () ->
+        rule :: join_rules_with_same_target (next :: rest))
+    end
+  | rules -> rules
 
 let remove_unreferenced_chains chains =
   let referenced_chains =
@@ -735,16 +724,12 @@ let merge_identical_chains chains =
   ) chains
 
 let rec join_rules = function
-  | (([pred], effects, target) as r1) :: (([pred'], effects', target') as r2) :: rules
-    when is_terminal target &&
-         equal_effects effects effects' && equal_target target target' ->
-    begin
-      match P.merge_pred ~tpe:`Union pred pred' with
-      | Some pred -> join_rules (([pred], effects, target) :: rules)
-      | None -> r1 :: join_rules (r2 :: rules)
+  | first :: second :: rest ->
+    begin match merge_rules first second with
+    | Some merged -> join_rules (merged :: rest)
+    | None -> first :: join_rules (second :: rest)
     end
-  | r1 :: rules -> r1 :: join_rules rules
-  | [] -> []
+  | rules -> rules
 
 (** filter rules that a a subset of a later or previous rule.
     When doing a forward pass, we can safely remove any rule that is a subset.
@@ -1028,6 +1013,48 @@ module Test = struct
     in
     check "Original rules" chains;
     check "Optimized rules" (optimize chains)
+
+  let expect_rule_count expected chains =
+    assert_equal ~msg:"Generated rule count" ~printer:Int.to_string
+      expected (Chain.count_rules chains);
+    chains
+
+  let%test_unit "terminal unions retain a shared conjunction" =
+    let chains = chain_map [
+      input [
+        rule ~effects:[MarkZone (Direction.Source, "lan")] Pass;
+        rule ~when_:[source_zones ["lan"]; protocols [tcp]]
+          ~effects:[Counter; Log "allowed"] Accept;
+        rule ~when_:[source_zones ["lan"]; protocols [udp]]
+          ~effects:[Counter; Log "allowed"] Accept;
+        rule Drop;
+      ];
+    ] in
+    let optimize chains = map_rules ~f:join_rules chains |> expect_rule_count 3 in
+    check_optimization ~optimize ~chains
+      ~cases:[
+        tcp, { allowed with source_zone = Some "lan"; counters = 1; logs = ["allowed"] };
+        udp, { allowed with source_zone = Some "lan"; counters = 1; logs = ["allowed"] };
+        icmpv6, { denied with source_zone = Some "lan" };
+      ]
+
+  let%test_unit "terminal unions preserve correlations between dimensions" =
+    let chains = chain_map [
+      input [
+        rule ~effects:[MarkZone (Direction.Source, "one")] Pass;
+        rule ~when_:[source_zones ["one"]; protocols [tcp]] Accept;
+        rule ~when_:[source_zones ["two"]; protocols [udp]] Accept;
+        rule Drop;
+      ];
+    ] in
+    let optimize chains =
+      map_rules ~f:join_rules_with_same_target chains |> expect_rule_count 4
+    in
+    check_optimization ~optimize ~chains
+      ~cases:[
+        tcp, { allowed with source_zone = Some "one" };
+        udp, { denied with source_zone = Some "one" };
+      ]
 
   let%test_unit "push_predicates preserves every moved guard" =
     let child = Temporary 1 in

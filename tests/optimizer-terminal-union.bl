@@ -1,0 +1,13 @@
+# EXPECT-COUNT: 1 => tcp dport { 443, 22 }
+# EXPECT-COUNT: 1 => counter accept
+
+process filter {
+    rule {
+        source interface_group = 1;
+        destination tcp port = 22;
+    } policy { counter; allow; };
+    rule {
+        source interface_group = 1;
+        destination tcp port = 443;
+    } policy { counter; allow; };
+} policy deny
