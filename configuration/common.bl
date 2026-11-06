@@ -75,8 +75,8 @@ define common = {
                 destination udp port = dhcpv6-server;
                 source zone = dhcp_server_zones;
                 destination zone = self;
-                source address = [ ipv6_all_routers, ipv6_global_unicast ];
-                destination address = [ ipv6_link_local, ipv6_global_unicast ];
+                source address = [ ipv6_link_local, ipv6_global_unicast ];
+                destination address = [ ipv6_all_routers, ipv6_global_unicast ];
             } policy log_allow;
             # Dhcpv6 Replies
             rule {
