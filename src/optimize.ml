@@ -484,18 +484,17 @@ let push_predicates ~min_push chains =
         | (preds, effects, (Ir.Jump target_id as target)) as rule when chain_reference_count target_id chains = 1 -> begin
             match Map.find chains target_id with
             | None -> chains, rule :: acc
-            | Some ({ rules = target_rules; _ } as target_chain) ->
-              let chains, preds =
-                List.fold ~init:(chains, []) ~f:(fun (chains, acc) pred ->
+            | Some target_chain ->
+              let target_rules, preds =
+                List.fold ~init:(target_chain.rules, []) ~f:(fun (target_rules, acc) pred ->
                   match can_merge_rules rules pred && count_merges target_rules pred >= min_push with
-                  | false -> (chains, pred :: acc)
+                  | false -> (target_rules, pred :: acc)
                   | true ->
                     printf ">";
-                    let target_rules = push target_rules pred in
-                    let chains = Map.set chains ~key:target_id ~data:{ target_chain with rules = target_rules } in
-                    chains, acc
+                    push target_rules pred, acc
                 ) preds
               in
+              let chains = Map.set chains ~key:target_id ~data:{ target_chain with rules = target_rules } in
               chains, (List.rev preds, effects, target) :: acc
           end
         | rule -> chains, rule :: acc
