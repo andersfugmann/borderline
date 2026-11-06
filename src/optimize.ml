@@ -23,12 +23,6 @@ let (>::) elt elts =
   Option.value_map ~f:(fun elt -> elt :: elts) ~default:elts elt
 [@@ocaml.warning "-32"]
 
-let chain_reference_count id chains =
-  let count_references acc rules =
-    List.fold_left ~init:acc ~f:(fun acc -> function (_, _, Jump id') when Chain_id.equal id id' -> acc + 1 | _ -> acc)  rules
-  in
-  Map.fold ~init:0 ~f:(fun ~key:_ ~data:chn acc -> (count_references acc chn.rules)) chains
-
 let equal_rule (preds, effects, target) (preds', effects', target') =
   P.equal_predicates preds preds' && Ir.equal_effects effects effects' && Ir.equal_target target target'
 
@@ -115,38 +109,57 @@ module Dependencies = struct
     | _ -> false
 end
 
-(** Return a list of chains with leaves first *)
-let get_ordered_chains chains =
-  let rec traverse_chains seen chains acc chain_id =
-    let seen = match Set.mem seen chain_id with
-      | false -> Set.add seen chain_id
-      | true -> failwith "Cycle detected!"
-    in
-    match Map.find chains chain_id with
-    | Some { rules; _ } ->
-      let acc = chain_id :: acc in
-      List.fold_left ~init:acc ~f:(fun acc -> function
-        | (_pred, _effect, Jump chain_id) -> traverse_chains seen chains acc chain_id
-        | _ -> acc
-      ) rules
-    | None -> acc
-  in
-  (* Traverse all builtin chains *)
-  Map.fold chains ~init:[] ~f:(fun ~key ~data:_ acc ->
-    match key with
-    | (Ir.Chain_id.Builtin _) as chain_id ->
-      traverse_chains (Set.empty) chains acc chain_id
-    | _ -> acc
-  )
-  |> List.stable_dedup ~compare:Ir.Chain_id.compare
+module Graph = struct
+  type t = {
+    leaves_first: Chain_id.t list;
+    references: (Chain_id.t, int, Chain_id.comparator_witness) Map.t;
+  }
 
-let process_chains_breath_first chains ~f =
-  get_ordered_chains chains
+  let analyze chains =
+    let rec visit active (visited, order) id =
+      if Set.mem active id then failwith ("Chain cycle: " ^ Chain_id.show id);
+      if Set.mem visited id then visited, order
+      else
+        let chain = match Map.find chains id with
+          | Some chain -> chain
+          | None -> failwith ("Missing jump target: " ^ Chain_id.show id)
+        in
+        let active = Set.add active id in
+        let visited, order =
+          List.fold chain.rules ~init:(visited, order) ~f:(fun acc -> function
+            | _, _, Jump child -> visit active acc child
+            | _ -> acc)
+        in
+        Set.add visited id, id :: order
+    in
+    let _, order =
+      Map.fold chains ~init:(Set.empty, []) ~f:(fun ~key:id ~data:_ acc ->
+        if Chain.is_builtin id then visit Set.empty acc id else acc)
+    in
+    let leaves_first = List.rev order in
+    let references =
+      List.fold leaves_first ~init:(Map.empty (module Chain_id))
+        ~f:(fun refs id ->
+          List.fold (Map.find_exn chains id).rules ~init:refs ~f:(fun refs -> function
+            | _, _, Jump child ->
+              Map.update refs child ~f:(fun n -> Option.value n ~default:0 + 1)
+            | _ -> refs))
+    in
+    { leaves_first; references }
+
+  let reference_count graph id =
+    Option.value (Map.find graph.references id) ~default:0
+end
+
+let get_ordered_chains chains = (Graph.analyze chains).leaves_first
+
+let process_chains_parents_first ~order chains ~f =
+  order
   |> List.rev
   |> List.fold_left ~init:chains ~f
 
-let chain_writes chains =
-  get_ordered_chains chains
+let summarize_writes chains graph =
+  graph.Graph.leaves_first
   |> List.fold ~init:(Map.empty (module Chain_id)) ~f:(fun summaries id ->
     let writes =
       if Chain.is_named id then None
@@ -156,6 +169,18 @@ let chain_writes chains =
     in
     Map.set summaries ~key:id ~data:writes)
 
+type context = {
+  chains: (Chain_id.t, chain, Chain_id.comparator_witness) Map.t;
+  graph: Graph.t;
+  writes: (Chain_id.t, Dependencies.writes, Chain_id.comparator_witness) Map.t;
+}
+
+let analyze chains =
+  let graph = Graph.analyze chains in
+  { chains; graph; writes = summarize_writes chains graph }
+
+let chain_writes chains = (analyze chains).writes
+
 let input_after_rule summaries input (preds, _, target as rule) =
   match preds with
   | [(p, n)] when is_terminal target && Option.is_none (P.get_implied_predicate (p, n)) ->
@@ -163,20 +188,19 @@ let input_after_rule summaries input (preds, _, target as rule) =
   | _ when is_terminal target -> input
   | _ -> Dependencies.invalidate (Dependencies.rule summaries rule) input
 
-let rule_inputs chains input rules =
-  let summaries = chain_writes chains in
+let rule_inputs context input rules =
   List.fold_map rules ~init:input ~f:(fun input rule ->
-    input_after_rule summaries input rule, (input, rule))
+    input_after_rule context.writes input rule, (input, rule))
   |> snd
 
 (** Return an ordered list of chains extended inputs for each inputs *)
-let map_chains_inputs chains =
-  let summaries = chain_writes chains in
+let map_chains_inputs context =
+  let summaries = context.writes in
   (* Get the set of chains *)
   let chains =
-    get_ordered_chains chains
+    context.graph.leaves_first
     |> List.rev
-    |> List.filter_map ~f:(Map.find chains)
+    |> List.map ~f:(Map.find_exn context.chains)
   in
   (* Map the chains to have initial reduced input. *)
   (* Extend to also handle derived inputs *)
@@ -235,10 +259,11 @@ let remap_chain_ids chains =
 
 (** This should be used with a set of filters *)
 let map_rules_input ~f chains =
-  map_chains_inputs chains
+  let context = analyze chains in
+  map_chains_inputs context
   |> List.concat_map ~f:(function
     | (input, ({ id = Temporary _; rules; _ } as chain)) ->
-      let rules, new_chains = f chains input rules in
+      let rules, new_chains = f context input rules in
       { chain with rules } :: new_chains
     | _, chain -> [chain]
   )
@@ -246,10 +271,10 @@ let map_rules_input ~f chains =
   |> Map.of_alist_exn (module Chain_id)
 
 
-let remove_unsatisfiable_rules chains input rules =
+let remove_unsatisfiable_rules context input rules =
   (* Removing complete rules due to unsatifiability is ok *)
   let rules =
-    rule_inputs chains input rules
+    rule_inputs context input rules
     |> List.filter_map ~f:(fun (input, ((preds, _, _) as rule)) ->
       match P.is_satisfiable (input @ preds) with
       | false ->
@@ -333,8 +358,9 @@ let can_inline_call chains summaries ~max_rules (preds, effects, id) =
   not (List.exists preds ~f:(Dependencies.affects (Map.find_exn summaries id)))
 
 let inline_chains ~max_rules chains =
-  let summaries = chain_writes chains in
-  get_ordered_chains chains
+  let context = analyze chains in
+  let summaries = context.writes in
+  context.graph.leaves_first
   |> List.fold ~init:chains ~f:(fun chains -> function
     | (Ir.Chain_id.Temporary _) as chain_id ->
       Map.change chains chain_id ~f:(function
@@ -358,9 +384,9 @@ let inline_chains ~max_rules chains =
     | _ -> chains
   )
 
-let remove_implied_predicates chains input rules =
+let remove_implied_predicates context input rules =
   let rules =
-    rule_inputs chains input rules
+    rule_inputs context input rules
     |> List.map ~f:(fun (input, (preds, effects, target)) ->
       let implied_predicates = P.get_implied_predicates (preds @ input) in
       let preds = List.filter ~f:(fun pred -> List.mem implied_predicates pred ~equal:P.equal_predicate |> not) preds in
@@ -369,7 +395,8 @@ let remove_implied_predicates chains input rules =
   in
   rules, []
 
-let rec push_common_predicates ~find_pred chains input (rules : Rule.t list) =
+let rec push_common_predicates ~find_pred context input (rules : Rule.t list) =
+  let chains = context.chains in
   (* Create a set of merge sequences based in the input predicate *)
   let rec get_seqeuences ~input head rules =
     (* Find a pred where the the type matches *)
@@ -466,7 +493,7 @@ let rec push_common_predicates ~find_pred chains input (rules : Rule.t list) =
     printf "V";
     (* Map the new chain *)
     let input' = pred :: input in
-    let seq', new_chains' = push_common_predicates ~find_pred chains input' seq in
+    let seq', new_chains' = push_common_predicates ~find_pred context input' seq in
     let new_chain = Chain.create seq' (Printf.sprintf "Push common pred: %d: %s" (List.length seq) (P.to_string pred)) in
     let rules = head @ ([pred], [], Ir.Jump new_chain.id) :: tail in
     rules, new_chain :: new_chains'
@@ -487,7 +514,7 @@ let push_common_predicates_union =
   push_common_predicates ~find_pred
 
 
-let reduce_predicates chains input rules =
+let reduce_predicates context input rules =
   let merge pred input =
     match P.merge_pred ~tpe:`Inter input pred with
     | None -> None (* Cannot reduce *)
@@ -514,7 +541,7 @@ let reduce_predicates chains input rules =
   in
 
   let rules =
-    rule_inputs chains input rules
+    rule_inputs context input rules
     |> List.map ~f:(fun (input, (preds, effects, target)) ->
       let preds =
         List.map ~f:(fun p -> match List.find_map ~f:(merge p) input with
@@ -547,7 +574,8 @@ let remove_true_predicates rules =
   * This only works for chains that has only one reference.
 *)
 let push_predicates ~min_push chains =
-  let summaries = chain_writes chains in
+  let context = analyze chains in
+  let summaries = context.writes in
   (* Replace the chain with a chain where all rules have been extended with pred *)
   let merge pred preds = pred :: preds in
 
@@ -587,7 +615,7 @@ let push_predicates ~min_push chains =
         | (preds, effects, (Ir.Jump target_id as target)) as rule when
             Chain.is_temp target_id &&
             List.is_empty effects &&
-            chain_reference_count target_id chains = 1 -> begin
+            Graph.reference_count context.graph target_id = 1 -> begin
             match Map.find chains target_id with
             | None -> chains, rule :: acc
             | Some target_chain ->
@@ -613,7 +641,7 @@ let push_predicates ~min_push chains =
   in
 
   (* Take all chains in order and start replacing. *)
-  process_chains_breath_first ~f:(fun chains chain_id ->
+  process_chains_parents_first ~order:context.graph.leaves_first ~f:(fun chains chain_id ->
     match Map.find chains chain_id with
     | Some ({ rules; _ } as chain) ->
       let chains, rules = process_chain_rules chains rules in
@@ -622,8 +650,9 @@ let push_predicates ~min_push chains =
   ) chains
 
 let inline_pure_jumps chains =
-  let summaries = chain_writes chains in
-  get_ordered_chains chains
+  let context = analyze chains in
+  let summaries = context.writes in
+  context.graph.leaves_first
   |> List.fold ~init:chains ~f:(fun chains -> function
     | (Ir.Chain_id.Temporary _) as chain_id ->
       Map.change chains chain_id ~f:(function
@@ -645,6 +674,7 @@ let inline_pure_jumps chains =
   )
 
 let reduce_chain_indegree ~max_indegree chains =
+  let graph = Graph.analyze chains in
   let folding_map_chain_rules chains ~(init:'acc) ~(f: 'acc -> 'rule -> 'acc * 'rule) =
     Map.keys chains
     |> List.fold ~init:(chains, init) ~f:(fun (chains, acc) chain_id ->
@@ -671,8 +701,8 @@ let reduce_chain_indegree ~max_indegree chains =
     | rule -> acc, rule
   in
 
-  process_chains_breath_first ~f:(fun chains chain_id ->
-    match Map.find chains chain_id, chain_reference_count chain_id chains > max_indegree with
+  process_chains_parents_first ~order:graph.leaves_first ~f:(fun chains chain_id ->
+    match Map.find chains chain_id, Graph.reference_count graph chain_id > max_indegree with
     | Some chain, true when Chain.is_temp chain.id ->
       let chains, new_chains = folding_map_chain_rules chains ~init:[] ~f:(replace_chain chain) in
       List.fold ~init:chains ~f:(fun chains chain -> Map.add_exn chains ~key:chain.id ~data:chain) new_chains
@@ -817,73 +847,83 @@ let reorder_rules rules =
 let reorder_preds preds =
   List.stable_sort ~compare:(fun a b -> Int.compare (P.cost a) (P.cost b)) preds
 
-let optimize_pass ~stage chains =
-  let (@@) a b = a ~f:b in
-  let optimize_functions =
-    [
-      [1;       ], reduce_chain_indegree ~max_indegree:1;
-      [1;       ], inline_chains ~max_rules:10000;
-      [  2;3;4  ], inline_chains ~max_rules:3;
-      [        5], inline_chains ~max_rules:2;
-      [1;2;3;4;5], map_rules @@ map_predicates @@ P.inter_preds;
-      [1;2;3;4;5], map_rules @@ join_rules;
-      [1;2;3;4;5], map_rules_input @@ reduce_predicates;
-      [        5], map_rules_input @@ remove_implied_predicates;
-      [1;2;3;4;5], map_rules @@ remove_empty_rules;
-      [1;2;3;4;5], map_rules_input @@ remove_unsatisfiable_rules;
-      [1;2;3;4;5], map_rules @@ remove_true_predicates;
-      [1;2;3;4;5], map_rules @@ eliminate_unreachable_rules;
-      [1;2;3;4;5], filter_covered_subset;
-      [  2;3    ], push_predicates ~min_push:2;
-      [1;2;3;   ], map_rules_input @@ remove_implied_predicates;
-      [1;2;3;   ], map_rules_input @@ push_common_predicates_union;
-      [1;2;3;   ], map_rules_input @@ push_common_predicates_union;
-      [1;2;3;   ], map_rules_input @@ push_common_predicates_union;
-      [  2;3;4  ], map_rules_input @@ push_common_predicates_equal;
-      [    3;4  ], map_rules_input @@ push_common_predicates_equal;
-      [    3;4  ], map_rules_input @@ push_common_predicates_equal;
-      [1;2;3;4  ], remove_unreferenced_chains;
-      [1;2;3;4  ], inline_pure_jumps;
-      [1;  3;4  ], merge_identical_chains;
-      [1;  3;4  ], map_rules @@ join_rules_with_same_target;
-      [1;      5], remove_unreferenced_chains;
-      [1;      5], remap_chain_ids;
-      [        5], map_rules @@ map_predicates @@ reorder_preds;
-      [    3;4;5], map_rules @@ reorder_rules
-    ]
-  in
+let same_chains =
+  Map.equal (fun a b ->
+    List.equal (fun (preds, effects, target) (preds', effects', target') ->
+      P.equal_predicates preds preds' &&
+      List.equal equal_effect_ effects effects' &&
+      equal_target target target') a.rules b.rules)
 
-  List.fold_left ~init:chains ~f:(fun chains' (stages, optim_func) ->
-    match List.exists ~f:(Int.equal stage) stages with
-    | true -> printf "%!"; optim_func chains'
-    | false -> chains'
-  ) optimize_functions
+let run_pass name f chains =
+  let started = Stdlib.Sys.time () in
+  let before = Chain.count_rules chains, Chain.count_predicates chains in
+  printf "\n# Optimize %s: %!" name;
+  let result = f chains in
+  let rules, predicates = before in
+  printf " rules %d -> %d, predicates %d -> %d, cpu %.3f ms\n"
+    rules (Chain.count_rules result) predicates (Chain.count_predicates result)
+    ((Stdlib.Sys.time () -. started) *. 1000.);
+  result
+
+let until_stable ~name ~max_rounds f chains =
+  let rec loop remaining chains =
+    let result = f chains in
+    if same_chains chains result then result
+    else if remaining = 1 then begin
+      printf "\n# Optimize %s: reached %d-round budget\n" name max_rounds;
+      result
+    end
+    else loop (remaining - 1) result
+  in
+  loop max_rounds chains
+
+let simplify chains =
+  let once chains =
+    chains
+    |> run_pass "normalize" (map_rules ~f:(map_predicates ~f:P.inter_preds))
+    |> run_pass "merge adjacent rules" (map_rules ~f:join_rules)
+    |> run_pass "reduce predicates" (map_rules_input ~f:reduce_predicates)
+    |> run_pass "remove empty rules" (map_rules ~f:remove_empty_rules)
+    |> run_pass "remove impossible rules" (map_rules_input ~f:remove_unsatisfiable_rules)
+    |> run_pass "remove true predicates" (map_rules ~f:remove_true_predicates)
+    |> run_pass "remove unreachable rules" (map_rules ~f:eliminate_unreachable_rules)
+    |> run_pass "remove covered rules" filter_covered_subset
+    |> run_pass "merge matching targets" (map_rules ~f:join_rules_with_same_target)
+    |> run_pass "remove unused chains" remove_unreferenced_chains
+  in
+  until_stable ~name:"simplification" ~max_rounds:8 once chains
 
 let dump_chains chains =
-  chains
-  |> get_ordered_chains
+  let graph = Graph.analyze chains in
+  graph.leaves_first
   |> List.rev
   |> List.filter_map ~f:(fun chain -> Map.find chains chain)
   |> List.iter ~f:(fun {id; rules; _ } ->
-    printf "# Chain %s. Rules %3d. Ref: %2d\n" (Chain_id.show id) (List.length rules) (chain_reference_count id chains)
+    printf "# Chain %s. Rules %3d. Ref: %2d\n" (Chain_id.show id) (List.length rules) (Graph.reference_count graph id)
   )
 
-let max_stages = 5
-let rec optimize ~stage chains =
-  printf "\n#Stage: %d: (%d, %d, %d): " stage (Chain.count_rules chains) (Chain.count_predicates chains) (Chain.count_chains chains);
-  let chains' = optimize_pass ~stage chains in
-  match (stage >= max_stages) with
-  | false ->
-    optimize ~stage:(stage+1) chains'
-  | true ->
-    printf "\n#Optimization done\n";
-    chains'
-
-
 let optimize chains =
+  let factor chains =
+    chains
+    |> run_pass "push call guards" (push_predicates ~min_push:2)
+    |> run_pass "factor predicate unions" (map_rules_input ~f:push_common_predicates_union)
+    |> run_pass "factor equal predicates" (map_rules_input ~f:push_common_predicates_equal)
+    |> simplify
+  in
   chains
-  |> optimize ~stage:1
-  |> optimize ~stage:1
+  |> simplify
+  |> run_pass "specialize callers" (reduce_chain_indegree ~max_indegree:1)
+  |> run_pass "inline expanded calls" (inline_chains ~max_rules:10000)
+  |> simplify
+  |> until_stable ~name:"factoring" ~max_rounds:4 factor
+  |> run_pass "inline small calls" (inline_chains ~max_rules:2)
+  |> run_pass "inline pure jumps" inline_pure_jumps
+  |> run_pass "merge identical chains" merge_identical_chains
+  |> run_pass "order independent rules" (map_rules ~f:reorder_rules)
+  |> simplify
+  |> run_pass "remove implied predicates" (map_rules_input ~f:remove_implied_predicates)
+  |> run_pass "order predicates" (map_rules ~f:(map_predicates ~f:reorder_preds))
+  |> run_pass "renumber temporary chains" remap_chain_ids
   |> (fun chains -> dump_chains chains; chains)
 
 module Test = struct
@@ -1148,6 +1188,24 @@ module Test = struct
         udp, { allowed with counters = 1 };
         tcp, allowed;
       ]
+
+  let%test_unit "shared descendants receive inputs from every caller path" =
+    let left = Temporary 1 in
+    let right = Temporary 2 in
+    let shared = Temporary 3 in
+    let chains = chain_map [
+      input [
+        rule ~when_:[protocols [udp]] (Jump left);
+        rule ~when_:[protocols [tcp]] (Jump right);
+        rule Drop;
+      ];
+      chain left [rule (Jump shared)];
+      chain right [rule (Jump left)];
+      chain shared [rule ~when_:[protocols [tcp; udp]] Accept];
+    ] in
+    check_optimization
+      ~optimize:(map_rules_input ~f:remove_unsatisfiable_rules) ~chains
+      ~cases:[tcp, allowed; udp, allowed; icmpv6, denied]
 
   let%test_unit "both inliners preserve the frame of an explicit return" =
     let parent = Temporary 1 in
