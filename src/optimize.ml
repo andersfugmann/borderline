@@ -306,7 +306,13 @@ let union_rule_predicates preds preds' =
   | _ -> None
 
 let merge_rules (preds, effects, target) (preds', effects', target') =
-  if is_terminal target && equal_target target target' &&
+  let preserves_multiplicity =
+    is_terminal target ||
+    (equal_target target Pass &&
+     Dependencies.is_read_only (Dependencies.effects effects) &&
+     P.disjoint preds preds')
+  in
+  if preserves_multiplicity && equal_target target target' &&
      List.equal equal_effect_ effects effects'
   then
     union_rule_predicates preds preds'
@@ -1055,6 +1061,38 @@ module Test = struct
         tcp, { allowed with source_zone = Some "one" };
         udp, { denied with source_zone = Some "one" };
       ]
+
+  let%test_unit "disjoint read-only pass rules merge without losing effects" =
+    let chains = chain_map [
+      input [
+        rule ~when_:[protocols [tcp]] ~effects:[Counter; Log "matched"] Pass;
+        rule ~when_:[protocols [udp]] ~effects:[Counter; Log "matched"] Pass;
+        rule Accept;
+      ];
+    ] in
+    List.iter [join_rules; join_rules_with_same_target] ~f:(fun merge ->
+      let optimize chains = map_rules ~f:merge chains |> expect_rule_count 2 in
+      check_optimization ~optimize ~chains
+        ~cases:[
+          tcp, { allowed with counters = 1; logs = ["matched"] };
+          udp, { allowed with counters = 1; logs = ["matched"] };
+          icmpv6, allowed;
+        ])
+
+  let%test_unit "pass merging cannot collapse writes that enable a later match" =
+    let effects = [MarkZone (Direction.Source, "after"); Counter] in
+    let chains = chain_map [
+      input [
+        rule ~effects:[MarkZone (Direction.Source, "before")] Pass;
+        rule ~when_:[source_zones ["before"]] ~effects Pass;
+        rule ~when_:[source_zones ["after"]] ~effects Pass;
+        rule Accept;
+      ];
+    ] in
+    List.iter [join_rules; join_rules_with_same_target] ~f:(fun merge ->
+      let optimize chains = map_rules ~f:merge chains |> expect_rule_count 4 in
+      check_optimization ~optimize ~chains
+        ~cases:[udp, { allowed with source_zone = Some "after"; counters = 2 }])
 
   let%test_unit "push_predicates preserves every moved guard" =
     let child = Temporary 1 in

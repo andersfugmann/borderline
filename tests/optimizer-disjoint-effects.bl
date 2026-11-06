@@ -1,0 +1,10 @@
+# EXPECT-COUNT: 1 => counter log prefix "seen: "
+
+process filter {
+    rule {
+        protocol = 6;
+    } policy { counter; log "seen"; };
+    rule {
+        protocol = 17;
+    } policy { counter; log "seen"; };
+} policy allow
