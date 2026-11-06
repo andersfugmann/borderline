@@ -10,7 +10,7 @@ module Ipaddr = struct
   include Ipaddr
   module V4 = struct
     include V4
-    let equal a b = compare a b = 1
+    let equal a b = compare a b = 0
   end
 end
 
@@ -162,16 +162,7 @@ type effect_ = MarkZone of Direction.t * zone
 
 type effects = effect_ list [@@driving equal]
 let equal_effects a b =
-  let order = function
-    | MarkZone _ -> 1
-    | Counter -> 2
-    | Notrack -> 3
-    | Log _ -> 4
-    | Snat _ -> 5
-    | Comment _ -> 6
-  in
-  let sort = List.stable_sort ~compare:(fun x y -> compare (order x) (order y)) in
-  List.equal equal_effect_ (sort a) (sort b)
+  List.equal equal_effect_ a b
 
 type target = Jump of Chain_id.t
             | Accept
@@ -188,3 +179,17 @@ type chain = { id: Chain_id.t; rules : rule list; comment: string; }
 type string = String.t [@@ocaml.warning "-34"]
 type int = Int.t [@@ocaml.warning "-34"]
 type bool = Bool.t [@@ocaml.warning "-34"]
+
+let%test_unit "source NAT effects preserve IPv4 target identity" =
+  let snat address = Snat (Some (Ipaddr.V4.of_string_exn address)) in
+  List.iter [
+    "198.51.100.2", "198.51.100.2", true;
+    "198.51.100.2", "198.51.100.1", false;
+    "198.51.100.1", "198.51.100.2", false;
+  ] ~f:(fun (a, b, expected) ->
+    OUnit2.assert_equal ~msg:("SNAT " ^ a ^ " versus " ^ b)
+      ~printer:Bool.to_string expected (equal_effect_ (snat a) (snat b)))
+
+let%test "effect identity preserves packet-write and log order" =
+  let mark = MarkZone (Direction.Source, "lan") in
+  not (equal_effects [mark; Log "seen"] [Log "seen"; mark])
