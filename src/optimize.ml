@@ -195,6 +195,7 @@ let rec join_rules_with_same_target =
 
   let can_merge (preds, effects, target) = function
     | (preds', effects', target') when
+        is_terminal target &&
         equal_target target target' &&
         equal_effects effects effects' ->
       begin
@@ -598,7 +599,8 @@ let merge_identical_chains chains =
 
 let rec join_rules = function
   | (([pred], effects, target) as r1) :: (([pred'], effects', target') as r2) :: rules
-    when equal_effects effects effects' && equal_target target target' ->
+    when is_terminal target &&
+         equal_effects effects effects' && equal_target target target' ->
     begin
       match P.merge_pred ~tpe:`Union pred pred' with
       | Some pred -> join_rules (([pred], effects, target) :: rules)
@@ -986,5 +988,34 @@ module Test = struct
         tcp, { allowed with counters = 1; logs = ["matched"] };
         udp, { allowed with counters = 1; logs = ["matched"] };
         icmpv6, { allowed with counters = 2; logs = ["matched"; "matched"] };
+      ]
+
+  let overlapping_returning_jumps =
+    let child = Temporary 1 in
+    chain_map [
+      input [
+        rule ~when_:[except_protocols [tcp]] (Jump child);
+        rule ~when_:[except_protocols [udp]] (Jump child);
+        rule Accept;
+      ];
+      chain child [rule ~effects:[Counter; Log "visited"] Return];
+    ]
+
+  let%test_unit "join_rules preserves repeated returning jumps" =
+    check_optimization ~optimize:(map_rules ~f:join_rules)
+      ~chains:overlapping_returning_jumps
+      ~cases:[
+        tcp, { allowed with counters = 1; logs = ["visited"] };
+        udp, { allowed with counters = 1; logs = ["visited"] };
+        icmpv6, { allowed with counters = 2; logs = ["visited"; "visited"] };
+      ]
+
+  let%test_unit "join_rules_with_same_target preserves repeated returning jumps" =
+    check_optimization ~optimize:(map_rules ~f:join_rules_with_same_target)
+      ~chains:overlapping_returning_jumps
+      ~cases:[
+        tcp, { allowed with counters = 1; logs = ["visited"] };
+        udp, { allowed with counters = 1; logs = ["visited"] };
+        icmpv6, { allowed with counters = 2; logs = ["visited"; "visited"] };
       ]
 end
