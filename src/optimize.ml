@@ -173,13 +173,24 @@ type context = {
   chains: (Chain_id.t, chain, Chain_id.comparator_witness) Map.t;
   graph: Graph.t;
   writes: (Chain_id.t, Dependencies.writes, Chain_id.comparator_witness) Map.t;
+  next_temporary: int ref;
 }
 
 let analyze chains =
   let graph = Graph.analyze chains in
-  { chains; graph; writes = summarize_writes chains graph }
+  let next_temporary =
+    Map.fold chains ~init:0 ~f:(fun ~key ~data:_ next ->
+      match key with Temporary id -> Int.max next (id + 1) | _ -> next)
+    |> ref
+  in
+  { chains; graph; writes = summarize_writes chains graph; next_temporary }
 
 let chain_writes chains = (analyze chains).writes
+
+let create_chain context rules comment =
+  let id = Chain_id.Temporary !(context.next_temporary) in
+  Int.incr context.next_temporary;
+  { id; rules; comment }
 
 let input_after_rule summaries input (preds, _, target as rule) =
   match preds with
@@ -344,17 +355,17 @@ let remove_unreferenced_chains chains =
   in
   Map.filter_keys ~f:(Set.mem referenced_chains) chains
 
-let can_inline_call chains summaries ~max_rules (preds, effects, id) =
+let can_inline_call context chains ~max_rules (preds, effects, id) =
   let child = Map.find_exn chains id in
   Chain.is_temp id &&
   List.is_empty effects &&
   List.length child.rules <= max_rules &&
+  (Graph.reference_count context.graph id = 1 || List.length child.rules <= 1) &&
   not (List.exists child.rules ~f:(fun (_, _, target) -> equal_target target Return)) &&
-  not (List.exists preds ~f:(Dependencies.affects (Map.find_exn summaries id)))
+  not (List.exists preds ~f:(Dependencies.affects (Map.find_exn context.writes id)))
 
 let inline_chains ~max_rules chains =
   let context = analyze chains in
-  let summaries = context.writes in
   context.graph.leaves_first
   |> List.fold ~init:chains ~f:(fun chains -> function
     | (Ir.Chain_id.Temporary _) as chain_id ->
@@ -363,7 +374,7 @@ let inline_chains ~max_rules chains =
           let rules =
             List.concat_map ~f:(function
               | (preds, effects, Ir.Jump id) when
-                  can_inline_call chains summaries ~max_rules (preds, effects, id) ->
+                  can_inline_call context chains ~max_rules (preds, effects, id) ->
                 printf "I";
                 let { rules; _ } = Map.find_exn chains id in
                 List.map ~f:(fun (preds', effects', target) ->
@@ -390,109 +401,62 @@ let remove_implied_predicates context input rules =
   in
   rules, []
 
-let rec push_common_predicates ~find_pred context input (rules : Rule.t list) =
-  let chains = context.chains in
-  (* Create a set of merge sequences based in the input predicate *)
-  let rec get_seqeuences ~input head rules =
-    (* Find a pred where the the type matches *)
-    let get_pred_by_type pred preds  =
-      List.find ~f:(fun pred' ->
-          P.merge_pred ~tpe:`Union pred pred' |> Option.is_some
-        ) preds
-    in
+module Cost = struct
+  let jump = 65535
 
-    (* Determine if the target and predicates are the same if its a jump target *)
-    let match_effect_and_target (_, effects, target) rule' =
-      let rec inner = function
-        | [] -> true
-        | (_, effects', target') :: rules
-          when Ir.equal_effects effects effects' &&
-               Ir.equal_target target target' ->
-          inner rules
-        | (_, effects', Jump id) :: rules
-          when Chain.is_temp id && Ir.equal_effects effects effects' ->
-          Map.find chains id
-          |> Option.value_map ~default:false ~f:(fun { rules; _ } ->
-            inner rules) &&
-          inner rules
-        | _ -> false
-      in
-      inner [rule']
-    in
+  let rules rules =
+    List.sum (module Int) rules ~f:(fun (preds, _, target) ->
+      P.costs preds + (match target with Jump _ -> jump | _ -> 0))
 
-    let can_reorder (preds, effects, target) rules =
-      List.for_all ~f:(fun (preds', effects', target') ->
-          Dependencies.independent (preds, effects, target) (preds', effects', target') &&
-          (match_effect_and_target (preds, effects, target) (preds', effects', target') ||
-           P.disjoint preds preds')) rules
+  let factoring_gain guard rules =
+    let saved =
+      List.sum (module Int) rules ~f:(fun (preds, _, _) ->
+        List.sum (module Int) preds ~f:(fun pred ->
+          if P.is_subset guard ~of_:pred then P.cost pred else 0))
     in
+    saved - P.cost guard - jump
+end
 
-    let rec reorder_disjoint pred (acc : Rule.t list) = function
-      | [] -> None
-      | ((preds, _, _) as rule) :: rules ->
-        match find_pred pred preds with
-        (* Found a match. See if we can reorder and return if true *)
-        | Some pred when can_reorder rule acc ->
-          Some (pred, rule, List.rev_append acc rules)
-        (* Acc could not be reordered *)
-        | Some _ -> None
-        | None ->
-          (* No match for this rule - continue *)
-          reorder_disjoint pred (rule :: acc) rules
-    in
-
-    let rec create_seq (acc, seq) = function
-      | [] -> (acc, List.rev seq, [])
-      | rule :: rules ->
-        match reorder_disjoint acc [] (rule :: rules) with
-        | None -> (acc, List.rev seq, (rule :: rules))
-        | Some (pred, rule, tail) ->
-          create_seq (pred, rule :: seq) tail
-    in
-    match rules with
+let rec push_common_predicates ~find_pred context input rules =
+  let factorable = function (TcpFlags _ | True | Mark _), _ -> false | _ -> true in
+  let rec extend guard seq = function
+    | ((preds, _, target) as rule) :: rest when not (equal_target target Return) ->
+      begin match find_pred guard (preds @ P.get_implied_predicates preds) with
+      | Some next when
+          not (P.is_always true next) &&
+          not (Dependencies.affects (Dependencies.rule context.writes rule) next) ->
+        if not (P.equal_predicate guard next) &&
+           List.length seq >= min_push_seq && Cost.factoring_gain guard seq > 0
+        then guard, List.rev seq, rule :: rest
+        else extend next (rule :: seq) rest
+      | _ -> guard, List.rev seq, rule :: rest
+      end
+    | rest -> guard, List.rev seq, rest
+  in
+  let rec candidates head = function
     | [] -> []
-    | ((preds, _, _) as rule) :: rules ->
-      match get_pred_by_type input preds with
-      | Some pred ->
-        let (pred, seq, tail) = create_seq (pred, []) (rule :: rules) in
-        let head', tail' = List.split_n (rule :: rules) (List.length seq) in
-        (pred, List.rev head, seq, tail) :: get_seqeuences ~input (List.rev_append head' head) tail'
-      | None ->
-        get_seqeuences ~input (rule :: head) rules
+    | ((preds, _, _) as rule) :: rest ->
+      let here =
+        preds @ P.get_implied_predicates preds
+        |> List.filter ~f:factorable
+        |> List.filter_map ~f:(fun guard ->
+          let guard, seq, tail = extend guard [] (rule :: rest) in
+          let gain = Cost.factoring_gain guard seq in
+          if List.length seq >= min_push_seq && gain > 0 &&
+             not (List.exists input ~f:(P.equal_predicate guard))
+          then Some (gain, guard, List.rev head, seq, tail)
+          else None)
+      in
+      here @ candidates (rule :: head) rest
   in
-  let input_predicates =
-    let rec reduce = function
-      | [] -> []
-      | pred :: preds when List.exists ~f:(fun pred' -> P.merge_pred pred pred' |> Option.is_some) preds ->
-        reduce preds
-      | pred :: preds -> pred :: reduce preds
-    in
-    List.concat_map ~f:(fun (preds, _, _) -> preds) rules
-    |> (fun preds -> preds @ P.get_implied_predicates preds)
-    |> reduce
-  in
-
-  let rank (pred, _, seq, _) = Predicate.cardinal_of_pred pred * List.length seq in
-  let sequence =
-    List.concat_map ~f:(fun input ->
-      get_seqeuences ~input [] rules
-    ) input_predicates
-    |> List.filter ~f:(fun (_, _, seq, _) -> List.length seq >= min_push_seq)
-    (* Remove predicates that have already been matched as part of input *)
-    |> List.filter ~f:(fun (pred, _, _, _) -> List.exists ~f:(fun input -> P.equal_predicate pred input) input |> not)
-    |> List.filter ~f:(fun (pred, _, _, _) -> not (P.is_always true pred))
-    |> List.max_elt ~compare:(fun a b  -> Int.compare (rank a) (rank b))
-  in
-  match sequence with
-  | Some (pred, head, seq, tail) ->
+  match List.max_elt (candidates [] rules)
+          ~compare:(fun (a, _, _, _, _) (b, _, _, _, _) -> Int.compare a b) with
+  | None -> rules, []
+  | Some (_, guard, head, seq, tail) ->
     printf "V";
-    (* Map the new chain *)
-    let input' = pred :: input in
-    let seq', new_chains' = push_common_predicates ~find_pred context input' seq in
-    let new_chain = Chain.create seq' (Printf.sprintf "Push common pred: %d: %s" (List.length seq) (P.to_string pred)) in
-    let rules = head @ ([pred], [], Ir.Jump new_chain.id) :: tail in
-    rules, new_chain :: new_chains'
-  | _ -> rules, []
+    let seq, nested = push_common_predicates ~find_pred context (guard :: input) seq in
+    let child = create_chain context seq ("Common predicate: " ^ P.to_string guard) in
+    head @ ([guard], [], Jump child.id) :: tail, child :: nested
 
 let push_common_predicates_equal =
   let find_pred pred preds =
@@ -565,43 +529,14 @@ let remove_true_predicates rules =
        | false -> Some pred
     ) preds, effects,target)) rules
 
-(** Push predicates to sub-chains if the predicate are already present on the subchains
-  * This only works for chains that has only one reference.
-*)
-let push_predicates ~min_push chains =
+(** Move stable guards into single-caller chains only when the merged predicates cost less. *)
+let push_predicates chains =
   let context = analyze chains in
   let summaries = context.writes in
-  (* Replace the chain with a chain where all rules have been extended with pred *)
-  let merge pred preds = pred :: preds in
-
   let push rules pred =
     List.map ~f:(fun (preds, effects, target) ->
-      (merge pred preds, effects, target)
+      (P.inter_preds (pred :: preds), effects, target)
     ) rules
-  in
-
-  let can_merge pred pred' =
-    P.merge_pred pred pred' |> Option.is_some
-  in
-
-  let has_conflict pred pred' =
-    can_merge pred pred' |> not
-  in
-
-  let can_merge_rules rules pred =
-    List.exists ~f:(fun (preds, _, _) ->
-      List.exists ~f:(fun pred' -> has_conflict pred pred') preds
-    ) rules
-    |> not
-  in
-
-  let count_merges rules pred =
-    let count =
-      List.count ~f:(fun (preds, _, _) ->
-        List.exists ~f:(can_merge pred) preds
-      ) rules
-    in
-    count * 100 / (List.length rules + 1)
   in
 
   let process_chain_rules chains rules =
@@ -616,14 +551,15 @@ let push_predicates ~min_push chains =
             | Some target_chain ->
               let target_rules, preds =
                 List.fold ~init:(target_chain.rules, []) ~f:(fun (target_rules, acc) pred ->
+                  let pushed = push target_rules pred in
                   match
                     not (Dependencies.affects (Map.find_exn summaries target_id) pred) &&
-                    can_merge_rules rules pred && count_merges target_rules pred >= min_push
+                    Cost.rules pushed < Cost.rules target_rules + P.cost pred
                   with
                   | false -> (target_rules, pred :: acc)
                   | true ->
                     printf ">";
-                    push target_rules pred, acc
+                    pushed, acc
                 ) preds
               in
               let chains = Map.set chains ~key:target_id ~data:{ target_chain with rules = target_rules } in
@@ -646,7 +582,6 @@ let push_predicates ~min_push chains =
 
 let inline_pure_jumps chains =
   let context = analyze chains in
-  let summaries = context.writes in
   context.graph.leaves_first
   |> List.fold ~init:chains ~f:(fun chains -> function
     | (Ir.Chain_id.Temporary _) as chain_id ->
@@ -656,7 +591,7 @@ let inline_pure_jumps chains =
           let rules =
             List.concat_map ~f:(function
               | ([], [], Ir.Jump target) as rule when
-                  can_inline_call chains summaries ~max_rules:Int.max_value ([], [], target) ->
+                  can_inline_call context chains ~max_rules:Int.max_value ([], [], target) ->
                 printf "P";
                 Map.find chains target
                 |> Option.value_map ~default:[rule] ~f:(fun { rules; _ } -> rules)
@@ -668,41 +603,49 @@ let inline_pure_jumps chains =
     | _ -> chains
   )
 
-let reduce_chain_indegree ~max_indegree chains =
-  let graph = Graph.analyze chains in
-  let folding_map_chain_rules chains ~(init:'acc) ~(f: 'acc -> 'rule -> 'acc * 'rule) =
-    Map.keys chains
-    |> List.fold ~init:(chains, init) ~f:(fun (chains, acc) chain_id ->
-      match Map.find chains chain_id with
-      | Some ({ id = Temporary _; rules; _ } as chain) ->
-        (* Replace the chain *)
-        let rules, acc =
-          List.fold ~init:([], acc) ~f:(fun (rules_acc, acc) rule ->
-            let acc, rule = f acc rule in
-            (rule :: rules_acc, acc)
-          ) rules
-        in
-        let chains =
-          Map.set chains ~key:chain_id ~data:{ chain with rules = List.rev rules }
-        in
-        chains, acc
-      | _ -> (chains, acc)
-    )
+let specialize_callers ~max_growth chains =
+  let context = analyze chains in
+  let remaining = ref max_growth in
+  let added = ref [] in
+  let specialize input = function
+    | (preds, effects, Jump id) as rule when
+        Chain.is_temp id && Graph.reference_count context.graph id > 1 ->
+      let child = Map.find_exn chains id in
+      let input =
+        P.inter_preds (preds @ input)
+        |> Dependencies.invalidate (Dependencies.effects effects)
+      in
+      let rules, _ = remove_unsatisfiable_rules context input child.rules in
+      let rules, _ = reduce_predicates context input rules in
+      let rules = remove_true_predicates rules in
+      let size = List.length rules in
+      if size < List.length child.rules &&
+         Cost.rules rules < Cost.rules child.rules && size <= !remaining
+      then begin
+        remaining := !remaining - size;
+        if size = 0 then preds, effects, Pass
+        else begin
+          let child = create_chain context rules "Specialized caller" in
+          added := child :: !added;
+          preds, effects, Jump child.id
+        end
+      end
+      else rule
+    | rule -> rule
   in
-  let replace_chain chain acc = function
-    | (preds, effects, Jump id) when Chain_id.equal id chain.id ->
-      let new_chain = Chain.create chain.rules "Duplicate" in
-      new_chain :: acc, (preds, effects, Jump new_chain.id)
-    | rule -> acc, rule
+  let chains =
+    map_chains_inputs context
+    |> List.map ~f:(fun (input, chain) ->
+      let rules =
+        if Chain.is_named chain.id then chain.rules
+        else rule_inputs context input chain.rules
+          |> List.map ~f:(fun (input, rule) -> specialize input rule)
+      in
+      chain.id, { chain with rules })
+    |> Map.of_alist_exn (module Chain_id)
   in
-
-  process_chains_parents_first ~order:graph.leaves_first ~f:(fun chains chain_id ->
-    match Map.find chains chain_id, Graph.reference_count graph chain_id > max_indegree with
-    | Some chain, true when Chain.is_temp chain.id ->
-      let chains, new_chains = folding_map_chain_rules chains ~init:[] ~f:(replace_chain chain) in
-      List.fold ~init:chains ~f:(fun chains chain -> Map.add_exn chains ~key:chain.id ~data:chain) new_chains
-    | _, _ -> chains
-  ) chains
+  List.fold !added ~init:chains ~f:(fun chains child ->
+    Map.add_exn chains ~key:child.id ~data:child)
 
 
 let merge_identical_chains chains =
@@ -896,15 +839,16 @@ let dump_chains chains =
 let optimize chains =
   let factor chains =
     chains
-    |> run_pass "push call guards" (push_predicates ~min_push:2)
+    |> run_pass "push call guards" push_predicates
     |> run_pass "factor predicate unions" (map_rules_input ~f:push_common_predicates_union)
     |> run_pass "factor equal predicates" (map_rules_input ~f:push_common_predicates_equal)
     |> simplify
   in
   chains
   |> simplify
-  |> run_pass "specialize callers" (reduce_chain_indegree ~max_indegree:1)
-  |> run_pass "inline expanded calls" (inline_chains ~max_rules:10000)
+  |> run_pass "specialize callers" (fun chains ->
+    specialize_callers ~max_growth:(Chain.count_rules chains / 4) chains)
+  |> run_pass "inline small calls" (inline_chains ~max_rules:3)
   |> simplify
   |> until_stable ~name:"factoring" ~max_rounds:4 factor
   |> run_pass "inline small calls" (inline_chains ~max_rules:2)
@@ -1094,6 +1038,101 @@ module Test = struct
       check_optimization ~optimize ~chains
         ~cases:[udp, { allowed with source_zone = Some "after"; counters = 2 }])
 
+  let%test_unit "factoring removes repeated predicates when the guard pays for its jump" =
+    let parent = Temporary 1 in
+    let chains = chain_map [
+      input [rule (Jump parent)];
+      chain parent [
+        rule ~when_:[protocols [udp]] ~effects:[Counter] Pass;
+        rule ~when_:[protocols [udp]] ~effects:[Log "matched"] Pass;
+        rule ~when_:[protocols [udp]] Accept;
+        rule ~when_:[protocols [tcp]] Drop;
+        rule Drop;
+      ];
+    ] in
+    let optimize chains =
+      let result =
+        chains
+        |> map_rules_input ~f:push_common_predicates_union
+        |> map_rules_input ~f:reduce_predicates
+        |> map_rules ~f:remove_true_predicates
+      in
+      assert_equal ~msg:"The profitable UDP prefix shares one guard before the TCP rule"
+        2 (Chain.count_predicates result);
+      result
+    in
+    check_optimization ~optimize ~chains
+      ~cases:[
+        udp, { allowed with counters = 1; logs = ["matched"] };
+        tcp, denied;
+      ]
+
+  let%test_unit "factoring skips a union that removes no repeated predicate work" =
+    let parent = Temporary 1 in
+    let chains = chain_map [
+      input [rule (Jump parent)];
+      chain parent [
+        rule ~when_:[protocols [tcp]] ~effects:[Counter] Pass;
+        rule ~when_:[protocols [udp]] ~effects:[Log "udp"] Pass;
+        rule ~when_:[protocols [icmpv6]] Accept;
+      ];
+    ] in
+    let optimize chains =
+      map_rules_input ~f:push_common_predicates_union chains |> expect_rule_count 4
+    in
+    check_optimization ~optimize ~chains
+      ~cases:[
+        tcp, { denied with counters = 1 };
+        udp, { denied with logs = ["udp"] };
+        icmpv6, allowed;
+      ]
+
+  let%test_unit "factoring preserves explicit return boundaries" =
+    let parent = Temporary 1 in
+    let chains = chain_map [
+      input [rule (Jump parent); rule Accept];
+      chain parent [
+        rule ~when_:[protocols [udp]] ~effects:[Counter] Pass;
+        rule ~when_:[protocols [udp]] ~effects:[Log "returning"] Pass;
+        rule ~when_:[protocols [udp]] Return;
+        rule Drop;
+      ];
+    ] in
+    check_optimization ~optimize:(map_rules_input ~f:push_common_predicates_union)
+      ~chains
+      ~cases:[
+        udp, { allowed with counters = 1; logs = ["returning"] };
+        tcp, denied;
+      ]
+
+  let%test_unit "caller specialization prunes branches within its growth budget" =
+    let shared = Temporary 1 in
+    let chains = chain_map [
+      input [
+        rule ~when_:[protocols [tcp]] (Jump shared);
+        rule ~when_:[protocols [udp]] (Jump shared);
+        rule Drop;
+      ];
+      chain shared [
+        rule ~when_:[protocols [tcp]] ~effects:[Log "tcp"] Accept;
+        rule ~when_:[protocols [udp]] ~effects:[Log "udp"] Accept;
+        rule ~when_:[protocols [icmpv6]] ~effects:[Log "icmpv6"] Accept;
+        rule Drop;
+      ];
+    ] in
+    List.iter [0, 7; 1, 8; 2, 5] ~f:(fun (max_growth, expected_rules) ->
+      let optimize chains =
+        specialize_callers ~max_growth chains
+        |> remove_unreferenced_chains
+        |> expect_rule_count expected_rules
+      in
+      check_optimization ~optimize ~chains
+        ~cases:[
+          tcp, { allowed with logs = ["tcp"] };
+          udp, { allowed with logs = ["udp"] };
+          icmpv6, denied;
+        ])
+
   let%test_unit "push_predicates preserves every moved guard" =
     let child = Temporary 1 in
     let chains = chain_map [
@@ -1105,7 +1144,7 @@ module Test = struct
       chain child [rule ~when_:[protocols [tcp; udp; icmpv6]] Accept];
     ] in
     (* Keep both guards to exercise this pass before predicate normalization. *)
-    check_optimization ~optimize:(push_predicates ~min_push:2) ~chains
+    check_optimization ~optimize:push_predicates ~chains
       ~cases:[
         udp, allowed;
         icmpv6, denied;

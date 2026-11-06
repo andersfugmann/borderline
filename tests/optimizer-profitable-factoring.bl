@@ -1,0 +1,19 @@
+# EXPECT-COUNT: 1 => iifgroup { 1 }
+# EXPECT-COUNT: 1 => log prefix "first: "
+# EXPECT-COUNT: 1 => log prefix "second: "
+# EXPECT-COUNT: 1 => log prefix "third: "
+
+process filter {
+    rule {
+        source interface_group = 1;
+        destination tcp port = 10001;
+    } policy { log "first"; allow; };
+    rule {
+        source interface_group = 1;
+        destination tcp port = 10002;
+    } policy { log "second"; allow; };
+    rule {
+        source interface_group = 1;
+        destination tcp port = 10003;
+    } policy { log "third"; allow; };
+} policy deny
