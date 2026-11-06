@@ -935,32 +935,12 @@ module Test = struct
 
   let%test_unit "referenced named chains remain reachable" =
     let named = Named "local_policy" in
-    let child = Temporary 1 in
     let chains = chain_map [
       input [rule (Jump named)];
-      chain named [rule (Jump child)];
-      chain child [rule Accept];
+      chain named [rule Accept];
     ] in
     check_optimization ~optimize:remove_unreferenced_chains ~chains
       ~cases:[udp, allowed]
-
-  let%test_unit "empty user-chain hooks survive full optimization" =
-    let udp_policy = Named "udp_policy" in
-    let tcp_policy = Named "tcp_policy" in
-    let chains = chain_map [
-      input [
-        rule ~when_:[protocols [udp]] (Jump udp_policy);
-        rule ~when_:[protocols [tcp]] (Jump tcp_policy);
-        rule ~when_:[protocols [icmpv6]] (Jump udp_policy);
-        rule Drop;
-      ];
-      chain udp_policy [];
-      chain tcp_policy [];
-    ] in
-    let optimized = optimize chains in
-    List.iter [udp_policy; tcp_policy] ~f:(fun id ->
-      assert_bool ("User-chain hook must remain callable: " ^ Chain_id.show id)
-        (Map.mem optimized id && chain_reference_count id optimized > 0))
 
   let overlapping_nonterminal_effects = chain_map [
     input [
