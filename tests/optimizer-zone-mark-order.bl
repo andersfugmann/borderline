@@ -1,0 +1,16 @@
+# Both zones match 10.0.0.5 on interface group 1; the last mark must win.
+# EXPECT-ORDER: Mark source zone: wide => Mark source zone: narrow
+# EXPECT-ORDER: Mark destination zone: wide => Mark destination zone: narrow
+
+define ipv4_local_auto = []
+
+zone wide {
+    interface_group = 1;
+    network = [ 10.0.0.0/24, 192.168.0.0/24 ];
+}
+zone narrow {
+    interface_group = 1;
+    network = 10.0.0.0/24;
+}
+
+process filter { } policy deny

@@ -1,0 +1,21 @@
+process filter {
+    rule {
+        protocol = 17;
+    } policy counter;
+
+    rule {
+        protocol = 17;
+        source address = [ 10.0.0.0/24, 172.16.0.0/24, 192.168.0.0/24 ];
+        destination udp port = 10001;
+    } policy { log "OK: UDP 10001 after counter"; allow; };
+    rule {
+        protocol = 17;
+        source address = [ 10.0.0.0/24, 172.16.0.0/24, 192.168.0.0/24 ];
+        destination udp port = 10002;
+    } policy { log "OK: UDP 10002 after counter"; allow; };
+    rule {
+        protocol = 17;
+        source address = [ 10.0.0.0/24, 172.16.0.0/24, 192.168.0.0/24 ];
+        destination udp port = 10003;
+    } policy { log "OK: UDP 10003 after counter"; allow; };
+} policy deny

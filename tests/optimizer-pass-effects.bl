@@ -1,0 +1,13 @@
+# Protocol 58 matches both non-terminal rules and must execute both effects.
+# EXPECT-COUNT: 2 => counter log prefix "matched: "
+
+define track = policy { counter; log "matched"; }
+
+process filter {
+    rule {
+        protocol != 6;
+    } policy track;
+    rule {
+        protocol != 17;
+    } policy track;
+} policy allow

@@ -1,0 +1,13 @@
+# Normal compilation merges the two outer guards before push_predicates.
+# The inline test exercises the guard-overwrite defect without that protection.
+# EXPECT-COUNT: 1 => meta l4proto { 17 } log prefix "OK: guarded UDP: " level info accept
+
+process filter {
+    rule {
+        protocol = [ 6, 17 ];
+        protocol = [ 17, 58 ];
+        rule {
+            protocol = [ 6, 17, 58 ];
+        } policy { log "OK: guarded UDP"; allow; };
+    };
+} policy deny

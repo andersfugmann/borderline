@@ -754,3 +754,193 @@ let optimize chains =
   |> optimize ~stage:1
   |> optimize ~stage:1
   |> (fun chains -> dump_chains chains; chains)
+
+module Test = struct
+  open OUnit2
+  open Chain_id
+
+  type observation = {
+    accepted: bool;
+    source_zone: string option;
+    counters: int;
+    logs: string list;
+  } [@@deriving show]
+
+  let tcp = 6
+  let udp = 17
+  let icmpv6 = 58
+
+  let protocol_name = function
+    | 6 -> "TCP"
+    | 17 -> "UDP"
+    | 58 -> "ICMPv6"
+    | value -> Int.to_string value
+
+  let protocols values = Protocol (Set.of_list values), false
+  let except_protocols values = Protocol (Set.of_list values), true
+
+  let rule ?(when_=[]) ?(effects=[]) target = when_, effects, target
+
+  let chain id rules = { id; rules; comment = "Optimizer regression" }
+  let input rules = chain (Builtin Chain_type.Input) rules
+
+  let chain_map chains =
+    List.map chains ~f:(fun chain -> chain.id, chain)
+    |> Map.of_alist_exn (module Chain_id)
+
+  let denied = {
+    accepted = false;
+    source_zone = None;
+    counters = 0;
+    logs = [];
+  }
+
+  let allowed = { denied with accepted = true }
+
+  let observe ~context chains protocol =
+    let source_zone = ref None in
+    let counters = ref 0 in
+    let logs = ref [] in
+    let matches = function
+      | Protocol values, neg -> Set.mem values protocol <> neg
+      | True, neg -> not neg
+      | pred -> failwith ("Unsupported test predicate: " ^ P.to_string pred)
+    in
+    let apply_effect = function
+      | MarkZone (Direction.Source, zone) -> source_zone := Some zone
+      | Counter -> Int.incr counters
+      | Log prefix -> logs := prefix :: !logs
+      | Comment _ -> ()
+      | _ -> failwith "Unsupported test effect"
+    in
+    let rec run_chain id =
+      match Map.find chains id with
+      | Some chain -> run_rules chain.rules
+      | None ->
+        assert_failure (context ^ ": missing jump target")
+    and run_rules = function
+      | [] -> None
+      | (preds, effects, target) :: rest ->
+        if not (List.for_all preds ~f:matches) then run_rules rest
+        else begin
+          List.iter effects ~f:apply_effect;
+          match target with
+          | Accept -> Some true
+          | Drop | Reject _ -> Some false
+          | Return -> None
+          | Pass -> run_rules rest
+          | Jump id ->
+            match run_chain id with
+            | Some _ as result -> result
+            | None -> run_rules rest
+        end
+    in
+    let accepted =
+      Option.value (run_chain (Builtin Chain_type.Input)) ~default:false
+    in
+    {
+      accepted;
+      source_zone = !source_zone;
+      counters = !counters;
+      logs = List.rev !logs;
+    }
+
+  let check_optimization ~optimize ~chains ~cases =
+    let check phase chains =
+      List.iter cases ~f:(fun (protocol, expected) ->
+        let context = phase ^ ": " ^ protocol_name protocol in
+        assert_equal ~printer:show_observation
+          ~msg:context expected (observe ~context chains protocol))
+    in
+    check "Original rules" chains;
+    check "Optimized rules" (optimize chains)
+
+  let%test_unit "push_predicates preserves every moved guard" =
+    let child = Temporary 1 in
+    let chains = chain_map [
+      input [
+        rule ~when_:[protocols [tcp; udp]; protocols [udp; icmpv6]]
+          (Jump child);
+        rule Drop;
+      ];
+      chain child [rule ~when_:[protocols [tcp; udp; icmpv6]] Accept];
+    ] in
+    (* Keep both guards to exercise this pass before predicate normalization. *)
+    check_optimization ~optimize:(push_predicates ~min_push:2) ~chains
+      ~cases:[
+        udp, allowed;
+        icmpv6, denied;
+        tcp, denied;
+      ]
+
+  let%test_unit "non-terminal effects do not exclude subsequent jump inputs" =
+    let child = Temporary 1 in
+    let chains = chain_map [
+      input [
+        rule ~when_:[protocols [udp]] ~effects:[Counter] Pass;
+        rule ~when_:[protocols [udp]] (Jump child);
+        rule Drop;
+      ];
+      chain child [rule Accept];
+    ] in
+    check_optimization
+      ~optimize:(map_rules_input ~f:remove_unsatisfiable_rules) ~chains
+      ~cases:[
+        udp, { allowed with counters = 1 };
+        tcp, denied;
+      ]
+
+  let%test_unit "reorder_rules preserves overlapping zone-mark effects" =
+    let chains = chain_map [
+      input [
+        rule ~when_:[protocols [tcp; udp]]
+          ~effects:[MarkZone (Direction.Source, "int")] Pass;
+        rule ~when_:[protocols [tcp]]
+          ~effects:[MarkZone (Direction.Source, "guest")] Pass;
+        rule Accept;
+      ];
+    ] in
+    check_optimization ~optimize:(map_rules ~f:reorder_rules) ~chains
+      ~cases:[
+        tcp, { allowed with source_zone = Some "guest" };
+        udp, { allowed with source_zone = Some "int" };
+        icmpv6, allowed;
+      ]
+
+  let%test_unit "referenced named chains remain reachable" =
+    let named = Named "local_policy" in
+    let chains = chain_map [
+      input [rule (Jump named)];
+      chain named [rule Accept];
+    ] in
+    check_optimization ~optimize:remove_unreferenced_chains ~chains
+      ~cases:[udp, allowed]
+
+  let overlapping_nonterminal_effects = chain_map [
+    input [
+      rule ~when_:[except_protocols [tcp]]
+        ~effects:[Counter; Log "matched"] Pass;
+      rule ~when_:[except_protocols [udp]]
+        ~effects:[Counter; Log "matched"] Pass;
+      rule Accept;
+    ];
+  ]
+
+  let%test_unit "join_rules preserves counter and log multiplicity" =
+    check_optimization ~optimize:(map_rules ~f:join_rules)
+      ~chains:overlapping_nonterminal_effects
+      ~cases:[
+        tcp, { allowed with counters = 1; logs = ["matched"] };
+        udp, { allowed with counters = 1; logs = ["matched"] };
+        icmpv6, { allowed with counters = 2; logs = ["matched"; "matched"] };
+      ]
+
+  let%test_unit "join_rules_with_same_target preserves effect multiplicity" =
+    check_optimization ~optimize:(map_rules ~f:join_rules_with_same_target)
+      ~chains:overlapping_nonterminal_effects
+      ~cases:[
+        tcp, { allowed with counters = 1; logs = ["matched"] };
+        udp, { allowed with counters = 1; logs = ["matched"] };
+        icmpv6, { allowed with counters = 2; logs = ["matched"; "matched"] };
+      ]
+end

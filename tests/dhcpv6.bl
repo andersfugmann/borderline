@@ -1,0 +1,40 @@
+import "../configuration/common.bl"
+import "../configuration/generic/networks.bl"
+import "../configuration/generic/states.bl"
+import "../configuration/generic/services.bl"
+import "../configuration/generic/l4proto.bl"
+import "../configuration/generic/icmp4.bl"
+import "../configuration/generic/icmp6.bl"
+
+define validate = rule { }
+define global_tcp_ports = []
+define global_udp_ports = []
+define public_tcp_ports = []
+define public_udp_ports = []
+define dhcp_server_zones = [ guest ]
+define dhcp_client_zones = []
+define log_allow = policy { log "OK: DHCPv6 multicast request"; accept; }
+define log_martian = policy { deny; }
+
+zone self {
+    interface = lo;
+}
+zone guest {
+    interface_group = "guest";
+    network = [ fe80::/10, ff00::/8 ];
+}
+
+process filter {
+    rule {
+        state = new;
+        source zone = guest;
+        destination zone = self;
+        source address = fe80::1234;
+        destination address = ff02::1:2;
+        source udp port = dhcpv6-client;
+        destination udp port = dhcpv6-server;
+        rule {
+            use common;
+        } policy { log "ERROR: DHCPv6 multicast request denied"; deny; };
+    };
+} policy deny

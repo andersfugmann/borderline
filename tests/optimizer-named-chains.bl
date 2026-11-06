@@ -1,0 +1,7 @@
+# EXPECT-COUNT: 1 => chain local_policy {
+
+process filter {
+    rule {
+        protocol = 17;
+    } policy user-chain "local_policy";
+} policy deny
