@@ -159,7 +159,7 @@ let merge_pred ?(tpe=`Inter) a b =
     Some (Zone (dir, zones''), neg'')
   | (Zone _, _), _ -> None
   (* Wonder if I could do better here. Well. Could reverse the flags at least *)
-  | (TcpFlags (f, m), false), (TcpFlags (f', m'), false) ->
+  | (TcpFlags (f, m), false), (TcpFlags (f', m'), false) when tpe = `Inter ->
     begin
       let set_flags = Set.union f f' in
       let unset_flags = Set.union (Set.diff m f) (Set.diff m' f') in
@@ -169,7 +169,13 @@ let merge_pred ?(tpe=`Inter) a b =
       | false -> Some (True, true)
     end
   | (TcpFlags _, _), _ -> None (* These can be merged - potentially *)
-  | (True, neg), (True, neg') -> Some (True, neg || neg')
+  | (True, neg), (True, neg') ->
+    let neg = match tpe with
+      | `Inter -> neg || neg'
+      | `Union -> neg && neg'
+      | `Diff -> neg || not neg'
+    in
+    Some (True, neg)
   | (True, _), _  -> None
   | (If_group (dir, ifs), neg), (If_group (dir', ifs'), neg') when dir = dir' ->
     let (ifs'', neg'') = merge_sets (ifs, neg) (ifs', neg') in
@@ -309,7 +315,16 @@ let union_preds preds_list =
     ) preds
 
 let is_subset b ~of_:a =
-  merge_pred ~tpe:`Diff b a |> Option.value_map ~f:(is_always false) ~default:false
+  let flags_subset (flags, mask) (flags', mask') =
+    Set.is_subset ~of_:mask mask' &&
+    Set.equal (Set.inter flags mask') flags'
+  in
+  match b, a with
+  | (TcpFlags (flags, mask), neg), (TcpFlags (flags', mask'), neg') when neg = neg' ->
+    if neg then flags_subset (flags', mask') (flags, mask)
+    else flags_subset (flags, mask) (flags', mask')
+  | _ ->
+    merge_pred ~tpe:`Diff b a |> Option.value_map ~f:(is_always false) ~default:false
 
 let is_satisfiable preds =
   inter_preds preds
@@ -340,6 +355,42 @@ let equal_predicate a b =
 
 let equal_predicates p p' =
   subset_preds ~of_:p p' && subset_preds ~of_:p' p
+
+let%test "disjoint TCP flag matches are not equivalent" =
+  let mask = Set.singleton Tcp_flags.Syn in
+  let syn = TcpFlags (mask, mask), false in
+  let no_syn = TcpFlags (Set.empty, mask), false in
+  disjoint [syn] [no_syn] &&
+  not (equal_predicate syn no_syn) &&
+  equal_predicate syn syn &&
+  Option.is_none (merge_pred ~tpe:`Union syn no_syn)
+
+let%test_unit "TCP flag subsets respect masks and polarity" =
+  let syn_mask = Set.singleton Tcp_flags.Syn in
+  let both = Set.of_list [Tcp_flags.Syn; Tcp_flags.Ack] in
+  let syn = TcpFlags (syn_mask, syn_mask), false in
+  let syn_ack = TcpFlags (both, both), false in
+  let negate (pred, neg) = pred, not neg in
+  List.iter [
+    syn_ack, syn, true;
+    syn, syn_ack, false;
+    negate syn, negate syn_ack, true;
+    negate syn_ack, negate syn, false;
+  ] ~f:(fun (b, a, expected) ->
+    OUnit2.assert_equal ~msg:(to_string b ^ " subset of " ^ to_string a)
+      ~printer:Bool.to_string expected (is_subset b ~of_:a))
+
+let%test "constant predicate operations follow their boolean meaning" =
+  List.for_all [false; true] ~f:(fun neg ->
+    List.for_all [false; true] ~f:(fun neg' ->
+      List.for_all [`Inter; `Union; `Diff] ~f:(fun tpe ->
+        let expected = match tpe with
+          | `Inter -> not neg && not neg'
+          | `Union -> not neg || not neg'
+          | `Diff -> not neg && neg'
+        in
+        Option.value_map (merge_pred ~tpe (True, neg) (True, neg'))
+          ~default:false ~f:(is_always expected))))
 
 module Test = struct
   open OUnit2

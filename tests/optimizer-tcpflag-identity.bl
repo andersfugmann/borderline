@@ -1,0 +1,10 @@
+# EXPECT-COUNT: 2 => log prefix "flags: "
+
+process filter {
+    rule {
+        tcpflags = "SYN" / "SYN";
+    } policy { log "flags"; allow; };
+    rule {
+        tcpflags = [] / "SYN";
+    } policy { log "flags"; allow; };
+} policy deny
