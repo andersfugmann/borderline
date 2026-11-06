@@ -198,12 +198,15 @@ let gen_pred neg pred =
   | Ir.Mark (value, mask) ->
     sprintf "meta mark and 0x%08x %s0x%08x" mask neg_str value, None
   | Ir.TcpFlags (flags, mask) ->
-    let to_list f = Set.to_list f
-                    |> List.map ~f:string_of_tcpflag
-                    |> String.concat ~sep:"|"
+    let flags_to_string flags =
+      if Set.is_empty flags then "0"
+      else
+        Set.to_list flags
+        |> List.map ~f:string_of_tcpflag
+        |> String.concat ~sep:"|"
     in
     let neg_str = match neg with true -> "!=" | false -> "==" in
-    sprintf "tcp flags & (%s) %s %s" (to_list mask) neg_str (to_list flags), None
+    sprintf "tcp flags & (%s) %s %s" (flags_to_string mask) neg_str (flags_to_string flags), None
   | Ir.Hoplimit limits -> (* Hop limit implies ipv6 *)
     let rule =
       string_of_int_set limits

@@ -1,4 +1,5 @@
 # EXPECT-COUNT: 2 => log prefix "flags: "
+# EXPECT-COUNT: 1 => tcp flags & (syn) == 0
 
 process filter {
     rule {
