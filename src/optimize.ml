@@ -324,12 +324,16 @@ let remove_unreferenced_chains chains =
   in
   Map.filter_keys ~f:(Set.mem referenced_chains) chains
 
+let can_inline_call chains summaries ~max_rules (preds, effects, id) =
+  let child = Map.find_exn chains id in
+  Chain.is_temp id &&
+  List.is_empty effects &&
+  List.length child.rules <= max_rules &&
+  not (List.exists child.rules ~f:(fun (_, _, target) -> equal_target target Return)) &&
+  not (List.exists preds ~f:(Dependencies.affects (Map.find_exn summaries id)))
+
 let inline_chains ~max_rules chains =
-  let should_inline chains id =
-    match Map.find chains id with
-    | Some { rules; _ } -> Chain.is_temp id && List.length rules <= max_rules
-    | None -> false
-  in
+  let summaries = chain_writes chains in
   get_ordered_chains chains
   |> List.fold ~init:chains ~f:(fun chains -> function
     | (Ir.Chain_id.Temporary _) as chain_id ->
@@ -337,7 +341,8 @@ let inline_chains ~max_rules chains =
         | Some ({ rules; _ } as chain) ->
           let rules =
             List.concat_map ~f:(function
-              | (preds, effects, Ir.Jump id) when should_inline chains id->
+              | (preds, effects, Ir.Jump id) when
+                  can_inline_call chains summaries ~max_rules (preds, effects, id) ->
                 printf "I";
                 let { rules; _ } = Map.find_exn chains id in
                 List.map ~f:(fun (preds', effects', target) ->
@@ -617,6 +622,7 @@ let push_predicates ~min_push chains =
   ) chains
 
 let inline_pure_jumps chains =
+  let summaries = chain_writes chains in
   get_ordered_chains chains
   |> List.fold ~init:chains ~f:(fun chains -> function
     | (Ir.Chain_id.Temporary _) as chain_id ->
@@ -625,7 +631,8 @@ let inline_pure_jumps chains =
         | Some ({ rules; _ } as chain) ->
           let rules =
             List.concat_map ~f:(function
-              | ([], [], Ir.Jump target) as rule when Chain.is_temp target ->
+              | ([], [], Ir.Jump target) as rule when
+                  can_inline_call chains summaries ~max_rules:Int.max_value ([], [], target) ->
                 printf "P";
                 Map.find chains target
                 |> Option.value_map ~default:[rule] ~f:(fun { rules; _ } -> rules)
@@ -1124,6 +1131,53 @@ module Test = struct
     ] in
     check_optimization ~optimize:filter_covered_subset ~chains
       ~cases:[udp, { allowed with source_zone = Some "after" }]
+
+  let%test_unit "inlining preserves caller effects when the child does not match" =
+    let parent = Temporary 1 in
+    let child = Temporary 2 in
+    let chains = chain_map [
+      input [rule (Jump parent)];
+      chain parent [
+        rule ~when_:[protocols [udp]] ~effects:[Counter] (Jump child);
+        rule Accept;
+      ];
+      chain child [rule ~when_:[protocols [tcp]] Accept];
+    ] in
+    check_optimization ~optimize:(inline_chains ~max_rules:3) ~chains
+      ~cases:[
+        udp, { allowed with counters = 1 };
+        tcp, allowed;
+      ]
+
+  let%test_unit "both inliners preserve the frame of an explicit return" =
+    let parent = Temporary 1 in
+    let child = Temporary 2 in
+    let chains = chain_map [
+      input [rule (Jump parent); rule Drop];
+      chain parent [rule (Jump child); rule Accept];
+      chain child [rule Return];
+    ] in
+    let optimize chains =
+      chains |> inline_chains ~max_rules:3 |> inline_pure_jumps
+    in
+    check_optimization ~optimize ~chains ~cases:[udp, allowed]
+
+  let%test_unit "inlining does not repeat a guard changed by the child" =
+    let parent = Temporary 1 in
+    let child = Temporary 2 in
+    let chains = chain_map [
+      input [
+        rule ~effects:[MarkZone (Direction.Source, "before")] Pass;
+        rule (Jump parent);
+      ];
+      chain parent [rule ~when_:[source_zones ["before"]] (Jump child)];
+      chain child [
+        rule ~effects:[MarkZone (Direction.Source, "after")] Pass;
+        rule ~effects:[Counter] Accept;
+      ];
+    ] in
+    check_optimization ~optimize:(inline_chains ~max_rules:3) ~chains
+      ~cases:[udp, { allowed with source_zone = Some "after"; counters = 1 }]
 
   let overlapping_nonterminal_effects = chain_map [
     input [
