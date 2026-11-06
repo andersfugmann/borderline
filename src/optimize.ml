@@ -324,7 +324,7 @@ let merge_rules (preds, effects, target) (preds', effects', target') =
      P.disjoint preds preds')
   in
   if preserves_multiplicity && equal_target target target' &&
-     List.equal equal_effect_ effects effects'
+     equal_effects effects effects'
   then
     union_rule_predicates preds preds'
     |> Option.map ~f:(fun preds -> preds, effects, target)
@@ -672,6 +672,60 @@ let merge_identical_chains chains =
     ) rules
   ) chains
 
+let rec share_terminal_tails chains =
+  let context = analyze chains in
+  let shareable = function
+    | _, _, (Accept | Drop | Reject _) -> true
+    | _ -> false
+  in
+  let rec add_suffixes groups id size cost tail =
+    if size < 2 then groups
+    else
+      let rec add = function
+        | [] -> [tail, [id]]
+        | (other, ids) :: rest when List.equal equal_rule tail other ->
+          (other, id :: ids) :: rest
+        | entry :: rest -> entry :: add rest
+      in
+      let groups = Map.update groups (size, cost) ~f:(fun entries ->
+        add (Option.value entries ~default:[]))
+      in
+      add_suffixes groups id (size - 1)
+        (cost - Cost.rules [List.hd_exn tail]) (List.tl_exn tail)
+  in
+  let groups =
+    List.fold context.graph.leaves_first ~init:Map.Poly.empty ~f:(fun groups id ->
+      if not (Chain.is_temp id) then groups
+      else
+        let tail =
+          List.rev (Map.find_exn chains id).rules
+          |> List.take_while ~f:shareable
+          |> List.rev
+        in
+        add_suffixes groups id (List.length tail) (Cost.rules tail) tail)
+  in
+  let best =
+    Map.data groups
+    |> List.concat
+    |> List.fold ~init:None ~f:(fun best (tail, ids) ->
+      let length = List.length tail in
+      let saved = List.length ids * (length - 1) - length in
+      let previous = Option.value_map best ~default:0 ~f:(fun (saved, _, _) -> saved) in
+      if saved > previous then Some (saved, tail, ids) else best)
+  in
+  match best with
+  | None -> chains
+  | Some (_, tail, ids) ->
+    let child = create_chain context tail "Shared terminal tail" in
+    let chains = Map.add_exn chains ~key:child.id ~data:child in
+    let chains =
+      List.fold ids ~init:chains ~f:(fun chains id ->
+        let chain = Map.find_exn chains id in
+        let prefix = List.take chain.rules (List.length chain.rules - List.length tail) in
+        Map.set chains ~key:id ~data:{ chain with rules = prefix @ [[], [], Jump child.id] })
+    in
+    share_terminal_tails chains
+
 let rec join_rules = function
   | first :: second :: rest ->
     begin match merge_rules first second with
@@ -785,7 +839,7 @@ let same_chains =
   Map.equal (fun a b ->
     List.equal (fun (preds, effects, target) (preds', effects', target') ->
       P.equal_predicates preds preds' &&
-      List.equal equal_effect_ effects effects' &&
+      equal_effects effects effects' &&
       equal_target target target') a.rules b.rules)
 
 let run_pass name f chains =
@@ -856,6 +910,7 @@ let optimize chains =
   |> run_pass "merge identical chains" merge_identical_chains
   |> run_pass "order independent rules" (map_rules ~f:reorder_rules)
   |> simplify
+  |> run_pass "share terminal tails" share_terminal_tails
   |> run_pass "remove implied predicates" (map_rules_input ~f:remove_implied_predicates)
   |> run_pass "order predicates" (map_rules ~f:(map_predicates ~f:reorder_preds))
   |> run_pass "renumber temporary chains" remap_chain_ids
@@ -1132,6 +1187,55 @@ module Test = struct
           udp, { allowed with logs = ["udp"] };
           icmpv6, denied;
         ])
+
+  let%test_unit "terminal tail sharing retains branch prefixes and effects" =
+    let left = Temporary 1 in
+    let right = Temporary 2 in
+    let tail = [
+      rule ~when_:[protocols [tcp]] ~effects:[Counter] Accept;
+      rule ~when_:[protocols [udp]] ~effects:[Log "udp"] Accept;
+      rule Drop;
+    ] in
+    let chains = chain_map [
+      input [
+        rule ~when_:[protocols [tcp; icmpv6]] (Jump left);
+        rule ~when_:[protocols [udp]] (Jump right);
+        rule Drop;
+      ];
+      chain left (rule ~when_:[protocols [icmpv6]] ~effects:[Log "left"] Drop :: tail);
+      chain right (rule ~when_:[protocols [icmpv6]] ~effects:[Log "right"] Drop :: tail);
+    ] in
+    let optimize chains = share_terminal_tails chains |> expect_rule_count 10 in
+    check_optimization ~optimize ~chains
+      ~cases:[
+        tcp, { allowed with counters = 1 };
+        udp, { allowed with logs = ["udp"] };
+        icmpv6, { denied with logs = ["left"] };
+      ]
+
+  let%test_unit "terminal tails are not shared when jumps erase the size saving" =
+    let left = Temporary 1 in
+    let right = Temporary 2 in
+    let tail = [
+      rule ~when_:[protocols [tcp]] ~effects:[Counter] Accept;
+      rule Drop;
+    ] in
+    let chains = chain_map [
+      input [
+        rule ~when_:[protocols [tcp; icmpv6]] (Jump left);
+        rule ~when_:[protocols [udp]] (Jump right);
+        rule Drop;
+      ];
+      chain left (rule ~when_:[protocols [icmpv6]] ~effects:[Log "left"] Drop :: tail);
+      chain right (rule ~when_:[protocols [icmpv6]] ~effects:[Log "right"] Drop :: tail);
+    ] in
+    let optimize chains = share_terminal_tails chains |> expect_rule_count 9 in
+    check_optimization ~optimize ~chains
+      ~cases:[
+        tcp, { allowed with counters = 1 };
+        udp, denied;
+        icmpv6, { denied with logs = ["left"] };
+      ]
 
   let%test_unit "push_predicates preserves every moved guard" =
     let child = Temporary 1 in
