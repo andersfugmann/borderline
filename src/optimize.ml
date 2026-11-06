@@ -43,6 +43,78 @@ let is_terminal = function
   | Pass | Jump _ -> false
   | Accept | Drop | Return | Reject _ -> true
 
+module Dependencies = struct
+  type field =
+    | Source_zone | Destination_zone | Packet_mark | Connection_state
+    | Source_address | Destination_address | Other_packet_fields
+
+  type writes = field Set.t option
+
+  let none : writes = Some Set.empty
+  let union a b = Option.map2 a b ~f:Set.union
+
+  let zone = function
+    | Direction.Source -> Source_zone
+    | Direction.Destination -> Destination_zone
+
+  let address = function
+    | Direction.Source -> Source_address
+    | Direction.Destination -> Destination_address
+
+  let reads = function
+    | Zone (dir, _), _ -> Set.singleton (zone dir)
+    | Mark _, _ -> Set.singleton Packet_mark
+    | State _, _ -> Set.singleton Connection_state
+    | (Ip4Set (dir, _) | Ip6Set (dir, _)), _ -> Set.singleton (address dir)
+    | True, _ -> Set.empty
+    | _ -> Set.singleton Other_packet_fields
+
+  let effects effects =
+    List.concat_map effects ~f:(function
+      | MarkZone (dir, _) -> [zone dir; Packet_mark]
+      | Notrack -> [Connection_state]
+      | Snat _ -> [Source_address]
+      | Counter | Log _ | Comment _ -> [])
+    |> Set.of_list
+    |> Option.some
+
+  let affects writes pred =
+    let reads = reads pred in
+    match writes with
+    | None -> not (Set.is_empty reads)
+    | Some writes -> not (Set.is_empty (Set.inter writes reads))
+
+  let invalidate writes preds =
+    List.filter preds ~f:(fun pred -> not (affects writes pred))
+
+  let is_read_only = function
+    | Some writes -> Set.is_empty writes
+    | None -> false
+
+  let rule summaries (_, effects_, target) =
+    let writes = effects effects_ in
+    match target with
+    | Jump id -> union writes (Map.find_exn summaries id)
+    | _ -> writes
+
+  let independent (preds, effects_, target) (preds', effects', target') =
+    let writes effects_ = function
+      | Jump _ -> None
+      | _ -> effects effects_
+    in
+    let a = writes effects_ target in
+    let b = writes effects' target' in
+    let has_log = List.exists ~f:(function Log _ -> true | _ -> false) in
+    match a, b with
+    | Some a', Some b' ->
+      Set.is_empty (Set.inter a' b') &&
+      not (List.exists preds' ~f:(affects a)) &&
+      not (List.exists preds ~f:(affects b)) &&
+      (not (has_log effects_) || is_read_only b) &&
+      (not (has_log effects') || is_read_only a)
+    | _ -> false
+end
+
 (** Return a list of chains with leaves first *)
 let get_ordered_chains chains =
   let rec traverse_chains seen chains acc chain_id =
@@ -73,8 +145,33 @@ let process_chains_breath_first chains ~f =
   |> List.rev
   |> List.fold_left ~init:chains ~f
 
+let chain_writes chains =
+  get_ordered_chains chains
+  |> List.fold ~init:(Map.empty (module Chain_id)) ~f:(fun summaries id ->
+    let writes =
+      if Chain.is_named id then None
+      else
+        List.fold (Map.find_exn chains id).rules ~init:Dependencies.none
+          ~f:(fun writes rule -> Dependencies.union writes (Dependencies.rule summaries rule))
+    in
+    Map.set summaries ~key:id ~data:writes)
+
+let input_after_rule summaries input (preds, _, target as rule) =
+  match preds with
+  | [(p, n)] when is_terminal target && Option.is_none (P.get_implied_predicate (p, n)) ->
+    P.inter_preds ((p, not n) :: input)
+  | _ when is_terminal target -> input
+  | _ -> Dependencies.invalidate (Dependencies.rule summaries rule) input
+
+let rule_inputs chains input rules =
+  let summaries = chain_writes chains in
+  List.fold_map rules ~init:input ~f:(fun input rule ->
+    input_after_rule summaries input rule, (input, rule))
+  |> snd
+
 (** Return an ordered list of chains extended inputs for each inputs *)
 let map_chains_inputs chains =
+  let summaries = chain_writes chains in
   (* Get the set of chains *)
   let chains =
     get_ordered_chains chains
@@ -86,23 +183,22 @@ let map_chains_inputs chains =
   let _inputs, chains =
     List.fold_map ~init:(Map.empty (module Chain_id)) ~f:(fun inputs chain ->
       let input =
-        Map.find_multi inputs chain.id
-        |> P.union_preds
+        if Chain.is_named chain.id then []
+        else Map.find_multi inputs chain.id |> P.union_preds
       in
       let (inputs, _input) =
         List.fold ~init:(inputs, input) ~f:(fun (inputs, input) -> function
-          | (preds, _, Jump id) ->
-            let input' = P.inter_preds (preds @ input) in
-            let inputs = Map.add_multi inputs ~key:id ~data:input' in
-            (inputs, input)
-          (* Only terminal matches exclude packets from subsequent rules.
-             Negation is safe here only without an implied family predicate. *)
-          | ([(p, n)], _, target) when
-              is_terminal target &&
-              P.get_implied_predicate (p,n) |> Option.is_none ->
-            inputs, P.inter_preds ((p, not n) :: input)
-          | _ ->
-            inputs, input
+          | (preds, effects, target) as rule ->
+            let inputs = match target with
+              | Jump id ->
+                let input' =
+                  P.inter_preds (preds @ input)
+                  |> Dependencies.invalidate (Dependencies.effects effects)
+                in
+                Map.add_multi inputs ~key:id ~data:input'
+              | _ -> inputs
+            in
+            inputs, input_after_rule summaries input rule
         ) chain.rules
       in
       inputs, (input, chain)
@@ -150,16 +246,17 @@ let map_rules_input ~f chains =
   |> Map.of_alist_exn (module Chain_id)
 
 
-let remove_unsatisfiable_rules _chains input rules =
+let remove_unsatisfiable_rules chains input rules =
   (* Removing complete rules due to unsatifiability is ok *)
   let rules =
-    List.filter ~f:(fun (preds, _, _) ->
+    rule_inputs chains input rules
+    |> List.filter_map ~f:(fun (input, ((preds, _, _) as rule)) ->
       match P.is_satisfiable (input @ preds) with
       | false ->
         printf "U";
-        false
-      | true -> true
-    ) rules
+        None
+      | true -> Some rule
+    )
   in
   rules, []
 
@@ -256,13 +353,14 @@ let inline_chains ~max_rules chains =
     | _ -> chains
   )
 
-let remove_implied_predicates _chains input rules =
+let remove_implied_predicates chains input rules =
   let rules =
-    List.map ~f:(fun (preds, effects, target) ->
+    rule_inputs chains input rules
+    |> List.map ~f:(fun (input, (preds, effects, target)) ->
       let implied_predicates = P.get_implied_predicates (preds @ input) in
       let preds = List.filter ~f:(fun pred -> List.mem implied_predicates pred ~equal:P.equal_predicate |> not) preds in
       (preds, effects, target)
-    ) rules
+    )
   in
   rules, []
 
@@ -297,8 +395,9 @@ let rec push_common_predicates ~find_pred chains input (rules : Rule.t list) =
 
     let can_reorder (preds, effects, target) rules =
       List.for_all ~f:(fun (preds', effects', target') ->
-          match_effect_and_target (preds, effects, target) (preds', effects', target') ||
-          P.disjoint preds preds') rules
+          Dependencies.independent (preds, effects, target) (preds', effects', target') &&
+          (match_effect_and_target (preds, effects, target) (preds', effects', target') ||
+           P.disjoint preds preds')) rules
     in
 
     let rec reorder_disjoint pred (acc : Rule.t list) = function
@@ -383,7 +482,7 @@ let push_common_predicates_union =
   push_common_predicates ~find_pred
 
 
-let reduce_predicates _chains input rules =
+let reduce_predicates chains input rules =
   let merge pred input =
     match P.merge_pred ~tpe:`Inter input pred with
     | None -> None (* Cannot reduce *)
@@ -409,25 +508,19 @@ let reduce_predicates _chains input rules =
         Some pred
   in
 
-  let rules, _input =
-    List.fold ~init:([], input) ~f:(fun (acc, input) (preds, effects, target) ->
+  let rules =
+    rule_inputs chains input rules
+    |> List.map ~f:(fun (input, (preds, effects, target)) ->
       let preds =
         List.map ~f:(fun p -> match List.find_map ~f:(merge p) input with
           | Some p' -> p'
           | None -> p
         ) preds
       in
-      let input = match preds with
-        | [(p,n)] when
-            is_terminal target &&
-            P.get_implied_predicate (p,n) |> Option.is_none ->
-          P.inter_preds ((p, not n) :: input)
-        | _ -> input
-      in
-      (preds, effects, target) :: acc, input
-    ) rules
+      (preds, effects, target)
+    )
   in
-  List.rev rules, []
+  rules, []
 
 let rec eliminate_unreachable_rules = function
   | (preds, _effects, target) as rule :: rs when
@@ -449,6 +542,7 @@ let remove_true_predicates rules =
   * This only works for chains that has only one reference.
 *)
 let push_predicates ~min_push chains =
+  let summaries = chain_writes chains in
   (* Replace the chain with a chain where all rules have been extended with pred *)
   let merge pred preds = pred :: preds in
 
@@ -485,13 +579,19 @@ let push_predicates ~min_push chains =
   let process_chain_rules chains rules =
     let chains, rules =
       List.fold ~init:(chains, []) ~f:(fun (chains, acc) -> function
-        | (preds, effects, (Ir.Jump target_id as target)) as rule when chain_reference_count target_id chains = 1 -> begin
+        | (preds, effects, (Ir.Jump target_id as target)) as rule when
+            Chain.is_temp target_id &&
+            List.is_empty effects &&
+            chain_reference_count target_id chains = 1 -> begin
             match Map.find chains target_id with
             | None -> chains, rule :: acc
             | Some target_chain ->
               let target_rules, preds =
                 List.fold ~init:(target_chain.rules, []) ~f:(fun (target_rules, acc) pred ->
-                  match can_merge_rules rules pred && count_merges target_rules pred >= min_push with
+                  match
+                    not (Dependencies.affects (Map.find_exn summaries target_id) pred) &&
+                    can_merge_rules rules pred && count_merges target_rules pred >= min_push
+                  with
                   | false -> (target_rules, pred :: acc)
                   | true ->
                     printf ">";
@@ -614,13 +714,18 @@ let rec join_rules = function
     When doing a backward pass (rollup) both effects and target must be the same.
 *)
 let filter_covered_subset chains =
+  let summaries = chain_writes chains in
   let rec get_rules = function
     (* User-defined chains can be populated outside the generated ruleset. *)
     | (_, _, Jump (Named _)) as rule -> [rule]
-    | (preds, effects, Jump chain_id) ->
+    | (preds, [], Jump chain_id) as rule ->
       let chain = Map.find_exn chains chain_id in
-      List.concat_map ~f:get_rules chain.rules
-      |> List.map ~f:(fun (preds', effects', target) -> (preds @ preds', effects @ effects', target))
+      if Dependencies.is_read_only (Map.find_exn summaries chain_id) &&
+         List.for_all chain.rules ~f:(fun (_, _, target) -> is_terminal target)
+      then
+        List.concat_map ~f:get_rules chain.rules
+        |> List.map ~f:(fun (preds', effects', target) -> (preds @ preds', effects', target))
+      else [rule]
     | rule -> [rule]
   in
 
@@ -636,7 +741,10 @@ let filter_covered_subset chains =
       when P.subset_preds ~of_:matched_preds preds ->
       printf "F";
       forward rule rs
-    | r :: rs -> r :: forward rule rs
+    | r :: rs ->
+      if List.exists matched_preds ~f:(Dependencies.affects (Dependencies.rule summaries r))
+      then r :: rs
+      else r :: forward rule rs
     | [] -> []
   in
   (* If a jump only has the same targets, and all are subsets we can drop the jump *)
@@ -649,7 +757,9 @@ let filter_covered_subset chains =
       | true ->
         printf "R";
         rollup rule rs
-      | false when List.for_all ~f:(fun (preds', _, _) -> Predicate.disjoint preds preds') rules ->
+      | false when
+          not (List.exists preds ~f:(Dependencies.affects (Dependencies.rule summaries r))) &&
+          List.for_all ~f:(fun (preds', _, _) -> Predicate.disjoint preds preds') rules ->
         r :: rollup rule rs
       | false -> r :: rs
   in
@@ -682,9 +792,12 @@ let reorder_rules rules =
     | [] -> List.rev acc
     | ((preds, effects, target) as rule1) :: ((preds', effects', target') as rule2) :: rules
       when
+        Dependencies.independent rule1 rule2 &&
+        (
         (Ir.equal_target target target' && equal_effects effects effects' &&
          P.costs preds' < P.costs preds) ||
         (order_target target' < order_target target && P.disjoint preds preds')
+        )
       ->
       printf "^";
       inner [] (List.rev_append acc (rule2 :: rule1 :: rules))
@@ -789,6 +902,7 @@ module Test = struct
 
   let protocols values = Protocol (Set.of_list values), false
   let except_protocols values = Protocol (Set.of_list values), true
+  let source_zones values = Zone (Direction.Source, Set.of_list values), false
 
   let rule ?(when_=[]) ?(effects=[]) target = when_, effects, target
 
@@ -814,6 +928,8 @@ module Test = struct
     let logs = ref [] in
     let matches = function
       | Protocol values, neg -> Set.mem values protocol <> neg
+      | Zone (Direction.Source, values), neg ->
+        Set.mem values (Option.value !source_zone ~default:"unclassified") <> neg
       | True, neg -> not neg
       | pred -> failwith ("Unsupported test predicate: " ^ P.to_string pred)
     in
@@ -941,6 +1057,73 @@ module Test = struct
     ] in
     check_optimization ~optimize:remove_unreferenced_chains ~chains
       ~cases:[udp, allowed]
+
+  let%test_unit "reordering cannot move a zone test before its writer" =
+    let chains = chain_map [
+      input [
+        rule ~effects:[MarkZone (Direction.Source, "before")] Pass;
+        rule ~when_:[source_zones ["before"]]
+          ~effects:[MarkZone (Direction.Source, "after")] Pass;
+        rule ~when_:[source_zones ["after"]] Accept;
+        rule Drop;
+      ];
+    ] in
+    check_optimization ~optimize:(map_rules ~f:reorder_rules) ~chains
+      ~cases:[udp, { allowed with source_zone = Some "after" }]
+
+  let%test_unit "input-sensitive passes forget overwritten zone facts" =
+    let parent = Temporary 1 in
+    let child = Temporary 2 in
+    let chains = chain_map [
+      input [
+        rule ~effects:[MarkZone (Direction.Source, "before")] Pass;
+        rule ~when_:[source_zones ["before"]] (Jump parent);
+      ];
+      chain parent [
+        rule ~effects:[MarkZone (Direction.Source, "after")] Pass;
+        rule ~when_:[source_zones ["after"]] (Jump child);
+      ];
+      chain child [rule ~when_:[source_zones ["after"]] Accept];
+    ] in
+    let optimize chains =
+      chains
+      |> map_rules_input ~f:remove_unsatisfiable_rules
+      |> map_rules_input ~f:reduce_predicates
+      |> map_rules_input ~f:remove_implied_predicates
+    in
+    check_optimization ~optimize ~chains
+      ~cases:[udp, { allowed with source_zone = Some "after" }]
+
+  let%test_unit "user-chain calls invalidate facts used by later jumps" =
+    let parent = Temporary 1 in
+    let child = Temporary 2 in
+    let hook = Named "change_zone" in
+    let chains = chain_map [
+      input [
+        rule ~effects:[MarkZone (Direction.Source, "before")] Pass;
+        rule ~when_:[source_zones ["before"]] (Jump parent);
+      ];
+      chain parent [
+        rule (Jump hook);
+        rule ~when_:[source_zones ["after"]] (Jump child);
+      ];
+      chain hook [rule ~effects:[MarkZone (Direction.Source, "after")] Return];
+      chain child [rule Accept];
+    ] in
+    check_optimization
+      ~optimize:(map_rules_input ~f:remove_unsatisfiable_rules) ~chains
+      ~cases:[udp, { allowed with source_zone = Some "after" }]
+
+  let%test_unit "covered-rule removal stops at writes to the covering predicate" =
+    let chains = chain_map [
+      input [
+        rule ~when_:[source_zones ["after"]] Drop;
+        rule ~effects:[MarkZone (Direction.Source, "after")] Pass;
+        rule ~when_:[source_zones ["after"]] Accept;
+      ];
+    ] in
+    check_optimization ~optimize:filter_covered_subset ~chains
+      ~cases:[udp, { allowed with source_zone = Some "after" }]
 
   let overlapping_nonterminal_effects = chain_map [
     input [
