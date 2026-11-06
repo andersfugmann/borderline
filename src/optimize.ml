@@ -95,8 +95,11 @@ let map_chains_inputs chains =
             let input' = P.inter_preds (preds @ input) in
             let inputs = Map.add_multi inputs ~key:id ~data:input' in
             (inputs, input)
-            (* Only use the single predicate as filter if it has no implied predicate, i.e. its not ipv4 filter *)
-          | ([(p, n)], _, _) when P.get_implied_predicate (p,n) |> Option.is_none ->
+          (* Only terminal matches exclude packets from subsequent rules.
+             Negation is safe here only without an implied family predicate. *)
+          | ([(p, n)], _, target) when
+              is_terminal target &&
+              P.get_implied_predicate (p,n) |> Option.is_none ->
             inputs, P.inter_preds ((p, not n) :: input)
           | _ ->
             inputs, input
