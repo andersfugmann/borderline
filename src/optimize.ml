@@ -672,9 +672,10 @@ let reorder_rules rules =
   in
   let rec inner acc = function
     | [] -> List.rev acc
-    | ((preds, _effects, target) as rule1) :: ((preds', _effects', target') as rule2) :: rules
+    | ((preds, effects, target) as rule1) :: ((preds', effects', target') as rule2) :: rules
       when
-        (Ir.equal_target target target' && P.costs preds' < P.costs preds) ||
+        (Ir.equal_target target target' && equal_effects effects effects' &&
+         P.costs preds' < P.costs preds) ||
         (order_target target' < order_target target && P.disjoint preds preds')
       ->
       printf "^";
@@ -907,6 +908,21 @@ module Test = struct
         tcp, { allowed with source_zone = Some "guest" };
         udp, { allowed with source_zone = Some "int" };
         icmpv6, allowed;
+      ]
+
+  let%test_unit "reorder_rules preserves first matching terminal effects" =
+    let chains = chain_map [
+      input [
+        rule ~when_:[protocols [tcp; udp]] ~effects:[Log "first"] Accept;
+        rule ~when_:[protocols [tcp]] ~effects:[Log "second"] Accept;
+        rule Drop;
+      ];
+    ] in
+    check_optimization ~optimize:(map_rules ~f:reorder_rules) ~chains
+      ~cases:[
+        tcp, { allowed with logs = ["first"] };
+        udp, { allowed with logs = ["first"] };
+        icmpv6, denied;
       ]
 
   let%test_unit "referenced named chains remain reachable" =
