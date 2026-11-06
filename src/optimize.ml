@@ -54,7 +54,7 @@ let get_ordered_chains chains =
     | Some { rules; _ } ->
       let acc = chain_id :: acc in
       List.fold_left ~init:acc ~f:(fun acc -> function
-        | (_pred, _effect, Jump ((Temporary _) as chain_id)) -> traverse_chains seen chains acc chain_id
+        | (_pred, _effect, Jump chain_id) -> traverse_chains seen chains acc chain_id
         | _ -> acc
       ) rules
     | None -> acc
@@ -284,7 +284,7 @@ let rec push_common_predicates ~find_pred chains input (rules : Rule.t list) =
                Ir.equal_target target target' ->
           inner rules
         | (_, effects', Jump id) :: rules
-          when Ir.equal_effects effects effects' ->
+          when Chain.is_temp id && Ir.equal_effects effects effects' ->
           Map.find chains id
           |> Option.value_map ~default:false ~f:(fun { rules; _ } ->
             inner rules) &&
@@ -524,7 +524,7 @@ let inline_pure_jumps chains =
         | Some ({ rules; _ } as chain) ->
           let rules =
             List.concat_map ~f:(function
-              | ([], [], Ir.Jump target) as rule ->
+              | ([], [], Ir.Jump target) as rule when Chain.is_temp target ->
                 printf "P";
                 Map.find chains target
                 |> Option.value_map ~default:[rule] ~f:(fun { rules; _ } -> rules)
@@ -565,7 +565,7 @@ let reduce_chain_indegree ~max_indegree chains =
 
   process_chains_breath_first ~f:(fun chains chain_id ->
     match Map.find chains chain_id, chain_reference_count chain_id chains > max_indegree with
-    | Some chain, true ->
+    | Some chain, true when Chain.is_temp chain.id ->
       let chains, new_chains = folding_map_chain_rules chains ~init:[] ~f:(replace_chain chain) in
       List.fold ~init:chains ~f:(fun chains chain -> Map.add_exn chains ~key:chain.id ~data:chain) new_chains
     | _, _ -> chains
@@ -580,7 +580,11 @@ let merge_identical_chains chains =
       inner acc rest
     | [] -> acc
   in
-  let replace_map = inner (Map.empty (module Chain_id)) (Map.data chains) in
+  let replace_map =
+    Map.data chains
+    |> List.filter ~f:(fun chain -> Chain.is_temp chain.id)
+    |> inner (Map.empty (module Chain_id))
+  in
   (* Replace all jumps *)
   map_rules ~f:(fun rules ->
     List.map ~f:(function
@@ -609,6 +613,8 @@ let rec join_rules = function
 *)
 let filter_covered_subset chains =
   let rec get_rules = function
+    (* User-defined chains can be populated outside the generated ruleset. *)
+    | (_, _, Jump (Named _)) as rule -> [rule]
     | (preds, effects, Jump chain_id) ->
       let chain = Map.find_exn chains chain_id in
       List.concat_map ~f:get_rules chain.rules
@@ -927,12 +933,32 @@ module Test = struct
 
   let%test_unit "referenced named chains remain reachable" =
     let named = Named "local_policy" in
+    let child = Temporary 1 in
     let chains = chain_map [
       input [rule (Jump named)];
-      chain named [rule Accept];
+      chain named [rule (Jump child)];
+      chain child [rule Accept];
     ] in
     check_optimization ~optimize:remove_unreferenced_chains ~chains
       ~cases:[udp, allowed]
+
+  let%test_unit "empty user-chain hooks survive full optimization" =
+    let udp_policy = Named "udp_policy" in
+    let tcp_policy = Named "tcp_policy" in
+    let chains = chain_map [
+      input [
+        rule ~when_:[protocols [udp]] (Jump udp_policy);
+        rule ~when_:[protocols [tcp]] (Jump tcp_policy);
+        rule ~when_:[protocols [icmpv6]] (Jump udp_policy);
+        rule Drop;
+      ];
+      chain udp_policy [];
+      chain tcp_policy [];
+    ] in
+    let optimized = optimize chains in
+    List.iter [udp_policy; tcp_policy] ~f:(fun id ->
+      assert_bool ("User-chain hook must remain callable: " ^ Chain_id.show id)
+        (Map.mem optimized id && chain_reference_count id optimized > 0))
 
   let overlapping_nonterminal_effects = chain_map [
     input [
