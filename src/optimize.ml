@@ -804,7 +804,32 @@ let filter_covered_subset chains =
   in
   Map.map ~f:(fun chn -> { chn with rules = map_rules chn.rules }) chains
 
-let reorder_rules rules =
+let reorder_rules ?(chains=Map.empty (module Chain_id)) rules =
+  let rec pure_rule_outcome active (preds, effects, target) =
+    if not (List.for_all effects ~f:(function Comment _ -> true | _ -> false)) then None
+    else
+      let outcome =
+        match target with
+        | Accept | Drop | Reject _ -> Some (Some target, 0)
+        | Return -> Some (None, 0)
+        | Pass -> None
+        | Jump (Temporary _ as id) when not (Set.mem active id) ->
+          Option.bind (Map.find chains id) ~f:(fun chain ->
+            pure_chain_outcome (Set.add active id) chain.rules)
+          |> Option.map ~f:(fun (target, cost) -> target, cost + Cost.jump)
+        | Jump _ -> None
+      in
+      Option.map outcome ~f:(fun (target, cost) -> target, cost + P.costs preds)
+  and pure_chain_outcome active rules =
+    List.fold rules ~init:(Some (None, 0)) ~f:(fun outcome rule ->
+      Option.bind outcome ~f:(fun (target, cost) ->
+        Option.bind (pure_rule_outcome active rule) ~f:(fun (next, next_cost) ->
+          match target, next with
+          | None, target | target, None -> Some (target, cost + next_cost)
+          | Some target, Some next when equal_target target next ->
+            Some (Some target, cost + next_cost)
+          | _ -> None)))
+  in
   let order_target = function
     | Ir.Accept -> 1
     | Drop -> 2
@@ -813,17 +838,21 @@ let reorder_rules rules =
     | Pass -> 5
     | Jump _ -> 6
   in
+  let should_swap ((preds, effects, target) as rule1) ((preds', effects', target') as rule2) =
+    match pure_rule_outcome Set.empty rule1, pure_rule_outcome Set.empty rule2 with
+    | Some (Some outcome, cost), Some (Some outcome', cost') when equal_target outcome outcome' ->
+      cost' < cost
+    | _ ->
+      Dependencies.independent rule1 rule2 &&
+      (
+      (Ir.equal_target target target' && equal_effects effects effects' &&
+       P.costs preds' < P.costs preds) ||
+      (order_target target' < order_target target && P.disjoint preds preds')
+      )
+  in
   let rec inner acc = function
     | [] -> List.rev acc
-    | ((preds, effects, target) as rule1) :: ((preds', effects', target') as rule2) :: rules
-      when
-        Dependencies.independent rule1 rule2 &&
-        (
-        (Ir.equal_target target target' && equal_effects effects effects' &&
-         P.costs preds' < P.costs preds) ||
-        (order_target target' < order_target target && P.disjoint preds preds')
-        )
-      ->
+    | rule1 :: rule2 :: rules when should_swap rule1 rule2 ->
       printf "^";
       inner [] (List.rev_append acc (rule2 :: rule1 :: rules))
     | rule :: rules ->
@@ -908,7 +937,7 @@ let optimize chains =
   |> run_pass "inline small calls" (inline_chains ~max_rules:2)
   |> run_pass "inline pure jumps" inline_pure_jumps
   |> run_pass "merge identical chains" merge_identical_chains
-  |> run_pass "order independent rules" (map_rules ~f:reorder_rules)
+  |> run_pass "order independent rules" (fun chains -> map_rules ~f:(reorder_rules ~chains) chains)
   |> simplify
   |> run_pass "share terminal tails" share_terminal_tails
   |> run_pass "remove implied predicates" (map_rules_input ~f:remove_implied_predicates)
