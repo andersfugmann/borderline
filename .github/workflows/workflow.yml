@@ -16,15 +16,27 @@ jobs:
           - 5
     runs-on: ${{ matrix.os }}
 
+    env:
+      DUNE_CACHE: enabled-except-user-rules
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Use OCaml ${{ matrix.ocaml-compiler }}
         uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: ${{ matrix.ocaml-compiler }}
-          dune-cache: true
+          cache: true
+
+      - name: Cache Dune build artifacts
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/dune
+          key: ${{ runner.os }}-${{ runner.arch }}-dune-${{ matrix.ocaml-compiler }}-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-dune-${{ matrix.ocaml-compiler }}-
+
       - name: Install dependencies
         run: sudo apt update && sudo apt install xsltproc nftables --yes
 
