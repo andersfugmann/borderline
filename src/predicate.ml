@@ -73,6 +73,14 @@ let is_always value =
     | _ :: _ :: _ -> neg <> value
 
 
+let positive_predicate =
+  let all_address_families = Set.of_list [Ipv4; Ipv6] in
+  function
+  | State states, true -> State (State.diff State.all states), false
+  | Address_family families, true ->
+    Address_family (Set.diff all_address_families families), false
+  | pred -> pred
+
 let merge_pred ?(tpe=`Inter) a b =
   (* !A => !B => X => !(A | B) => X
       A => B  => X =>   A U B  => X
@@ -113,17 +121,8 @@ let merge_pred ?(tpe=`Inter) a b =
   let merge_ip4sets = merge Ip4Set.intersection Ip4Set.union Ip4Set.diff in
   let merge_sets a b = merge Set.inter Set.union Set.diff a b in
 
-  let all_address_families = Set.of_list [Ipv4; Ipv6] in
-
-  let invert = function
-    | State s, true -> (State (Set.diff State.all s), false)
-    | State s, false -> (State s, false)
-    | Address_family s, true ->
-      Address_family (Set.diff all_address_families s), false
-    | v -> v
-  in
-  let a = invert a in
-  let b = invert b in
+  let a = positive_predicate a in
+  let b = positive_predicate b in
 
   match a, b with
   | (State s, neg), (State s', neg') ->
@@ -351,7 +350,12 @@ let preds_all_true preds =
   |> List.for_all ~f:(is_always true)
 
 let equal_predicate a b =
-  is_subset a ~of_:b && is_subset b ~of_:a
+  match a, b with
+  | (Ip4Set (dir, set), neg), (Ip4Set (dir', set'), neg') when dir = dir' && neg = neg' ->
+    Ip4Set.equal set set'
+  | (Ip6Set (dir, set), neg), (Ip6Set (dir', set'), neg') when dir = dir' && neg = neg' ->
+    Ip6Set.equal set set'
+  | _ -> is_subset a ~of_:b && is_subset b ~of_:a
 
 let equal_predicates p p' =
   subset_preds ~of_:p p' && subset_preds ~of_:p' p
@@ -439,6 +443,36 @@ module Test = struct
         assert_bool "'c' is a subset of 'b'" (is_subset ~of_:b c);
         assert_bool "'b' is a subset of 'b'" (is_subset ~of_:b b);
 
+        let check_ipsets make compact decomposed complement hole =
+          let positive set = make Direction.Source set, false in
+          let negative set = make Direction.Source set, true in
+          List.iter [
+            positive compact, positive decomposed, true;
+            negative compact, negative decomposed, true;
+            positive compact, negative compact, false;
+            positive compact, (make Direction.Destination compact, false), false;
+            positive complement, negative hole, true;
+          ] ~f:(fun (a, b, expected) ->
+            assert_equal ~printer:Bool.to_string ~msg:(to_string a ^ " versus " ^ to_string b)
+              expected (equal_predicate a b);
+            assert_equal ~printer:Bool.to_string ~msg:("reverse " ^ to_string a ^ " versus " ^ to_string b)
+              expected (equal_predicate b a));
+          let zone = Zone (Direction.Source, Set.singleton "lan"), false in
+          assert_bool "IP and zone conjunctions are order independent"
+            (equal_predicates [positive compact; zone] [zone; positive decomposed])
+        in
+        let ips4 values = List.map values ~f:Ipaddr.V4.Prefix.of_string_exn |> Ip4Set.of_list in
+        let hole4 = ips4 ["10.0.0.0/26"] in
+        check_ipsets (fun dir set -> Ip4Set (dir, set))
+          (Ip4Set.diff (ips4 ["10.0.0.0/24"]) hole4)
+          (ips4 ["10.0.0.64/26"; "10.0.0.128/25"])
+          (Ip4Set.diff Ip4Set.any hole4) hole4;
+        let ips6 values = List.map values ~f:Ipaddr.V6.Prefix.of_string_exn |> Ip6Set.of_list in
+        let hole6 = ips6 ["2001:db8::/128"] in
+        check_ipsets (fun dir set -> Ip6Set (dir, set))
+          (Ip6Set.diff (ips6 ["2001:db8::/126"]) hole6)
+          (ips6 ["2001:db8::1/128"; "2001:db8::2/127"])
+          (Ip6Set.diff Ip6Set.any hole6) hole6;
         ()
       end;
 

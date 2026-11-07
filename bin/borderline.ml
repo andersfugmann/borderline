@@ -32,7 +32,7 @@ let _ =
     Chain.add { Ir.id = Ir.Chain_id.Builtin Ir.Chain_type.Input ; rules = input_opers @ filter_ops; comment = "Builtin" };
     Chain.add { Ir.id = Ir.Chain_id.Builtin Ir.Chain_type.Output ; rules = output_opers @ filter_ops; comment = "Builtin" };
     Chain.add { Ir.id = Ir.Chain_id.Builtin Ir.Chain_type.Forward ; rules = forward_opers @ filter_ops; comment = "Builtin" };
-    Chain.optimize Optimize.optimize;
+    Chain.optimize (Optimize.optimize ~zones);
 
     let lines =
       Chain.emit Nftables.emit_filter_rules @

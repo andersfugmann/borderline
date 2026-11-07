@@ -271,10 +271,11 @@ let remap_chain_ids chains =
 (** This should be used with a set of filters *)
 let map_rules_input ~f chains =
   let context = analyze chains in
+  let f = f context in
   map_chains_inputs context
   |> List.concat_map ~f:(function
     | (input, ({ id = Temporary _; rules; _ } as chain)) ->
-      let rules, new_chains = f context input rules in
+      let rules, new_chains = f input rules in
       { chain with rules } :: new_chains
     | _, chain -> [chain]
   )
@@ -473,13 +474,61 @@ let push_common_predicates_union =
   push_common_predicates ~find_pred
 
 
-let reduce_predicates context input rules =
+let reduce_predicates ~zones context =
+  let writes =
+    Map.fold context.writes ~init:Dependencies.none
+      ~f:(fun ~key:_ ~data writes -> Dependencies.union writes data)
+  in
+  let assigned_zones =
+    Map.data context.chains
+    |> List.concat_map ~f:(fun chain ->
+      match chain.id with Builtin _ -> chain.rules | _ -> [])
+    |> List.concat_map ~f:(function [], effects, _ -> effects | _ -> [])
+    |> List.filter_map ~f:(function MarkZone (dir, id) -> Some (dir, id) | _ -> None)
+    |> Set.of_list
+  in
+  let zone_addresses make pred dir ids =
+    Set.fold ids ~init:(make (Ip4Set.empty, Ip6Set.empty)) ~f:(fun allowed id ->
+      let unrestricted =
+        Dependencies.affects writes pred || Set.mem assigned_zones (dir, id)
+      in
+      let ips =
+        match unrestricted with
+        | true -> Ip4Set.any, Ip6Set.any
+        | false ->
+          List.Assoc.find zones id ~equal:String.equal
+          |> Option.value ~default:(Ip4Set.any, Ip6Set.any)
+      in
+      P.merge_pred ~tpe:`Union allowed (make ips) |> Option.value_exn)
+  in
+  let address_input pred input =
+    match input, pred with
+    | (Zone (dir, ids), false), (Ip4Set (dir', _), _) when dir = dir' ->
+      zone_addresses (fun (ip4, _) ->
+        match Ip4Set.equal ip4 Ip4Set.any with
+        | true -> Ip4Set (dir, Ip4Set.empty), true
+        | false -> Ip4Set (dir, ip4), false) pred dir ids
+    | (Zone (dir, ids), false), (Ip6Set (dir', _), _) when dir = dir' ->
+      zone_addresses (fun (_, ip6) ->
+        match Ip6Set.equal ip6 Ip6Set.any with
+        | true -> Ip6Set (dir, Ip6Set.empty), true
+        | false -> Ip6Set (dir, ip6), false) pred dir ids
+    | (Zone (dir, ids), false), (Address_family _, _) ->
+      zone_addresses (fun (ip4, ip6) ->
+        Address_family (match Ip4Set.is_empty ip4, Ip6Set.is_empty ip6 with
+          | true, true -> Set.empty
+          | true, false -> Set.singleton Ipv6
+          | false, true -> Set.singleton Ipv4
+          | false, false -> Set.of_list [Ipv4; Ipv6]), false) pred dir ids
+    | _ -> input
+  in
   let merge pred input =
     match P.merge_pred ~tpe:`Inter input pred with
     | None -> None (* Cannot reduce *)
+    | Some result when P.is_always false result -> Some result
     | Some result when P.equal_predicate result input ->
       printf "£";
-      Some (True, false);
+      Some (Option.value (P.get_implied_predicate pred) ~default:(True, false));
     | Some result ->
       (* We may have that the input is a,b,c,d and pred id a,b,c. Then we want to
          have !d.
@@ -499,11 +548,22 @@ let reduce_predicates context input rules =
         Some pred
   in
 
+  fun input rules ->
   let rules =
     rule_inputs context input rules
     |> List.map ~f:(fun (input, (preds, effects, target)) ->
       let preds =
-        List.map ~f:(fun p -> match List.find_map ~f:(merge p) input with
+        List.map ~f:(fun p ->
+          let input =
+            match p with
+            | (Ip4Set _ | Ip6Set _ | Address_family _), _ ->
+              List.filter preds ~f:(function Zone _, _ -> true | _ -> false)
+              |> List.rev_append input
+              |> List.map ~f:(address_input p)
+              |> P.inter_preds
+            | _ -> input
+          in
+          match List.find_map ~f:(merge p) input with
           | Some p' -> p'
           | None -> p
         ) preds
@@ -603,8 +663,9 @@ let inline_pure_jumps chains =
     | _ -> chains
   )
 
-let specialize_callers ~max_growth chains =
+let specialize_callers ~zones ~max_growth chains =
   let context = analyze chains in
+  let reduce = reduce_predicates ~zones context in
   let remaining = ref max_growth in
   let added = ref [] in
   let specialize input = function
@@ -616,7 +677,7 @@ let specialize_callers ~max_growth chains =
         |> Dependencies.invalidate (Dependencies.effects effects)
       in
       let rules, _ = remove_unsatisfiable_rules context input child.rules in
-      let rules, _ = reduce_predicates context input rules in
+      let rules, _ = reduce input rules in
       let rules = remove_true_predicates rules in
       let size = List.length rules in
       if size < List.length child.rules &&
@@ -894,12 +955,21 @@ let until_stable ~name ~max_rounds f chains =
   in
   loop max_rounds chains
 
-let simplify chains =
+let prefer_positive_predicates =
+  map_predicates ~f:(List.map ~f:(function
+    | (_, true) as pred ->
+      begin match P.positive_predicate pred with
+      | (_, false) as positive when P.cost positive = P.cost pred -> positive
+      | _ -> pred
+      end
+    | pred -> pred))
+
+let simplify ~zones chains =
   let once chains =
     chains
     |> run_pass "normalize" (map_rules ~f:(map_predicates ~f:P.inter_preds))
     |> run_pass "merge adjacent rules" (map_rules ~f:join_rules)
-    |> run_pass "reduce predicates" (map_rules_input ~f:reduce_predicates)
+    |> run_pass "reduce predicates" (map_rules_input ~f:(reduce_predicates ~zones))
     |> run_pass "remove empty rules" (map_rules ~f:remove_empty_rules)
     |> run_pass "remove impossible rules" (map_rules_input ~f:remove_unsatisfiable_rules)
     |> run_pass "remove true predicates" (map_rules ~f:remove_true_predicates)
@@ -907,6 +977,7 @@ let simplify chains =
     |> run_pass "remove covered rules" filter_covered_subset
     |> run_pass "merge matching targets" (map_rules ~f:join_rules_with_same_target)
     |> run_pass "remove unused chains" remove_unreferenced_chains
+    |> run_pass "prefer positive predicates" (map_rules ~f:prefer_positive_predicates)
   in
   until_stable ~name:"simplification" ~max_rounds:8 once chains
 
@@ -919,26 +990,36 @@ let dump_chains chains =
     printf "# Chain %s. Rules %3d. Ref: %2d\n" (Chain_id.show id) (List.length rules) (Graph.reference_count graph id)
   )
 
-let optimize chains =
+let optimize ~zones chains =
+  let zones =
+    List.map zones ~f:(fun (id, statements) ->
+      let zone = Zone.init statements in
+      let ips =
+        match Rule.list2ip zone.networks with
+        | [], [] -> Ip4Set.any, Ip6Set.any
+        | ip4, ip6 -> Ip4Set.of_list ip4, Ip6Set.of_list ip6
+      in
+      id, ips)
+  in
   let factor chains =
     chains
     |> run_pass "push call guards" push_predicates
     |> run_pass "factor predicate unions" (map_rules_input ~f:push_common_predicates_union)
     |> run_pass "factor equal predicates" (map_rules_input ~f:push_common_predicates_equal)
-    |> simplify
+    |> simplify ~zones
   in
   chains
-  |> simplify
+  |> simplify ~zones
   |> run_pass "specialize callers" (fun chains ->
-    specialize_callers ~max_growth:(Chain.count_rules chains / 4) chains)
+    specialize_callers ~zones ~max_growth:(Chain.count_rules chains / 4) chains)
   |> run_pass "inline small calls" (inline_chains ~max_rules:3)
-  |> simplify
+  |> simplify ~zones
   |> until_stable ~name:"factoring" ~max_rounds:4 factor
   |> run_pass "inline small calls" (inline_chains ~max_rules:2)
   |> run_pass "inline pure jumps" inline_pure_jumps
   |> run_pass "merge identical chains" merge_identical_chains
   |> run_pass "order independent rules" (fun chains -> map_rules ~f:(reorder_rules ~chains) chains)
-  |> simplify
+  |> simplify ~zones
   |> run_pass "share terminal tails" share_terminal_tails
   |> run_pass "remove implied predicates" (map_rules_input ~f:remove_implied_predicates)
   |> run_pass "order predicates" (map_rules ~f:(map_predicates ~f:reorder_preds))
@@ -1053,6 +1134,36 @@ module Test = struct
       expected (Chain.count_rules chains);
     chains
 
+  let%test_unit "simplification prefers positive predicates only at equal cost" =
+    let family value neg = Address_family (Set.singleton value), neg in
+    let small_states = State (State.of_list [State.New; State.Established]), true in
+    let large_states = State (State.of_list [State.New; State.Established; State.Related]), true in
+    let negative_zone = Zone (Direction.Source, Set.singleton "lan"), true in
+    List.iter [
+      family Ipv6 true, family Ipv4 false;
+      family Ipv4 true, family Ipv6 false;
+      family Ipv4 false, family Ipv4 false;
+      small_states, small_states;
+      large_states, large_states;
+      negative_zone, negative_zone;
+    ] ~f:(fun (pred, expected) ->
+      let effects = [Counter; Log "matched"] in
+      let chains = chain_map [input [rule ~when_:[pred] ~effects Accept]] in
+      let result = Map.find_exn (simplify ~zones:[] chains) (Builtin Chain_type.Input) in
+      match result.rules with
+      | [([actual], actual_effects, Accept)] ->
+        assert_equal ~printer:Fn.id ~msg:(P.to_string pred)
+          (P.to_string expected) (P.to_string actual);
+        assert_equal ~printer:Int.to_string (P.cost pred) (P.cost actual);
+        assert_bool "effects retain their order" (Ir.equal_effects effects actual_effects);
+        List.iter [Ipv4; Ipv6] ~f:(fun value ->
+          let matches = function
+            | Address_family families, neg -> Set.mem families value <> neg
+            | _ -> true
+          in
+          assert_equal ~printer:Bool.to_string (matches pred) (matches actual))
+      | _ -> assert_failure "Expected one unchanged rule with a canonical predicate")
+
   let%test_unit "terminal unions retain a shared conjunction" =
     let chains = chain_map [
       input [
@@ -1138,7 +1249,7 @@ module Test = struct
       let result =
         chains
         |> map_rules_input ~f:push_common_predicates_union
-        |> map_rules_input ~f:reduce_predicates
+        |> map_rules_input ~f:(reduce_predicates ~zones:[])
         |> map_rules ~f:remove_true_predicates
       in
       assert_equal ~msg:"The profitable UDP prefix shares one guard before the TCP rule"
@@ -1206,7 +1317,7 @@ module Test = struct
     ] in
     List.iter [0, 7; 1, 8; 2, 5] ~f:(fun (max_growth, expected_rules) ->
       let optimize chains =
-        specialize_callers ~max_growth chains
+        specialize_callers ~zones:[] ~max_growth chains
         |> remove_unreferenced_chains
         |> expect_rule_count expected_rules
       in
@@ -1372,7 +1483,7 @@ module Test = struct
     let optimize chains =
       chains
       |> map_rules_input ~f:remove_unsatisfiable_rules
-      |> map_rules_input ~f:reduce_predicates
+      |> map_rules_input ~f:(reduce_predicates ~zones:[])
       |> map_rules_input ~f:remove_implied_predicates
     in
     check_optimization ~optimize ~chains
