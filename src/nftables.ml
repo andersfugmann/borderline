@@ -284,23 +284,14 @@ let gen_rule = function
     sprintf "%s;" (String.concat ~sep:" " elements)
 
 (* Essentially we dont split at all *)
-let expand_rule (rls, effects, target) =
-
-  let rec split (rules, (ip4, neg4), (ip6, neg6)) = function
-    | (Ir.Ip4Set _, n) as r :: xs -> split (rules, (r :: ip4, neg4 && n), (ip6, neg6)) xs
-    | (Ir.Ip6Set _, n) as r :: xs -> split (rules, (ip4, neg4), (r :: ip6, neg6 && n)) xs
-    | r :: xs -> split (r :: rules, (ip4, neg4), (ip6, neg6)) xs
-    | [] -> (List.rev rules, (List.rev ip4, neg4), (List.rev ip6, neg6))
+let expand_rule ((preds, _, _) as rule) =
+  let has_ipv4 =
+    List.exists preds ~f:(function Ir.Ip4Set _, _ -> true | _ -> false)
   in
-  let (rules, (ip4, neg4), (ip6, neg6)) = split ([], ([], true), ([], true)) rls in
-
-  match (ip4, neg4), (ip6, neg6) with
-  | ([], _), ([], _) -> [(rls, effects, target)]
-  | (ip4, _), ([], _) ->
-    [(ip4 @ rules, effects, target)];
-  | ([], _), (ip6, _) -> (* Must be ipv4 and not some ipv6 *)
-    [(ip6 @ rules, effects, target)]
-  | (_, _), (_, _) -> [] (* Cannot be both ipv4 and ipv6 address family *)
+  let has_ipv6 =
+    List.exists preds ~f:(function Ir.Ip6Set _, _ -> true | _ -> false)
+  in
+  if has_ipv4 && has_ipv6 then [] else [rule]
 
 let emit_chain { Ir.id; rules; comment } =
   let rules =
