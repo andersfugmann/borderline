@@ -209,7 +209,7 @@ module Make(Ip : Prefix) = struct
       (incl, excls) :: union ts ((incl', excls') :: ts')
     | ts, (incl', excls') :: ts' (* when Ip.compare incl incl' > 0 *) ->
       (incl', excls') :: union ts ts'
-  let union t t' = union t t'
+  let union t t' = union t t' |> reduce
 
   let[@tail_mod_cons] rec intersection t t' =
     match t, t' with
@@ -230,9 +230,13 @@ module Make(Ip : Prefix) = struct
     | ts, [] -> ts
     | (incl, excls) :: ts, (incl', excls') :: ts' when Ip.subset ~subnet:incl ~network:incl' ->
       (* Complete range excluded. Its what-ever is not excluded within incl, and keep excls *)
-      let incls =
+      let _, incls =
         IpSet.intersection [incl] excls'
-        |> List.map ~f:(fun incl -> (incl, IpSet.intersection [incl] excls))
+        |> List.fold_map ~init:excls ~f:(fun excls incl ->
+          let excls = List.drop_while excls ~f:(fun excl ->
+            Ip.compare excl incl < 0 && not (Ip.subset ~network:excl ~subnet:incl))
+          in
+          excls, (incl, IpSet.intersection [incl] excls))
       in
       incls @ diff ts ((incl', excls') :: ts')
     | (incl, excls) :: ts, (incl', excls') :: ts' when Ip.subset ~subnet:incl' ~network:incl -> begin
@@ -251,7 +255,12 @@ module Make(Ip : Prefix) = struct
       (incl, excls) :: diff ts ((incl', excls') :: ts')
     | ts, _ :: ts' (* when Ip.compare incl incl' > 0 *) ->
       diff ts ts'
-  let diff t t' = diff t t' |> reduce
+  let diff t t' =
+    match t, t' with
+    | [incl, excls], (_ :: _ as ts) when List.for_all ts ~f:(fun (incl', excls') ->
+        List.is_empty excls' && Ip.subset ~network:incl ~subnet:incl') ->
+      [incl, IpSet.union excls (List.map ts ~f:fst)] |> reduce
+    | _ -> diff t t' |> reduce
 
   (* Can we optimize this? *)
   let rec equal t t' =
@@ -485,6 +494,13 @@ let%expect_test "Set operations" =
   print_set ~msg:"union" @@ (?@"10.0.0.0/24") + (?@"10.0.0.0/8" - ?@"10.1.0.0/24" - ?@"10.0.0.1/32");
   print_set ~msg:"union" @@ (?@"10.0.0.0/24" - ?@"10.0.0.1/32") + (?@"10.0.0.0/8" - ?@"10.1.0.0/24" - ?@"10.0.0.1/32");
   print_set ~msg:"union" @@ (?@"10.0.0.0/24" - ?@"10.0.0.1/32" - ?@"10.0.0.2/32") + (?@"10.0.0.0/8" - ?@"10.1.0.0/24" - ?@"10.0.0.1/32");
+  print_set ~msg:"union adjacent" (?@"10.0.0.0/25" + ?@"10.0.0.128/25");
+  print_set ~msg:"diff clipped exclusions" @@
+    (?@"10.0.0.0/24" - ?@"10.0.0.0/27" - ?@"10.0.0.96/27") -
+    (?@"10.0.0.0/24" - ?@"10.0.0.0/26" - ?@"10.0.0.192/26");
+  print_set ~msg:"diff covering exclusion" @@
+    (?@"10.0.0.0/24" - ?@"10.0.0.0/26") -
+    (?@"10.0.0.0/24" - ?@"10.0.0.0/28" - ?@"10.0.0.32/28");
   let excluded = ?@"10.0.0.0/8" - ?@"10.1.0.0/16" in
   print_set ~msg:"union preserves exclusion" (excluded + ?@"10.2.0.0/16");
   print_set ~msg:"reverse union preserves exclusion" (?@"10.2.0.0/16" + excluded);
@@ -529,6 +545,9 @@ let%expect_test "Set operations" =
     union: -> [ 10.0.0.0/8 \ [ 10.1.0.0/24 ] ]
     union: -> [ 10.0.0.0/8 \ [ 10.0.0.1/32; 10.1.0.0/24 ] ]
     union: -> [ 10.0.0.0/8 \ [ 10.0.0.1/32; 10.1.0.0/24 ] ]
+    union adjacent: -> [ 10.0.0.0/24 ]
+    diff clipped exclusions: -> [ 10.0.0.32/27; 10.0.0.192/26 ]
+    diff covering exclusion: -> [  ]
     union preserves exclusion: -> [ 10.0.0.0/8 \ [ 10.1.0.0/16 ] ]
     reverse union preserves exclusion: -> [ 10.0.0.0/8 \ [ 10.1.0.0/16 ] ]
     excluded intersections empty: true true
@@ -578,6 +597,7 @@ let%expect_test "Set operations - ipv6 " =
     (Ip6Set.equal compact decomposed) (Ip6Set.equal decomposed compact);
   printf "unequal representations equal: %b\n"
     (Ip6Set.equal compact (singleton "2001:db8::/126"));
+  test ~msg:"union adjacent" ~f:Ip6Set.union [singleton "2001:db8::/127"; singleton "2001:db8::2/127"];
 
   ();
   [%expect {|
@@ -614,4 +634,9 @@ let%expect_test "Set operations - ipv6 " =
     excluded intersections empty: true true
     equivalent representations equal: true true
     unequal representations equal: false
+    *****************
+    union adjacent
+        [ 2001:db8::/127 ]
+     o  [ 2001:db8::2/127 ]
+     =  [ 2001:db8::/126 ]
     |}]
