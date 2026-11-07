@@ -27,9 +27,12 @@ let enable_reduce = true
 module Make(Ip : Prefix) = struct
   module IpSet = struct
     let split ip =
-      let bits = Ip.bits ip + 1 in
-      Ip.subnets bits ip
-      |> Stdlib.List.of_seq
+      match Ip.bits ip with
+      (* Ipaddr's IPv4 /0 subnet step overflows before enumeration. *)
+      | 0 -> [Ip.make 1 (Ip.mask 0); Ip.make 1 (Ip.mask 1)]
+      | bits ->
+        Ip.subnets (bits + 1) ip
+        |> Stdlib.List.of_seq
 
     let subset ~of_:networks subnets =
       let rec inner networks subnets =
@@ -420,6 +423,10 @@ let%expect_test "ip set operations" =
   test ~msg:"diff" ~f:Ip4Set.IpSet.diff ["10.1.0.0/16"] ["10.2.0.0/16"];
   test ~msg:"diff" ~f:Ip4Set.IpSet.diff ["10.2.0.0/16"] ["10.1.0.0/16"];
   test ~msg:"diff" ~f:Ip4Set.IpSet.diff ["10.0.0.0/16"; "10.1.0.0/16"; "10.3.0.0/16"] ["10.1.0.0/16"; "10.2.0.0/16"];
+  test ~msg:"diff" ~f:Ip4Set.IpSet.diff ["0.0.0.0/0"] ["0.0.0.0/1"];
+  test ~msg:"diff" ~f:Ip4Set.IpSet.diff ["0.0.0.0/0"] ["128.0.0.0/1"];
+  printf "lower half equals universe: %b\n"
+    (Ip4Set.equal (Ip4Set.singleton (Ipaddr.V4.Prefix.of_string_exn "0.0.0.0/1")) Ip4Set.any);
 
   [%expect {|
     [10.0.0.0/32] union [10.0.0.1/32] = [10.0.0.0/31]
@@ -431,6 +438,9 @@ let%expect_test "ip set operations" =
     [10.1.0.0/16] diff [10.2.0.0/16] = [10.1.0.0/16]
     [10.2.0.0/16] diff [10.1.0.0/16] = [10.2.0.0/16]
     [10.0.0.0/16; 10.1.0.0/16; 10.3.0.0/16] diff [10.1.0.0/16; 10.2.0.0/16] = [10.0.0.0/16; 10.3.0.0/16]
+    [0.0.0.0/0] diff [0.0.0.0/1] = [128.0.0.0/1]
+    [0.0.0.0/0] diff [128.0.0.0/1] = [0.0.0.0/1]
+    lower half equals universe: false
     |}]
 
 let%expect_test "Set operations" =
