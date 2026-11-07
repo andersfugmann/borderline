@@ -119,7 +119,7 @@ module Make(Ip : Prefix) = struct
       | l :: ls, l' :: ls' when Ip.subset ~subnet:l' ~network:l ->
         diff ((split l) @ ls) (l' :: ls')
       | l :: ls, l' :: ls' when Ip.compare l l' < 0 ->
-        diff ls (l' :: ls')
+        l :: diff ls (l' :: ls')
       | ls, _ :: ls' (* when Ip.compare l l' > 0 *) ->
         diff ls ls'
       | ts, [] -> ts
@@ -140,7 +140,11 @@ module Make(Ip : Prefix) = struct
 
   let split_elt (incl, excls) =
     IpSet.split incl
-    |> List.map ~f:(fun network -> network, List.filter ~f:(fun subnet -> Ip.subset ~network ~subnet) excls)
+    |> List.filter_map ~f:(fun network ->
+      match List.exists excls ~f:(fun excl -> Ip.subset ~network:excl ~subnet:network) with
+      | true -> None
+      | false ->
+        Some (network, List.filter ~f:(fun subnet -> Ip.subset ~network ~subnet) excls))
 
   let reduce l =
     let merge l =
@@ -215,7 +219,7 @@ module Make(Ip : Prefix) = struct
       intersection ts ((incl', excls') :: ts')
     | ts, _ :: ts' (* when Ip.compare incl incl' > 0 *) ->
       intersection ts ts'
-  let intersections t t' = intersection t t' |> reduce
+  let intersection t t' = intersection t t' |> reduce
 
   let[@tail_mod_cons] rec diff t t' =
     match t, t' with
@@ -413,6 +417,9 @@ let%expect_test "ip set operations" =
   test ~msg:"union" ~f:Ip4Set.IpSet.union ["10.0.0.9/32";"10.0.0.10/32"; "10.0.0.11/32"] ["10.0.0.0/16"];
   test ~msg:"intersection" ~f:Ip4Set.IpSet.intersection ["10.0.0.11/32"] ["10.0.0.11/32"; "10.0.0.12/32"];
   test ~msg:"intersection" ~f:Ip4Set.IpSet.intersection ["10.0.0.0/24"; "10.0.0.0/8"] ["10.0.1.0/24"; "10.0.4.0/24"];
+  test ~msg:"diff" ~f:Ip4Set.IpSet.diff ["10.1.0.0/16"] ["10.2.0.0/16"];
+  test ~msg:"diff" ~f:Ip4Set.IpSet.diff ["10.2.0.0/16"] ["10.1.0.0/16"];
+  test ~msg:"diff" ~f:Ip4Set.IpSet.diff ["10.0.0.0/16"; "10.1.0.0/16"; "10.3.0.0/16"] ["10.1.0.0/16"; "10.2.0.0/16"];
 
   [%expect {|
     [10.0.0.0/32] union [10.0.0.1/32] = [10.0.0.0/31]
@@ -421,6 +428,9 @@ let%expect_test "ip set operations" =
     [10.0.0.9/32; 10.0.0.10/32; 10.0.0.11/32] union [10.0.0.0/16] = [10.0.0.0/16]
     [10.0.0.11/32] intersection [10.0.0.11/32; 10.0.0.12/32] = [10.0.0.11/32]
     [10.0.0.0/24; 10.0.0.0/8] intersection [10.0.1.0/24; 10.0.4.0/24] = [10.0.1.0/24; 10.0.4.0/24]
+    [10.1.0.0/16] diff [10.2.0.0/16] = [10.1.0.0/16]
+    [10.2.0.0/16] diff [10.1.0.0/16] = [10.2.0.0/16]
+    [10.0.0.0/16; 10.1.0.0/16; 10.3.0.0/16] diff [10.1.0.0/16; 10.2.0.0/16] = [10.0.0.0/16; 10.3.0.0/16]
     |}]
 
 let%expect_test "Set operations" =
@@ -465,6 +475,22 @@ let%expect_test "Set operations" =
   print_set ~msg:"union" @@ (?@"10.0.0.0/24") + (?@"10.0.0.0/8" - ?@"10.1.0.0/24" - ?@"10.0.0.1/32");
   print_set ~msg:"union" @@ (?@"10.0.0.0/24" - ?@"10.0.0.1/32") + (?@"10.0.0.0/8" - ?@"10.1.0.0/24" - ?@"10.0.0.1/32");
   print_set ~msg:"union" @@ (?@"10.0.0.0/24" - ?@"10.0.0.1/32" - ?@"10.0.0.2/32") + (?@"10.0.0.0/8" - ?@"10.1.0.0/24" - ?@"10.0.0.1/32");
+  let excluded = ?@"10.0.0.0/8" - ?@"10.1.0.0/16" in
+  print_set ~msg:"union preserves exclusion" (excluded + ?@"10.2.0.0/16");
+  print_set ~msg:"reverse union preserves exclusion" (?@"10.2.0.0/16" + excluded);
+  printf "excluded intersections empty: %b %b\n"
+    (Ip4Set.is_empty (Ip4Set.intersection excluded (?@"10.1.0.0/16")))
+    (Ip4Set.is_empty (Ip4Set.intersection (?@"10.1.0.0/16") excluded));
+  let compact = ?@"10.0.0.0/24" - ?@"10.0.0.0/26" in
+  let decomposed = Ip4Set.of_list [!"10.0.0.64/26"; !"10.0.0.128/25"] in
+  printf "equivalent representations equal: %b %b\n"
+    (Ip4Set.equal compact decomposed) (Ip4Set.equal decomposed compact);
+  printf "unequal representations equal: %b\n"
+    (Ip4Set.equal compact (?@"10.0.0.0/24"));
+  printf "empty intersection equals nonempty range: %b\n"
+    (Ip4Set.equal
+      (Ip4Set.intersection compact (?@"10.0.0.0/26"))
+      (?@"10.0.0.0/27" + ?@"10.0.0.32/27"));
   ();
 
   [%expect {|
@@ -493,6 +519,12 @@ let%expect_test "Set operations" =
     union: -> [ 10.0.0.0/8 \ [ 10.1.0.0/24 ] ]
     union: -> [ 10.0.0.0/8 \ [ 10.0.0.1/32; 10.1.0.0/24 ] ]
     union: -> [ 10.0.0.0/8 \ [ 10.0.0.1/32; 10.1.0.0/24 ] ]
+    union preserves exclusion: -> [ 10.0.0.0/8 \ [ 10.1.0.0/16 ] ]
+    reverse union preserves exclusion: -> [ 10.0.0.0/8 \ [ 10.1.0.0/16 ] ]
+    excluded intersections empty: true true
+    equivalent representations equal: true true
+    unequal representations equal: false
+    empty intersection equals nonempty range: false
     |}]
 
 
@@ -523,6 +555,19 @@ let%expect_test "Set operations - ipv6 " =
   test ~msg:"all \\ sources" ~f:Ip6Set.diff [all; sources];
   test ~msg:"all ∩ sources" ~f:Ip6Set.intersection [all; sources];
   test ~msg:"any \\ (all \\ sources)" ~f:Ip6Set.diff [Ip6Set.any; Ip6Set.diff all sources];
+  let singleton s = Ip6Set.singleton (of_string s) in
+  let excluded = Ip6Set.diff (singleton "2001:db8::/32") (singleton "2001:db8:1::/48") in
+  test ~msg:"union preserves exclusion" ~f:Ip6Set.union [excluded; singleton "2001:db8:2::/48"];
+  test ~msg:"reverse union preserves exclusion" ~f:Ip6Set.union [singleton "2001:db8:2::/48"; excluded];
+  printf "excluded intersections empty: %b %b\n"
+    (Ip6Set.is_empty (Ip6Set.intersection excluded (singleton "2001:db8:1::/48")))
+    (Ip6Set.is_empty (Ip6Set.intersection (singleton "2001:db8:1::/48") excluded));
+  let compact = Ip6Set.diff (singleton "2001:db8::/126") (singleton "2001:db8::/128") in
+  let decomposed = Ip6Set.of_list [of_string "2001:db8::1/128"; of_string "2001:db8::2/127"] in
+  printf "equivalent representations equal: %b %b\n"
+    (Ip6Set.equal compact decomposed) (Ip6Set.equal decomposed compact);
+  printf "unequal representations equal: %b\n"
+    (Ip6Set.equal compact (singleton "2001:db8::/126"));
 
   ();
   [%expect {|
@@ -546,4 +591,17 @@ let%expect_test "Set operations - ipv6 " =
         [ ::/0 ]
      o  [ ::1/128; ::ffff:0.0.0.0/96; 2001::/23 \ [ 2001::/32; 2001:1::1/128; 2001:1::2/127; 2001:2::/48; 2001:3::/32; 2001:4:112::/48; 2001:20::/27 ]; 2001:db8::/32; 3fff::/20 ]
      =  [ ::/3 \ [ ::1/128; ::ffff:0.0.0.0/96 ]; 2000::/16; 2001::/32; 2001:1::1/128; 2001:1::2/127; 2001:2::/48; 2001:3::/32; 2001:4:112::/48; 2001:20::/27; 2001:200::/23; 2001:400::/22; 2001:800::/21 \ [ 2001:db8::/32 ]; 2001:1000::/20; 2001:2000::/19; 2001:4000::/18; 2001:8000::/17; 2002::/15; 2004::/14; 2008::/13; 2010::/12; 2020::/11; 2040::/10; 2080::/9; 2100::/8; 2200::/7; 2400::/6; 2800::/5; 3000::/4 \ [ 3fff::/20 ]; 4000::/2; 8000::/1 ]
+    *****************
+    union preserves exclusion
+        [ 2001:db8::/32 \ [ 2001:db8:1::/48 ] ]
+     o  [ 2001:db8:2::/48 ]
+     =  [ 2001:db8::/32 \ [ 2001:db8:1::/48 ] ]
+    *****************
+    reverse union preserves exclusion
+        [ 2001:db8:2::/48 ]
+     o  [ 2001:db8::/32 \ [ 2001:db8:1::/48 ] ]
+     =  [ 2001:db8::/32 \ [ 2001:db8:1::/48 ] ]
+    excluded intersections empty: true true
+    equivalent representations equal: true true
+    unequal representations equal: false
     |}]
