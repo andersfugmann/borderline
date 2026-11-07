@@ -1,10 +1,19 @@
 import "../configuration/common.bl"
 import "../configuration/generic/networks.bl"
-import "../configuration/generic/states.bl"
-import "../configuration/generic/services.bl"
-import "../configuration/generic/l4proto.bl"
 import "../configuration/generic/icmp4.bl"
 import "../configuration/generic/icmp6.bl"
+
+define udp = 17
+define new = "new"
+define established = "established"
+define related = "related"
+define untracked = "untracked"
+
+# Fix the service aliases used by common independently of /etc/services.
+define bootpc = [ 68 ]
+define bootps = [ 67 ]
+define dhcpv6-client = [ 546 ]
+define dhcpv6-server = [ 547 ]
 
 define validate = rule { }
 define global_tcp_ports = []

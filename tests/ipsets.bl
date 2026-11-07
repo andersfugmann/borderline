@@ -1,5 +1,5 @@
-import "../configuration/generic/iana-ipv6-special-registry.bl"
-import "../configuration/generic/iana-ipv4-special-registry.bl"
+define ipv6_iana_all = [ 2001:db8:1::/48, 2001:db8:2::/48 ]
+define ipv6_iana_source = [ 2001:db8:1::/64 ]
 
 process filter {
   rule {

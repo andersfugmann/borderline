@@ -1,5 +1,5 @@
 # Test protocol definitions to ensure no name clash
-import "../configuration/generic/l4proto.bl"
+define ipv6 = 41
 
 # All ip addresses are gone.
 #
