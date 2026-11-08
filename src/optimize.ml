@@ -10,7 +10,7 @@ let printf = Stdio.printf
 let sprintf = Printf.sprintf [@@ocaml.warning "-32"]
 
 (** Minimum sequence of predicates to push *)
-let min_push_seq = 3
+let min_push_seq = 2
 
 type string = id [@@ocaml.warning "-34"]
 
