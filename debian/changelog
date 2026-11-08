@@ -1,4 +1,4 @@
-borderline (3.1.0) unstable; urgency=high
+borderline (3.1.0) unstable; urgency=medium
 
   * Rewrite rule optimization into bounded phases with dependency tracking.
   * Preserve pushed guards, non-terminal inputs, temporary-chain call semantics
@@ -37,7 +37,7 @@ borderline (3.1.0) unstable; urgency=high
   * Require Menhir >= 20180523 and add the ppx_expect test dependency.
   * Improve nft rule formatting.
 
- -- Anders Fugmann <anders@fugmann.net>  Sun, 08 Nov 2026 12:18:40 +0100
+ -- Anders Peter Fugmann <anders@fugmann.net>  Sun, 8 Nov 2026 16:08:55 +0100
 
 borderline (3.0.0) unstable; urgency=high
 

@@ -48,6 +48,7 @@ clean:
 
 .PHONY:deb
 deb:
+	scripts/update_debian_changelog.sh
 	dpkg-buildpackage --no-sign --build=binary -nc
 
 .PHONY:debian
