@@ -136,14 +136,14 @@ let gen_pred neg pred =
       | Ir.Direction.Source -> "iifname"
       | Ir.Direction.Destination -> "oifname"
     in
-    sprintf "%s%s { %s }" classifier neg_str interfaces, None
+    sprintf "%s %s{ %s }" classifier neg_str interfaces, None
   | Ir.If_group (dir, if_groups) ->
     let if_groups = string_or_int_set if_groups in
     let classifier = match dir with
       | Ir.Direction.Source -> "iifgroup"
       | Ir.Direction.Destination -> "oifgroup"
     in
-    sprintf "%s%s { %s }" classifier neg_str if_groups, None
+    sprintf "%s %s{ %s }" classifier neg_str if_groups, None
   | Ir.Zone (dir, zones) ->
     let shift = match dir with
       | Ir.Direction.Source -> 0
@@ -162,7 +162,7 @@ let gen_pred neg pred =
         | Ir.Direction.Destination  -> "dest"
       in
       let zones = Set.to_list zones |> String.concat ~sep:"; " in
-      sprintf "%s%s zone in [ %s ]" neg dir zones
+      sprintf "%s %s zone in [ %s ]" neg dir zones
     in
     sprintf "meta mark & 0x%08x %s 0x0" mask neg_str, Some comment
   | Ir.State states ->
