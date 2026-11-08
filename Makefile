@@ -14,6 +14,7 @@ install: release
 unittest: build
 	dune test
 	dune exec bin/unit_test.exe
+	bash -n debian/borderline.init
 
 .PHONY: test
 test: build unittest
