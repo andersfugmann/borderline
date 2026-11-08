@@ -131,8 +131,11 @@ let gen_pred neg pred =
   in
   match pred with
   | Ir.Interface (dir, interfaces) ->
+    let only_loopback = Set.mem interfaces Zone.loopback && Set.length interfaces = 1 in
     let interfaces = Set.to_list interfaces |> List.map ~f:(sprintf "\"%s\"") |> String.concat ~sep:", " in
     let classifier = match dir with
+      | Ir.Direction.Source when only_loopback -> "iif"
+      | Ir.Direction.Destination when only_loopback-> "oif"
       | Ir.Direction.Source -> "iifname"
       | Ir.Direction.Destination -> "oifname"
     in
