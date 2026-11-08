@@ -165,7 +165,7 @@ let gen_pred neg pred =
         | Ir.Direction.Destination  -> "dest"
       in
       let zones = Set.to_list zones |> String.concat ~sep:"; " in
-      sprintf "%s %s zone in [ %s ]" neg dir zones
+      sprintf "%s%s zone in [ %s ]" neg dir zones
     in
     sprintf "meta mark & 0x%08x %s 0x0" mask neg_str, Some comment
   | Ir.State states ->
