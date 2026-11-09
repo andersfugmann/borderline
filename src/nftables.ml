@@ -336,15 +336,7 @@ let rec pp_rules ?(acc = []) ?(indent = "") ?(indent_level = "    ")= function
     pp_rules ~acc:(line :: acc) ~indent ~indent_level lines
 
 let emit rules =
-  let zones =
-    Hashtbl.to_alist zones
-    |> List.sort ~compare:(fun (_, id) (_, id') -> Int.compare id id')
-    |> List.map ~f:(fun (zone, id) ->
-      sprintf "   iifname \"%s\" meta mark 0x%04x comment \"Zone %s\"" zone id zone)
-  in
   "table inet borderline {" ::
-  "  chain zones { " ::
-  "    comment \"zone ids\"" :: zones @
-  "  }" :: rules @
-  [ "}" ]
+  rules
+  @ [ "}" ]
   |> pp_rules
