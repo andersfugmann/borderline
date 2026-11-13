@@ -878,10 +878,11 @@ let filter_covered_subset chains =
   in
   Map.map ~f:(fun chn -> { chn with rules = map_rules chn.rules }) chains
 
-let reorder_rules ?(chains=Map.empty (module Chain_id)) rules =
+let reorder_rules ~chains rules =
   let rec pure_rule_outcome active (preds, effects, target) =
-    if not (List.for_all effects ~f:(function Comment _ -> true | _ -> false)) then None
-    else
+    match (List.for_all effects ~f:(function Comment _ | Counter -> true | _ -> false)) with
+    | true -> None
+    | false ->
       let outcome =
         match target with
         | Accept | Drop | Reject _ -> Some (Some target, 0)
@@ -889,20 +890,20 @@ let reorder_rules ?(chains=Map.empty (module Chain_id)) rules =
         | Pass -> None
         | Jump (Temporary _ as id) when not (Set.mem active id) ->
           Option.bind (Map.find chains id) ~f:(fun chain ->
-            pure_chain_outcome (Set.add active id) chain.rules)
+              pure_chain_outcome (Set.add active id) chain.rules)
           |> Option.map ~f:(fun (target, cost) -> target, cost + Cost.jump)
         | Jump _ -> None
       in
       Option.map outcome ~f:(fun (target, cost) -> target, cost + P.costs preds)
   and pure_chain_outcome active rules =
     List.fold rules ~init:(Some (None, 0)) ~f:(fun outcome rule ->
-      Option.bind outcome ~f:(fun (target, cost) ->
-        Option.bind (pure_rule_outcome active rule) ~f:(fun (next, next_cost) ->
-          match target, next with
-          | None, target | target, None -> Some (target, cost + next_cost)
-          | Some target, Some next when equal_target target next ->
-            Some (Some target, cost + next_cost)
-          | _ -> None)))
+        Option.bind outcome ~f:(fun (target, cost) ->
+            Option.bind (pure_rule_outcome active rule) ~f:(fun (next, next_cost) ->
+                match target, next with
+                | None, target | target, None -> Some (target, cost + next_cost)
+                | Some target, Some next when equal_target target next ->
+                  Some (Some target, cost + next_cost)
+                | _ -> None)))
   in
   let order_target = function
     | Ir.Accept -> 1
@@ -919,9 +920,9 @@ let reorder_rules ?(chains=Map.empty (module Chain_id)) rules =
     | _ ->
       Dependencies.independent rule1 rule2 &&
       (
-      (Ir.equal_target target target' && equal_effects effects effects' &&
-       P.costs preds' < P.costs preds) ||
-      (order_target target' < order_target target && P.disjoint preds preds')
+        (Ir.equal_target target target' && equal_effects effects effects' &&
+         P.costs preds' < P.costs preds) ||
+        (order_target target' < order_target target && P.disjoint preds preds')
       )
   in
   let rec inner acc = function
@@ -1519,7 +1520,7 @@ module Test = struct
         rule Accept;
       ];
     ] in
-    check_optimization ~optimize:(map_rules ~f:reorder_rules) ~chains
+    check_optimization ~optimize:(map_rules ~f:(reorder_rules ~chains)) ~chains
       ~cases:[
         tcp, { allowed with source_zone = Some "guest" };
         udp, { allowed with source_zone = Some "int" };
@@ -1534,7 +1535,7 @@ module Test = struct
         rule Drop;
       ];
     ] in
-    check_optimization ~optimize:(map_rules ~f:reorder_rules) ~chains
+    check_optimization ~optimize:(map_rules ~f:(reorder_rules ~chains)) ~chains
       ~cases:[
         tcp, { allowed with logs = ["first"] };
         udp, { allowed with logs = ["first"] };
@@ -1560,7 +1561,7 @@ module Test = struct
         rule Drop;
       ];
     ] in
-    check_optimization ~optimize:(map_rules ~f:reorder_rules) ~chains
+    check_optimization ~optimize:(map_rules ~f:(reorder_rules ~chains)) ~chains
       ~cases:[udp, { allowed with source_zone = Some "after" }]
 
   let%test_unit "input-sensitive passes forget overwritten zone facts" =
