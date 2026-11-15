@@ -337,77 +337,6 @@ module Ip4Set : (IpSet with type ip = Ipaddr.V4.Prefix.t) = Make(Ipaddr.V4.Prefi
 module Ip6Set : (IpSet with type ip = Ipaddr.V6.Prefix.t) = Make(Ipaddr.V6.Prefix)
 
 
-let%expect_test "compare" =
-  let open Ipaddr.V4.Prefix in
-  let test_compare xs ys =
-    let x = of_string_exn xs |> prefix in
-    let y = of_string_exn ys |> prefix in
-    let res = Ipaddr.V4.Prefix.compare x y in
-    printf "compare %s %s = %d\n" (to_string x) (to_string y) res
-  in
-  test_compare "10.0.0.10/32" "10.0.0.11/32";
-  test_compare "10.0.0.11/32" "10.0.0.10/32";
-  test_compare "10.0.0.10/8" "10.0.0.11/8";
-  test_compare "10.0.0.11/8" "10.0.0.10/8";
-  test_compare "10.0.0.0/8" "10.0.0.0/8";
-  test_compare "10.0.0.0/8" "10.0.0.0/16";
-  test_compare "10.0.0.0/16" "10.0.0.0/8";
-  test_compare "10.0.0.1/8" "10.0.0.0/16";
-  test_compare "10.0.0.1/16" "10.0.0.0/8";
-  test_compare "20.0.0.0/8" "10.0.0.0/8";
-  test_compare "10.0.0.0/25" "10.0.2.0/24";
-  test_compare "0.0.0.0/0" "10.0.0.0/8";
-  test_compare "255.255.255.255/0" "10.0.0.0/8";
-  ();
-  [%expect {|
-    compare 10.0.0.10/32 10.0.0.11/32 = -1
-    compare 10.0.0.11/32 10.0.0.10/32 = 1
-    compare 10.0.0.0/8 10.0.0.0/8 = 0
-    compare 10.0.0.0/8 10.0.0.0/8 = 0
-    compare 10.0.0.0/8 10.0.0.0/8 = 0
-    compare 10.0.0.0/8 10.0.0.0/16 = -1
-    compare 10.0.0.0/16 10.0.0.0/8 = 1
-    compare 10.0.0.0/8 10.0.0.0/16 = -1
-    compare 10.0.0.0/16 10.0.0.0/8 = 1
-    compare 20.0.0.0/8 10.0.0.0/8 = 1
-    compare 10.0.0.0/25 10.0.2.0/24 = -1
-    compare 0.0.0.0/0 10.0.0.0/8 = -1
-    compare 0.0.0.0/0 10.0.0.0/8 = -1
-    |}]
-
-let%expect_test "decrease bits" =
-  let module P = Ipaddr.V4.Prefix in
-  let a = P.of_string_exn "10.0.0.0/8" in
-  let bits = P.bits a in
-  printf "Subnets of %s: " (P.to_string a);
-  P.subnets (bits - 1) a
-  |> Stdlib.Seq.iter (fun x -> printf "%s " (P.to_string x));
-  printf "\n";
-  ();
-  [%expect {| Subnets of 10.0.0.0/8: |}]
-
-let%expect_test "ip subnet" =
-  let test ~subnet:subnet_s ~network:network_s =
-    let subnet = Ipaddr.V4.Prefix.of_string_exn subnet_s in
-    let network = Ipaddr.V4.Prefix.of_string_exn network_s in
-    printf "subnet %s is subset of network %s == %b\n" subnet_s network_s (Ipaddr.V4.Prefix.subset ~subnet ~network)
-  in
-  test ~subnet:"10.0.0.10/32" ~network:"10.0.0.0/8";
-  test ~subnet:"10.0.0.8/8" ~network:"10.0.0.9/8";
-  test ~subnet:"10.0.0.8/8" ~network:"10.0.0.8/9";
-  test ~subnet:"10.0.0.0/8" ~network:"10.0.0.0/8";
-  test ~subnet:"10.0.0.10/32" ~network:"10.0.0.10/32";
-  test ~subnet:"10.0.0.10/16" ~network:"10.0.0.12/16";
-  [%expect {|
-    subnet 10.0.0.10/32 is subset of network 10.0.0.0/8 == true
-    subnet 10.0.0.8/8 is subset of network 10.0.0.9/8 == true
-    subnet 10.0.0.8/8 is subset of network 10.0.0.8/9 == false
-    subnet 10.0.0.0/8 is subset of network 10.0.0.0/8 == true
-    subnet 10.0.0.10/32 is subset of network 10.0.0.10/32 == true
-    subnet 10.0.0.10/16 is subset of network 10.0.0.12/16 == true
-    |}]
-
-
 let%expect_test "ip set operations" =
   let module Ip4Set = Make(Ipaddr.V4.Prefix) in
   let of_list l =
@@ -455,7 +384,6 @@ let%expect_test "ip set operations" =
 let%expect_test "Set operations" =
   let of_string = Ipaddr.V4.Prefix.of_string_exn in
   let singleton  s = Ip4Set.singleton (of_string s) in
-  let _union t elt = Ip4Set.union t (singleton elt) in
   let ( ?@ ) a = singleton a in
   let ( ! ) a =  Ipaddr.V4.Prefix.of_string_exn a in
   let ( + ) a b = Ip4Set.union a b in

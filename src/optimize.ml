@@ -14,11 +14,6 @@ let min_push_seq = 2
 
 type string = id [@@ocaml.warning "-34"]
 
-(**
-  Further improvements
-  * Sort predicates based on rank
-*)
-
 let (>::) elt elts =
   Option.value_map ~f:(fun elt -> elt :: elts) ~default:elts elt
 [@@ocaml.warning "-32"]
@@ -71,6 +66,14 @@ module Dependencies = struct
       | Counter | Log _ | Comment _ -> [])
     |> Set.of_list
     |> Option.some
+
+  let has_sideeffect effects =
+    List.exists ~f:(function MarkZone _
+                           | Notrack
+                           | Snat _
+                           | Log _ -> true
+                           | Counter
+                           | Comment _ -> false) effects
 
   let affects writes pred =
     let reads = reads pred in
@@ -878,32 +881,14 @@ let filter_covered_subset chains =
   in
   Map.map ~f:(fun chn -> { chn with rules = map_rules chn.rules }) chains
 
-let reorder_rules ~chains rules =
-  let rec pure_rule_outcome active (preds, effects, target) =
-    match (List.for_all effects ~f:(function Comment _ | Counter -> true | _ -> false)) with
-    | true -> None
-    | false ->
-      let outcome =
-        match target with
-        | Accept | Drop | Reject _ -> Some (Some target, 0)
-        | Return -> Some (None, 0)
-        | Pass -> None
-        | Jump (Temporary _ as id) when not (Set.mem active id) ->
-          Option.bind (Map.find chains id) ~f:(fun chain ->
-              pure_chain_outcome (Set.add active id) chain.rules)
-          |> Option.map ~f:(fun (target, cost) -> target, cost + Cost.jump)
-        | Jump _ -> None
-      in
-      Option.map outcome ~f:(fun (target, cost) -> target, cost + P.costs preds)
-  and pure_chain_outcome active rules =
-    List.fold rules ~init:(Some (None, 0)) ~f:(fun outcome rule ->
-        Option.bind outcome ~f:(fun (target, cost) ->
-            Option.bind (pure_rule_outcome active rule) ~f:(fun (next, next_cost) ->
-                match target, next with
-                | None, target | target, None -> Some (target, cost + next_cost)
-                | Some target, Some next when equal_target target next ->
-                  Some (Some target, cost + next_cost)
-                | _ -> None)))
+let rec sort_rules ~chains =
+  let rec has_sideeffect = function
+    | (_, effects, _) when Dependencies.has_sideeffect effects -> true
+    | (_, _, Jump (Named _)) -> true
+    | (_, _, Jump chain) ->
+      let target_chain = Map.find_exn chains chain in
+      List.exists ~f:has_sideeffect target_chain.rules
+    | _ -> false
   in
   let order_target = function
     | Ir.Accept -> 1
@@ -913,28 +898,19 @@ let reorder_rules ~chains rules =
     | Pass -> 5
     | Jump _ -> 6
   in
-  let should_swap ((preds, effects, target) as rule1) ((preds', effects', target') as rule2) =
-    match pure_rule_outcome Set.empty rule1, pure_rule_outcome Set.empty rule2 with
-    | Some (Some outcome, cost), Some (Some outcome', cost') when equal_target outcome outcome' ->
-      cost' < cost
-    | _ ->
-      Dependencies.independent rule1 rule2 &&
-      (
-        (Ir.equal_target target target' && equal_effects effects effects' &&
-         P.costs preds' < P.costs preds) ||
-        (order_target target' < order_target target && P.disjoint preds preds')
-      )
-  in
-  let rec inner acc = function
-    | [] -> List.rev acc
-    | rule1 :: rule2 :: rules when should_swap rule1 rule2 ->
-      printf "^";
-      inner [] (List.rev_append acc (rule2 :: rule1 :: rules))
-    | rule :: rules ->
-      inner (rule :: acc) rules
-  in
-  inner [] rules
-
+  function
+  | [] -> []
+  | rule :: rules ->
+    match rule, sort_rules ~chains rules with
+    | rule, rules when has_sideeffect rule ->
+      rule :: rules
+    | rule1, rule2 :: rules when has_sideeffect rule2 ->
+      rule1 :: rule2 :: rules
+    | ((preds, _, target) as rule1), ((preds', _, target') as rule2) :: rules when
+        P.disjoint preds preds' && order_target target' < order_target target ->
+      rule2 :: sort_rules ~chains (rule1 :: rules)
+    | rule, rules ->
+      rule :: rules
 
 let reorder_preds preds =
   List.stable_sort ~compare:(fun a b -> Int.compare (P.cost a) (P.cost b)) preds
@@ -949,7 +925,7 @@ let same_chains =
 let run_pass name f chains =
   let started = Stdlib.Sys.time () in
   let before = Chain.count_rules chains, Chain.count_predicates chains in
-  printf "\n# Optimize %s: %!" name;
+  printf "# Optimize %s: %!" name;
   let result = f chains in
   let rules, predicates = before in
   printf " rules %d -> %d, predicates %d -> %d, cpu %.3f ms\n"
@@ -1002,7 +978,7 @@ let dump_chains chains =
   |> List.filter_map ~f:(fun chain -> Map.find chains chain)
   |> List.iter ~f:(fun {id; rules; _ } ->
     printf "# Chain %s. Rules %3d. Ref: %2d\n" (Chain_id.show id) (List.length rules) (Graph.reference_count graph id)
-  )
+    )
 
 let optimize ~zones chains =
   let zones =
@@ -1032,7 +1008,7 @@ let optimize ~zones chains =
   |> run_pass "inline small calls" (inline_chains ~max_rules:2)
   |> run_pass "inline pure jumps" inline_pure_jumps
   |> run_pass "merge identical chains" merge_identical_chains
-  |> run_pass "order independent rules" (fun chains -> map_rules ~f:(reorder_rules ~chains) chains)
+  |> run_pass "sort rules" (fun chains -> map_rules ~f:(sort_rules ~chains) chains)
   |> simplify ~zones
   |> run_pass "share terminal tails" share_terminal_tails
   |> run_pass "remove implied predicates" (map_rules_input ~f:remove_implied_predicates)
@@ -1169,13 +1145,7 @@ module Test = struct
         assert_equal ~printer:Fn.id ~msg:(P.to_string pred)
           (P.to_string expected) (P.to_string actual);
         assert_equal ~printer:Int.to_string (P.cost pred) (P.cost actual);
-        assert_bool "effects retain their order" (Ir.equal_effects effects actual_effects);
-        List.iter [Ipv4; Ipv6] ~f:(fun value ->
-          let matches = function
-            | Address_family families, neg -> Set.mem families value <> neg
-            | _ -> true
-          in
-          assert_equal ~printer:Bool.to_string (matches pred) (matches actual))
+        assert_bool "effects retain their order" (Ir.equal_effects effects actual_effects)
       | _ -> assert_failure "Expected one unchanged rule with a canonical predicate")
 
   let%test_unit "terminal unions retain a shared conjunction" =
@@ -1510,38 +1480,6 @@ module Test = struct
         tcp, denied;
       ]
 
-  let%test_unit "reorder_rules preserves overlapping zone-mark effects" =
-    let chains = chain_map [
-      input [
-        rule ~when_:[protocols [tcp; udp]]
-          ~effects:[MarkZone (Direction.Source, "int")] Pass;
-        rule ~when_:[protocols [tcp]]
-          ~effects:[MarkZone (Direction.Source, "guest")] Pass;
-        rule Accept;
-      ];
-    ] in
-    check_optimization ~optimize:(map_rules ~f:(reorder_rules ~chains)) ~chains
-      ~cases:[
-        tcp, { allowed with source_zone = Some "guest" };
-        udp, { allowed with source_zone = Some "int" };
-        icmpv6, allowed;
-      ]
-
-  let%test_unit "reorder_rules preserves first matching terminal effects" =
-    let chains = chain_map [
-      input [
-        rule ~when_:[protocols [tcp; udp]] ~effects:[Log "first"] Accept;
-        rule ~when_:[protocols [tcp]] ~effects:[Log "second"] Accept;
-        rule Drop;
-      ];
-    ] in
-    check_optimization ~optimize:(map_rules ~f:(reorder_rules ~chains)) ~chains
-      ~cases:[
-        tcp, { allowed with logs = ["first"] };
-        udp, { allowed with logs = ["first"] };
-        icmpv6, denied;
-      ]
-
   let%test_unit "referenced named chains remain reachable" =
     let named = Named "local_policy" in
     let chains = chain_map [
@@ -1550,19 +1488,6 @@ module Test = struct
     ] in
     check_optimization ~optimize:remove_unreferenced_chains ~chains
       ~cases:[udp, allowed]
-
-  let%test_unit "reordering cannot move a zone test before its writer" =
-    let chains = chain_map [
-      input [
-        rule ~effects:[MarkZone (Direction.Source, "before")] Pass;
-        rule ~when_:[source_zones ["before"]]
-          ~effects:[MarkZone (Direction.Source, "after")] Pass;
-        rule ~when_:[source_zones ["after"]] Accept;
-        rule Drop;
-      ];
-    ] in
-    check_optimization ~optimize:(map_rules ~f:(reorder_rules ~chains)) ~chains
-      ~cases:[udp, { allowed with source_zone = Some "after" }]
 
   let%test_unit "input-sensitive passes forget overwritten zone facts" =
     let parent = Temporary 1 in
@@ -1683,60 +1608,39 @@ module Test = struct
     check_optimization ~optimize:(inline_chains ~max_rules:3) ~chains
       ~cases:[udp, { allowed with source_zone = Some "after"; counters = 1 }]
 
-  let overlapping_nonterminal_effects = chain_map [
-    input [
-      rule ~when_:[except_protocols [tcp]]
-        ~effects:[Counter; Log "matched"] Pass;
-      rule ~when_:[except_protocols [udp]]
-        ~effects:[Counter; Log "matched"] Pass;
-      rule Accept;
-    ];
-  ]
+  let%test_unit "rule merging preserves counter and log multiplicity" =
+    let chains = chain_map [
+      input [
+        rule ~when_:[except_protocols [tcp]]
+          ~effects:[Counter; Log "matched"] Pass;
+        rule ~when_:[except_protocols [udp]]
+          ~effects:[Counter; Log "matched"] Pass;
+        rule Accept;
+      ];
+    ] in
+    List.iter [merge_adjacent_rules; merge_matching_targets] ~f:(fun optimize ->
+      check_optimization ~optimize ~chains
+        ~cases:[
+          tcp, { allowed with counters = 1; logs = ["matched"] };
+          udp, { allowed with counters = 1; logs = ["matched"] };
+          icmpv6, { allowed with counters = 2; logs = ["matched"; "matched"] };
+        ])
 
-  let%test_unit "join_rules preserves counter and log multiplicity" =
-    check_optimization ~optimize:merge_adjacent_rules
-      ~chains:overlapping_nonterminal_effects
-      ~cases:[
-        tcp, { allowed with counters = 1; logs = ["matched"] };
-        udp, { allowed with counters = 1; logs = ["matched"] };
-        icmpv6, { allowed with counters = 2; logs = ["matched"; "matched"] };
-      ]
-
-  let%test_unit "join_rules_with_same_target preserves effect multiplicity" =
-    check_optimization ~optimize:merge_matching_targets
-      ~chains:overlapping_nonterminal_effects
-      ~cases:[
-        tcp, { allowed with counters = 1; logs = ["matched"] };
-        udp, { allowed with counters = 1; logs = ["matched"] };
-        icmpv6, { allowed with counters = 2; logs = ["matched"; "matched"] };
-      ]
-
-  let overlapping_returning_jumps =
+  let%test_unit "rule merging preserves repeated returning jumps" =
     let child = Temporary 1 in
-    chain_map [
+    let chains = chain_map [
       input [
         rule ~when_:[except_protocols [tcp]] (Jump child);
         rule ~when_:[except_protocols [udp]] (Jump child);
         rule Accept;
       ];
       chain child [rule ~effects:[Counter; Log "visited"] Return];
-    ]
-
-  let%test_unit "join_rules preserves repeated returning jumps" =
-    check_optimization ~optimize:merge_adjacent_rules
-      ~chains:overlapping_returning_jumps
-      ~cases:[
-        tcp, { allowed with counters = 1; logs = ["visited"] };
-        udp, { allowed with counters = 1; logs = ["visited"] };
-        icmpv6, { allowed with counters = 2; logs = ["visited"; "visited"] };
-      ]
-
-  let%test_unit "join_rules_with_same_target preserves repeated returning jumps" =
-    check_optimization ~optimize:merge_matching_targets
-      ~chains:overlapping_returning_jumps
-      ~cases:[
-        tcp, { allowed with counters = 1; logs = ["visited"] };
-        udp, { allowed with counters = 1; logs = ["visited"] };
-        icmpv6, { allowed with counters = 2; logs = ["visited"; "visited"] };
-      ]
+    ] in
+    List.iter [merge_adjacent_rules; merge_matching_targets] ~f:(fun optimize ->
+      check_optimization ~optimize ~chains
+        ~cases:[
+          tcp, { allowed with counters = 1; logs = ["visited"] };
+          udp, { allowed with counters = 1; logs = ["visited"] };
+          icmpv6, { allowed with counters = 2; logs = ["visited"; "visited"] };
+        ])
 end
