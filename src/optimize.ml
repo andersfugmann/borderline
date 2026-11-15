@@ -67,13 +67,21 @@ module Dependencies = struct
     |> Set.of_list
     |> Option.some
 
-  let has_sideeffect effects =
+  let effects_have_sideeffect effects =
     List.exists ~f:(function MarkZone _
                            | Notrack
                            | Snat _
                            | Log _ -> true
                            | Counter
                            | Comment _ -> false) effects
+
+  let rec has_sideeffect ~chains = function
+    | (_, effects, _) when effects_have_sideeffect effects -> true
+    | (_, _, Jump (Named _)) -> true
+    | (_, _, Jump chain) ->
+      let target_chain = Map.find_exn chains chain in
+      List.exists ~f:(has_sideeffect ~chains) target_chain.rules
+    | _ -> false
 
   let affects writes pred =
     let reads = reads pred in
@@ -881,33 +889,16 @@ let filter_covered_subset chains =
   in
   Map.map ~f:(fun chn -> { chn with rules = map_rules chn.rules }) chains
 
-let rec sort_rules ~chains =
-  let rec has_sideeffect = function
-    | (_, effects, _) when Dependencies.has_sideeffect effects -> true
-    | (_, _, Jump (Named _)) -> true
-    | (_, _, Jump chain) ->
-      let target_chain = Map.find_exn chains chain in
-      List.exists ~f:has_sideeffect target_chain.rules
-    | _ -> false
-  in
-  let order_target = function
-    | Ir.Accept -> 1
-    | Drop -> 2
-    | Reject _ -> 3
-    | Return -> 4
-    | Pass -> 5
-    | Jump _ -> 6
-  in
-  function
+let rec sort_rules ~chains = function
   | [] -> []
   | rule :: rules ->
     match rule, sort_rules ~chains rules with
-    | rule, rules when has_sideeffect rule ->
+    | rule, rules when Dependencies.has_sideeffect ~chains rule ->
       rule :: rules
-    | rule1, rule2 :: rules when has_sideeffect rule2 ->
+    | rule1, rule2 :: rules when Dependencies.has_sideeffect ~chains rule2 ->
       rule1 :: rule2 :: rules
     | ((preds, _, target) as rule1), ((preds', _, target') as rule2) :: rules when
-        P.disjoint preds preds' && order_target target' < order_target target ->
+        P.disjoint preds preds' && Ir.order_target target' < Ir.order_target target ->
       rule2 :: sort_rules ~chains (rule1 :: rules)
     | rule, rules ->
       rule :: rules

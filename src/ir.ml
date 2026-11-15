@@ -172,6 +172,14 @@ type target = Jump of Chain_id.t
             | Pass (* Not terminal *)
 [@@deriving equal, show { with_path = false }]
 
+let order_target = function
+  | Accept -> 1
+  | Drop -> 2
+  | Reject _ -> 3
+  | Return -> 4
+  | Pass -> 5
+  | Jump _ -> 6
+
 type rule = (predicate * bool) list * effects * target
 
 type chain = { id: Chain_id.t; rules : rule list; comment: string; }
