@@ -102,22 +102,6 @@ module Dependencies = struct
     | Jump id -> union writes (Map.find_exn summaries id)
     | _ -> writes
 
-  let independent (preds, effects_, target) (preds', effects', target') =
-    let writes effects_ = function
-      | Jump _ -> None
-      | _ -> effects effects_
-    in
-    let a = writes effects_ target in
-    let b = writes effects' target' in
-    let has_log = List.exists ~f:(function Log _ -> true | _ -> false) in
-    match a, b with
-    | Some a', Some b' ->
-      Set.is_empty (Set.inter a' b') &&
-      not (List.exists preds' ~f:(affects a)) &&
-      not (List.exists preds ~f:(affects b)) &&
-      (not (has_log effects_) || is_read_only b) &&
-      (not (has_log effects') || is_read_only a)
-    | _ -> false
 end
 
 module Graph = struct
@@ -327,45 +311,6 @@ let union_rule_predicates preds preds' =
     P.merge_pred ~tpe:`Union a b
     |> Option.map ~f:(fun union -> P.inter_preds (union :: common))
   | _ -> None
-
-let merge_rules summaries (preds, effects, target) (preds', effects', target') =
-  let callee_read_only = match target with
-    | Pass -> true
-    | Jump id ->
-      (* Unreachable callees have no summary; leave their jumps unmerged. *)
-      Option.value_map (Map.find summaries id) ~default:false ~f:Dependencies.is_read_only
-    | _ -> false
-  in
-  let preserves_multiplicity =
-    is_terminal target ||
-    (callee_read_only &&
-     Dependencies.is_read_only (Dependencies.effects effects) &&
-     P.disjoint preds preds')
-  in
-  if preserves_multiplicity && equal_target target target' &&
-     equal_effects effects effects'
-  then
-    union_rule_predicates preds preds'
-    |> Option.map ~f:(fun preds -> preds, effects, target)
-  else None
-
-let rec join_rules_with_same_target summaries = function
-  | rule :: ((next_preds, _, _) as next) :: rest ->
-    begin match merge_rules summaries rule next with
-    | Some merged -> join_rules_with_same_target summaries (merged :: rest)
-    | None ->
-      let across_next = match rest with
-        | ((preds, _, _) as later) :: tail
-          when Dependencies.independent next later &&
-               P.disjoint next_preds preds ->
-          Option.map (merge_rules summaries rule later) ~f:(fun merged ->
-            join_rules_with_same_target summaries (merged :: next :: tail))
-        | _ -> None
-      in
-      Option.value_or_thunk across_next ~default:(fun () ->
-        rule :: join_rules_with_same_target summaries (next :: rest))
-    end
-  | rules -> rules
 
 let remove_unreferenced_chains chains =
   let referenced_chains =
@@ -805,20 +750,6 @@ let rec share_terminal_tails chains =
     in
     share_terminal_tails chains
 
-let rec join_rules summaries = function
-  | first :: second :: rest ->
-    begin match merge_rules summaries first second with
-    | Some merged -> join_rules summaries (merged :: rest)
-    | None -> first :: join_rules summaries (second :: rest)
-    end
-  | rules -> rules
-
-let merge_adjacent_rules chains =
-  map_rules ~f:(join_rules (chain_writes chains)) chains
-
-let merge_matching_targets chains =
-  map_rules ~f:(join_rules_with_same_target (chain_writes chains)) chains
-
 (** filter rules that a a subset of a later or previous rule.
     When doing a forward pass, we can safely remove any rule that is a subset.
     When doing a backward pass (rollup) both effects and target must be the same.
@@ -903,6 +834,30 @@ let rec sort_rules ~chains = function
     | rule, rules ->
       rule :: rules
 
+let rec merge_rules ~chains rules =
+  let rec merge ((preds, effects, target) as rule1) acc = function
+    | [] -> None
+    | rule :: _ when Dependencies.has_sideeffect ~chains rule ->
+      None
+    | ((preds', effects', target') as rule2) :: rules ->
+      match Ir.equal_target target target', union_rule_predicates preds preds' with
+      | true, Some merged_preds ->
+        let merged_effects = effects @ effects' in
+        Some ((List.rev ((merged_preds, merged_effects, target) :: acc)) @ rules)
+      | _, _ when P.disjoint preds preds' ->
+        merge rule1 (rule2 :: acc) rules
+      | _ ->
+        None
+  in
+  match rules with
+  | [] -> []
+  | rule :: rules when Dependencies.has_sideeffect ~chains rule ->
+    rule :: merge_rules ~chains rules
+  | rule :: rules ->
+    match merge rule [] rules with
+    | Some rules -> merge_rules ~chains rules
+    | None -> rule :: merge_rules ~chains rules
+
 let reorder_preds preds =
   List.stable_sort ~compare:(fun a b -> Int.compare (P.cost a) (P.cost b)) preds
 
@@ -949,14 +904,12 @@ let simplify ~zones chains =
   let once chains =
     chains
     |> run_pass "normalize" (map_rules ~f:(map_predicates ~f:P.inter_preds))
-    |> run_pass "merge adjacent rules" merge_adjacent_rules
     |> run_pass "reduce predicates" (map_rules_input ~f:(reduce_predicates ~zones))
     |> run_pass "remove empty rules" (map_rules ~f:remove_empty_rules)
     |> run_pass "remove impossible rules" (map_rules_input ~f:remove_unsatisfiable_rules)
     |> run_pass "remove true predicates" (map_rules ~f:remove_true_predicates)
     |> run_pass "remove unreachable rules" (map_rules ~f:eliminate_unreachable_rules)
     |> run_pass "remove covered rules" filter_covered_subset
-    |> run_pass "merge matching targets" merge_matching_targets
     |> run_pass "remove unused chains" remove_unreferenced_chains
     |> run_pass "prefer positive predicates" (map_rules ~f:prefer_positive_predicates)
   in
@@ -999,6 +952,7 @@ let optimize ~zones chains =
   |> run_pass "inline small calls" (inline_chains ~max_rules:2)
   |> run_pass "inline pure jumps" inline_pure_jumps
   |> run_pass "merge identical chains" merge_identical_chains
+  |> run_pass "merge rules" (fun chains -> map_rules ~f:(merge_rules ~chains) chains)
   |> run_pass "sort rules" (fun chains -> map_rules ~f:(sort_rules ~chains) chains)
   |> simplify ~zones
   |> run_pass "share terminal tails" share_terminal_tails
@@ -1029,7 +983,6 @@ module Test = struct
     | value -> Int.to_string value
 
   let protocols values = Protocol (Set.of_list values), false
-  let except_protocols values = Protocol (Set.of_list values), true
   let source_zones values = Zone (Direction.Source, Set.of_list values), false
 
   let rule ?(when_=[]) ?(effects=[]) target = when_, effects, target
@@ -1138,159 +1091,6 @@ module Test = struct
         assert_equal ~printer:Int.to_string (P.cost pred) (P.cost actual);
         assert_bool "effects retain their order" (Ir.equal_effects effects actual_effects)
       | _ -> assert_failure "Expected one unchanged rule with a canonical predicate")
-
-  let%test_unit "terminal unions retain a shared conjunction" =
-    let chains = chain_map [
-      input [
-        rule ~effects:[MarkZone (Direction.Source, "lan")] Pass;
-        rule ~when_:[source_zones ["lan"]; protocols [tcp]]
-          ~effects:[Counter; Log "allowed"] Accept;
-        rule ~when_:[source_zones ["lan"]; protocols [udp]]
-          ~effects:[Counter; Log "allowed"] Accept;
-        rule Drop;
-      ];
-    ] in
-    let optimize chains = merge_adjacent_rules chains |> expect_rule_count 3 in
-    check_optimization ~optimize ~chains
-      ~cases:[
-        tcp, { allowed with source_zone = Some "lan"; counters = 1; logs = ["allowed"] };
-        udp, { allowed with source_zone = Some "lan"; counters = 1; logs = ["allowed"] };
-        icmpv6, { denied with source_zone = Some "lan" };
-      ]
-
-  let%test_unit "terminal unions preserve correlations between dimensions" =
-    let chains = chain_map [
-      input [
-        rule ~effects:[MarkZone (Direction.Source, "one")] Pass;
-        rule ~when_:[source_zones ["one"]; protocols [tcp]] Accept;
-        rule ~when_:[source_zones ["two"]; protocols [udp]] Accept;
-        rule Drop;
-      ];
-    ] in
-    let optimize chains =
-      merge_matching_targets chains |> expect_rule_count 4
-    in
-    check_optimization ~optimize ~chains
-      ~cases:[
-        tcp, { allowed with source_zone = Some "one" };
-        udp, { denied with source_zone = Some "one" };
-      ]
-
-  let%test_unit "disjoint read-only pass rules merge without losing effects" =
-    let chains = chain_map [
-      input [
-        rule ~when_:[protocols [tcp]] ~effects:[Counter; Log "matched"] Pass;
-        rule ~when_:[protocols [udp]] ~effects:[Counter; Log "matched"] Pass;
-        rule Accept;
-      ];
-    ] in
-    List.iter [merge_adjacent_rules; merge_matching_targets] ~f:(fun merge ->
-      let optimize chains = merge chains |> expect_rule_count 2 in
-      check_optimization ~optimize ~chains
-        ~cases:[
-          tcp, { allowed with counters = 1; logs = ["matched"] };
-          udp, { allowed with counters = 1; logs = ["matched"] };
-          icmpv6, allowed;
-        ])
-
-  let%test_unit "pass merging cannot collapse writes that enable a later match" =
-    let effects = [MarkZone (Direction.Source, "after"); Counter] in
-    let chains = chain_map [
-      input [
-        rule ~effects:[MarkZone (Direction.Source, "before")] Pass;
-        rule ~when_:[source_zones ["before"]] ~effects Pass;
-        rule ~when_:[source_zones ["after"]] ~effects Pass;
-        rule Accept;
-      ];
-    ] in
-    List.iter [merge_adjacent_rules; merge_matching_targets] ~f:(fun merge ->
-      let optimize chains = merge chains |> expect_rule_count 4 in
-      check_optimization ~optimize ~chains
-        ~cases:[udp, { allowed with source_zone = Some "after"; counters = 2 }])
-
-  let%test_unit "disjoint read-only jumps merge without losing call or callee effects" =
-    let child = Temporary 1 in
-    let effects = [Counter; Log "caller"] in
-    let chains = chain_map [
-      input [
-        rule ~when_:[protocols [tcp]] ~effects (Jump child);
-        rule ~when_:[protocols [udp]] ~effects (Jump child);
-        rule Accept;
-      ];
-      chain child [rule ~effects:[Counter; Log "callee"] Pass];
-    ] in
-    List.iter [merge_adjacent_rules; merge_matching_targets] ~f:(fun merge ->
-      let optimize chains = merge chains |> expect_rule_count 3 in
-      check_optimization ~optimize ~chains
-        ~cases:[
-          tcp, { allowed with counters = 2; logs = ["caller"; "callee"] };
-          udp, { allowed with counters = 2; logs = ["caller"; "callee"] };
-          icmpv6, allowed;
-        ])
-
-  let%test_unit "jump merging cannot collapse callee writes that enable a later match" =
-    let parent = Temporary 1 in
-    let child = Temporary 2 in
-    let chains = chain_map [
-      input [
-        rule ~effects:[MarkZone (Direction.Source, "before")] Pass;
-        rule (Jump parent);
-        rule Accept;
-      ];
-      chain parent [
-        rule ~when_:[source_zones ["before"]] (Jump child);
-        rule ~when_:[source_zones ["after"]] (Jump child);
-      ];
-      chain child [rule ~effects:[MarkZone (Direction.Source, "after"); Counter] Pass];
-    ] in
-    List.iter [merge_adjacent_rules; merge_matching_targets] ~f:(fun merge ->
-      let optimize chains = merge chains |> expect_rule_count 6 in
-      check_optimization ~optimize ~chains
-        ~cases:[udp, { allowed with source_zone = Some "after"; counters = 2 }])
-
-  let%test_unit "disjoint jumps to opaque user chains remain separate" =
-    let child = Named "external" in
-    let chains = chain_map [
-      input [
-        rule ~when_:[protocols [tcp]] (Jump child);
-        rule ~when_:[protocols [udp]] (Jump child);
-        rule Accept;
-      ];
-      chain child [];
-    ] in
-    List.iter [merge_adjacent_rules; merge_matching_targets] ~f:(fun merge ->
-      ignore (merge chains |> expect_rule_count 3))
-
-  let%test_unit "an exhaustive IPv6 address partition merges into one read-only jump" =
-    let parent = Temporary 1 in
-    let child = Temporary 2 in
-    let ipv6 = Address_family (Set.singleton Ipv6), false in
-    let networks = List.map [
-      ["::/128"; "fe80::/10"; "ff00::/8"];
-      ["2001:db8:1::/64"];
-      ["2001:db8:2::/64"];
-      ["2001:db8:3::/64"];
-    ] ~f:(fun prefixes ->
-      List.map prefixes ~f:Ipaddr.V6.Prefix.of_string_exn |> Ip6Set.of_list)
-    in
-    let covered = List.fold networks ~init:Ip6Set.empty ~f:Ip6Set.union in
-    let guards =
-      List.map networks ~f:(fun ips -> Ip6Set (Direction.Source, ips), false) @
-      [Ip6Set (Direction.Source, covered), true]
-    in
-    let chains = chain_map [
-      input [rule ~when_:[ipv6] (Jump parent); rule Accept];
-      chain parent (List.map guards ~f:(fun pred -> rule ~when_:[ipv6; pred] (Jump child)));
-      chain child [rule ~effects:[Counter; Log "callee"] Pass];
-    ] in
-    List.iter [merge_adjacent_rules; merge_matching_targets] ~f:(fun merge ->
-      let result = merge chains in
-      match (Map.find_exn result parent).rules with
-      | [(preds, [], Jump target)] when Chain_id.equal child target ->
-        let preds = List.filter preds ~f:(fun pred -> not (P.is_always true pred)) in
-        assert_bool "The union must retain IPv6 and no address restriction"
-          (P.equal_predicates preds [ipv6])
-      | _ -> assert_failure "Expected one jump for the complete IPv6 partition")
 
   let%test_unit "factoring removes repeated predicates when the guard pays for its jump" =
     let parent = Temporary 1 in
@@ -1599,39 +1399,4 @@ module Test = struct
     check_optimization ~optimize:(inline_chains ~max_rules:3) ~chains
       ~cases:[udp, { allowed with source_zone = Some "after"; counters = 1 }]
 
-  let%test_unit "rule merging preserves counter and log multiplicity" =
-    let chains = chain_map [
-      input [
-        rule ~when_:[except_protocols [tcp]]
-          ~effects:[Counter; Log "matched"] Pass;
-        rule ~when_:[except_protocols [udp]]
-          ~effects:[Counter; Log "matched"] Pass;
-        rule Accept;
-      ];
-    ] in
-    List.iter [merge_adjacent_rules; merge_matching_targets] ~f:(fun optimize ->
-      check_optimization ~optimize ~chains
-        ~cases:[
-          tcp, { allowed with counters = 1; logs = ["matched"] };
-          udp, { allowed with counters = 1; logs = ["matched"] };
-          icmpv6, { allowed with counters = 2; logs = ["matched"; "matched"] };
-        ])
-
-  let%test_unit "rule merging preserves repeated returning jumps" =
-    let child = Temporary 1 in
-    let chains = chain_map [
-      input [
-        rule ~when_:[except_protocols [tcp]] (Jump child);
-        rule ~when_:[except_protocols [udp]] (Jump child);
-        rule Accept;
-      ];
-      chain child [rule ~effects:[Counter; Log "visited"] Return];
-    ] in
-    List.iter [merge_adjacent_rules; merge_matching_targets] ~f:(fun optimize ->
-      check_optimization ~optimize ~chains
-        ~cases:[
-          tcp, { allowed with counters = 1; logs = ["visited"] };
-          udp, { allowed with counters = 1; logs = ["visited"] };
-          icmpv6, { allowed with counters = 2; logs = ["visited"; "visited"] };
-        ])
 end

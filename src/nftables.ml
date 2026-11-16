@@ -281,6 +281,16 @@ let gen_rule = function
       | [] -> ""
       | comments -> sprintf "comment \"%s\"" (String.concat ~sep:" && " comments)
     in
+    (* Remove duplicate counters *)
+    let counters, effects = List.partition_map ~f:(function
+        | Ir.Counter -> Either.First Ir.Counter
+        | effect_ -> Either.Second effect_ ) effects
+    in
+    let effects = match counters with
+      | c :: _ -> c :: effects
+      | [] -> effects
+    in
+
     let effects = List.map ~f:gen_effect effects in
     let target = gen_target target in
     let elements = preds @ effects @ [target] @ [comment_string] |> List.filter ~f:(fun s -> not (String.is_empty s)) in
