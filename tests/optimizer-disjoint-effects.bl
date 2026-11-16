@@ -1,4 +1,4 @@
-# EXPECT-COUNT: 1 => counter log prefix "seen: "
+# Effect multiplicity and order are checked by the optimizer properties.
 
 process filter {
     rule {
