@@ -8,7 +8,8 @@ define ipv4_global_networks = 0.0.0.0/0
 define ipv6_global_networks = [ ::/0 ]
 define ipv6_this_host       = ::/128
 define ipv4_this_host       = 0.0.0.0/32
-define ipv4_local_networks  = [ ipv4_multicast, ipv4_this_host ]
+define ipv4_limited_broadcast = 255.255.255.255/32
+define ipv4_local_networks = [ ipv4_multicast, ipv4_this_host, ipv4_limited_broadcast ]
 define ipv6_local_networks  = [ ipv6_multicast, ipv6_link_local, ipv6_this_host ]
 define local_networks       = [ ipv4_local_networks, ipv6_local_networks ]
 
