@@ -28,6 +28,16 @@ let map_rules ~f chains =
 let map_predicates ~f rules =
   List.map ~f:(fun (preds, effects, target) -> (f preds, effects, target)) rules
 
+let rec remove_duplicate_counters = function
+  | [] -> []
+  | Counter :: effects ->
+    Counter :: List.filter effects ~f:(fun effect_ -> not (equal_effect_ Counter effect_))
+  | effect_ :: effects -> effect_ :: remove_duplicate_counters effects
+
+let normalize_rules rules =
+  List.map rules ~f:(fun (preds, effects, target) ->
+    P.inter_preds preds, remove_duplicate_counters effects, target)
+
 let is_terminal = function
   | Pass | Jump _ -> false
   | Accept | Drop | Return | Reject _ -> true
@@ -701,6 +711,46 @@ let rec share_terminal_tails chains =
     in
     share_terminal_tails chains
 
+(* Remove earlier covered actions, descending only into uniquely referenced chains. *)
+let rollup_rules chains =
+  let is_return = function Ir.Return -> true | _ -> false in
+  let graph = Graph.analyze chains in
+  (* Input and output are reversed; acc holds the visited, retained rules forwards. *)
+  let rec filter_rev ~acc ~chains ((preds, effects, target) as covering) = function
+    | (preds', effects', target') :: rules when
+        equal_target target target' && equal_effects effects effects' &&
+        P.subset_preds ~of_:preds preds' ->
+      printf "f";
+      filter_rev ~acc ~chains covering rules
+    | ((preds', _, _) as rule) :: rules when
+        P.disjoint preds preds' ->
+      filter_rev ~acc:(rule :: acc) ~chains covering rules
+    | ((_, _, Jump (Temporary _ as id)) as rule) :: rules when
+        not (is_return target) && Graph.reference_count graph id = 1 ->
+      let chain = Map.find_exn chains id in
+      let chains, reversed = filter_rev ~acc:[] ~chains covering (List.rev chain.rules) in
+      let chains = Map.set chains ~key:id ~data:{ chain with rules = List.rev reversed } in
+      chains, List.rev_append acc (rule :: rules)
+    | rules -> chains, List.rev_append acc rules
+  in
+
+  let rec traverse_rev ~acc ~chains = function
+    | (_, _, target) as rule :: rules when is_terminal target ->
+      let chains, rules = filter_rev ~acc:[] ~chains rule rules in
+      traverse_rev ~acc:(rule :: acc) ~chains rules
+    | rule :: rules -> traverse_rev ~acc:(rule::acc) ~chains rules
+    | [] -> chains, acc
+  in
+
+  graph.leaves_first
+  |> List.fold ~init:chains ~f:(fun chains chain_id ->
+      let chain = Map.find_exn chains chain_id in
+      let chains, rules = traverse_rev ~acc:[] ~chains (List.rev chain.rules) in
+      let chain = { chain with rules } in
+      Map.set chains ~key:chain_id ~data:chain
+    )
+
+
 (** filter rules that a a subset of a later or previous rule.
     When doing a forward pass, we can safely remove any rule that is a subset.
     When doing a backward pass (rollup) both effects and target must be the same.
@@ -850,7 +900,7 @@ let prefer_positive_predicates =
 let simplify ~zones chains =
   let once chains =
     chains
-    |> run_pass "normalize" (map_rules ~f:(map_predicates ~f:P.inter_preds))
+    |> run_pass "normalize" (map_rules ~f:normalize_rules)
     |> run_pass "reduce predicates" (map_rules_input ~f:(reduce_predicates ~zones))
     |> run_pass "remove empty rules" (map_rules ~f:remove_empty_rules)
     |> run_pass "remove impossible rules" (map_rules_input ~f:remove_unsatisfiable_rules)
@@ -859,6 +909,7 @@ let simplify ~zones chains =
     |> run_pass "remove covered rules" filter_covered_subset
     |> run_pass "remove unused chains" remove_unreferenced_chains
     |> run_pass "prefer positive predicates" (map_rules ~f:prefer_positive_predicates)
+    |> run_pass "rollup rules" rollup_rules
   in
   until_stable ~name:"simplification" ~max_rounds:8 once chains
 
@@ -1193,7 +1244,7 @@ module Test = struct
       "tails", share_terminal_tails;
       "merge", (fun chains -> map_rules ~f:(merge_rules ~chains) chains);
       "sort", (fun chains -> map_rules ~f:(sort_rules ~chains) chains);
-      "normalize", map_rules ~f:(map_predicates ~f:P.inter_preds);
+      "normalize", map_rules ~f:normalize_rules;
       "positive", map_rules ~f:prefer_positive_predicates;
       "order", map_rules ~f:(map_predicates ~f:reorder_preds);
       "renumber", remap_chain_ids;
@@ -1205,6 +1256,21 @@ module Test = struct
         Int.incr index;
         List.iter transformations ~f:(fun (name, transform) ->
           ignore (check (sprintf "%s, program %d" name !index) transform before)))
+
+    let%test_unit "counter normalization is canonical and preserves emitted effects" =
+      let non_counters = List.filter ~f:(fun effect_ -> not (equal_effect_ Counter effect_)) in
+      let alphabet = effects @ [Comment "test"; Snat None; Snat (Some (Ipaddr.V4.of_string_exn "192.0.2.1"))] in
+      List.iter (sequences alphabet 3) ~f:(fun effects ->
+        let normalized = remove_duplicate_counters effects in
+        assert_bool "At most one counter per rule"
+          (List.count normalized ~f:(equal_effect_ Counter) <= 1);
+        assert_bool "Other effects keep their order and multiplicity"
+          (equal_effects (non_counters effects) (non_counters normalized));
+        assert_bool "Counter normalization is idempotent"
+          (equal_effects normalized (remove_duplicate_counters normalized));
+        assert_equal ~printer:(String.concat ~sep:"\n")
+          (Nftables.emit_nat_rules [rule ~effects Accept])
+          (Nftables.emit_nat_rules [rule ~effects:normalized Accept]))
 
     let improves measure before =
       let after = check "optimization progress" (optimize ~zones:[]) before in
