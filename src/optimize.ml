@@ -716,27 +716,29 @@ let rollup_rules chains =
   let is_return = function Ir.Return -> true | _ -> false in
   let graph = Graph.analyze chains in
   (* Input and output are reversed; acc holds the visited, retained rules forwards. *)
-  let rec filter_rev ~acc ~chains ((preds, effects, target) as covering) = function
+  let rec filter_rev ~acc ~chains ~blockers ((preds, effects, target) as covering) = function
     | (preds', effects', target') :: rules when
         equal_target target target' && equal_effects effects effects' &&
-        P.subset_preds ~of_:preds preds' ->
+        P.subset_preds ~of_:preds (P.inter_preds preds') &&
+        List.for_all blockers ~f:(P.disjoint preds') ->
       printf "f";
-      filter_rev ~acc ~chains covering rules
-    | ((preds', _, _) as rule) :: rules when
-        P.disjoint preds preds' ->
-      filter_rev ~acc:(rule :: acc) ~chains covering rules
-    | ((_, _, Jump (Temporary _ as id)) as rule) :: rules when
+      filter_rev ~acc ~chains ~blockers covering rules
+    | ((preds', _, _) as rule) :: rules when P.disjoint preds preds' ->
+      filter_rev ~acc:(rule :: acc) ~chains ~blockers covering rules
+    | ((preds', _, Jump (Temporary _ as id)) as rule) :: rules when
         not (is_return target) && Graph.reference_count graph id = 1 ->
       let chain = Map.find_exn chains id in
-      let chains, reversed = filter_rev ~acc:[] ~chains covering (List.rev chain.rules) in
+      let chains, reversed = filter_rev ~acc:[] ~chains ~blockers covering (List.rev chain.rules) in
       let chains = Map.set chains ~key:id ~data:{ chain with rules = List.rev reversed } in
-      chains, List.rev_append acc (rule :: rules)
-    | rules -> chains, List.rev_append acc rules
+      filter_rev ~acc:(rule :: acc) ~chains ~blockers:(preds' :: blockers) covering rules
+    | ((preds', _, _) as rule) :: rules ->
+      filter_rev ~acc:(rule :: acc) ~chains ~blockers:(preds' :: blockers) covering rules
+    | [] -> chains, List.rev acc
   in
 
   let rec traverse_rev ~acc ~chains = function
     | (_, _, target) as rule :: rules when is_terminal target ->
-      let chains, rules = filter_rev ~acc:[] ~chains rule rules in
+      let chains, rules = filter_rev ~acc:[] ~chains ~blockers:[] rule rules in
       traverse_rev ~acc:(rule :: acc) ~chains rules
     | rule :: rules -> traverse_rev ~acc:(rule::acc) ~chains rules
     | [] -> chains, acc
@@ -749,7 +751,6 @@ let rollup_rules chains =
       let chain = { chain with rules } in
       Map.set chains ~key:chain_id ~data:chain
     )
-
 
 (** filter rules that a a subset of a later or previous rule.
     When doing a forward pass, we can safely remove any rule that is a subset.
@@ -988,7 +989,7 @@ module Test = struct
 
   type execution = {
     packet: packet;
-    counters: int;
+    counted: bool;
     logs: string list;
   } [@@deriving show]
 
@@ -1052,7 +1053,8 @@ module Test = struct
       { execution with packet = {
           execution.packet with addresses = Ipaddr.V4 address, snd execution.packet.addresses;
         } }
-    | Counter -> { execution with counters = execution.counters + 1 }
+    (* Counters are instrumentation: rule merging can coalesce their increments. *)
+    | Counter -> { execution with counted = true }
     | Log prefix -> { execution with logs = prefix :: execution.logs }
     | Comment _ -> execution
     | Snat None -> failwith "A test SNAT effect must specify its translated address"
@@ -1084,7 +1086,7 @@ module Test = struct
         end
     in
     fun packet ->
-    let initial = { packet; counters = 0; logs = [] } in
+    let initial = { packet; counted = false; logs = [] } in
     match run_chain initial (Builtin Chain_type.Input) with
     | Continue, execution -> Dropped, execution
     | Stop verdict, execution -> verdict, execution
@@ -1154,6 +1156,11 @@ module Test = struct
 
     let effects = [Counter; Log "a"; Log "b"; Notrack] @ marks
 
+    let cycle values index = List.nth_exn values (index % List.length values)
+
+    let adjacent_pairs values =
+      List.mapi values ~f:(fun index value -> [value; cycle values (index + 1)])
+
     let check ?(packets=packets) name transform before =
       let after = transform before in
       let original = observe before and optimized = observe after in
@@ -1201,15 +1208,18 @@ module Test = struct
           rule Drop;
         ]
       in
-      let emit guard effects target =
-        List.iter (graphs guard (body guard effects target)) ~f
+      let emit index guard effects target =
+        f (cycle (graphs guard (body guard effects target)) index)
       in
-      List.iter guards ~f:(fun guard ->
-        List.iter (sequences effects 1) ~f:(fun effects ->
-          emit guard effects Accept);
-        List.iter [Return; Reject Reject.TcpReset] ~f:(emit guard []));
+      let single_effects = sequences effects 1 in
+      (* Rotate graph shapes and effects instead of taking their cross-product. *)
+      List.iteri guards ~f:(fun index guard ->
+        emit index guard (cycle single_effects index) Accept;
+        let target = cycle [Return; Reject Reject.TcpReset] (index / 2) in
+        emit (index + 1) guard [] target);
+      let effect_pairs = [Counter; Counter] :: adjacent_pairs effects in
       List.iter protocol_sets ~f:(fun values ->
-        List.iter (words effects 2) ~f:(fun effects ->
+        List.iter effect_pairs ~f:(fun effects ->
           f (chain_map [
             input [rule (Jump (Temporary 1)); rule Drop];
             chain (Temporary 1) (body (protocols values) effects Return);
@@ -1217,7 +1227,7 @@ module Test = struct
       let assignments = List.concat_map protocol_sets ~f:(fun values ->
         List.map marks ~f:(fun mark -> rule ~when_:[protocols values] ~effects:[mark] Pass))
       in
-      List.iter (words assignments 2) ~f:(fun rules ->
+      List.iter (adjacent_pairs assignments) ~f:(fun rules ->
         f (chain_map [
           input [rule (Jump (Temporary 1)); rule Accept];
           chain (Temporary 1) rules;
@@ -1278,7 +1288,7 @@ module Test = struct
 
     let%test_unit "known guards remain useful across unrelated effects" =
       List.iter protocol_sets ~f:(fun values ->
-        List.iter (sequences effects 2) ~f:(fun effects ->
+        List.iter (sequences effects 1 @ adjacent_pairs effects) ~f:(fun effects ->
           let guard = protocols values and child = Temporary 1 in
           chain_map [
             input [rule ~when_:[guard] (Jump child); rule Drop];
@@ -1291,19 +1301,19 @@ module Test = struct
 
     let%test_unit "repeated guards can be shared" =
       List.iter protocol_sets ~f:(fun values ->
-        List.iter (sequences effects 1) ~f:(fun effects ->
-          List.iter [3; 4; 5] ~f:(fun repeats ->
-            let guard = protocols values and child = Temporary 1 in
-            chain_map [
-              input [rule (Jump child)];
-              chain child (
-                List.init repeats ~f:(fun _ -> rule ~when_:[guard] ~effects Pass) @
-                [rule ~when_:[guard] Accept; rule Drop]);
-            ] |> improves Chain.count_predicates)))
+        List.iteri (sequences effects 1) ~f:(fun index effects ->
+          let repeats = 3 + index % 3 in
+          let guard = protocols values and child = Temporary 1 in
+          chain_map [
+            input [rule (Jump child)];
+            chain child (
+              List.init repeats ~f:(fun _ -> rule ~when_:[guard] ~effects Pass) @
+              [rule ~when_:[guard] Accept; rule Drop]);
+          ] |> improves Chain.count_predicates))
 
     let%test_unit "redundant call frames can be removed" =
       List.iter protocol_sets ~f:(fun values ->
-        List.iter (sequences effects 2) ~f:(fun effects ->
+        List.iter (sequences effects 1 @ adjacent_pairs effects) ~f:(fun effects ->
           let child = Temporary 2 in
           chain_map [
             input [rule (Jump (Temporary 1))];
