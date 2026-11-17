@@ -1,4 +1,22 @@
 
+Version 4.0.0 (2026-11-17)
+* Simplify rule sorting and merging, removing complex reordering machinery
+  and unused IP-set helpers.
+* Replace packet read/write dependency summaries with direct side-effect
+  and predicate-preservation checks.
+* Retain useful predicate facts across logging and unrelated packet changes,
+  preserving safe inlining, factoring and zone-domain inference.
+* Replace implementation-specific optimizer tests with shared property-based
+  execution checks for individual passes and the complete optimization pipeline.
+* Check verdicts, packet mutations, counters, ordered logs and call/return
+  semantics, with separate optimization-progress and growth-budget properties.
+* Add IPv4 limited broadcast to local network aliases so DHCP broadcast replies
+  can be classified into their destination zones.
+* Emit at most one counter statement per nftables rule.
+* Remove the auxiliary zone-ID mapping chain from generated nftables output.
+* Correct spacing in generated zone predicate comments.
+* Synchronize Debian release notes from this changelog when building packages.
+
 Version 3.1.0 (2026-11-08)
 * Rewrite rule optimization into bounded phases with dependency tracking.
 * Preserve pushed guards, non-terminal inputs, temporary-chain call semantics
