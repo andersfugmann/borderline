@@ -29,6 +29,8 @@ let () = ignore create_set
 let get_zone_id zone =
   match Hashtbl.find zones zone with
   | Some id -> id
+  | None when Hashtbl.length zones >= zone_bits ->
+    failwith "Too many zones for the packet mark"
   | None ->
     let id = 1 lsl (Hashtbl.length zones) in
     Hashtbl.add_exn ~key:zone ~data:id zones;
@@ -85,15 +87,22 @@ let string_of_state state = match state with
   | State.Invalid -> "invalid"
   | State.Untracked -> "untracked"
 
-let string_of_int_set s =
-  Set.fold ~init:[] ~f:(fun acc e -> Int.to_string e :: acc) s
-  |> String.concat ~sep:", "
-
 let string_or_int_set s =
   Set.fold ~init:[] ~f:(fun acc -> function
     | `Int i -> Int.to_string i :: acc
     | `String s -> Printf.sprintf "\"%s\"" s :: acc) s
   |> String.concat ~sep:", "
+
+let membership neg selector values =
+  match neg, values with
+  | false, [] -> "meta mark | 0x1 == 0x0"
+  | _, [value] ->
+    let op = match neg with true -> "!=" | false -> "==" in
+    sprintf "%s %s %s" selector op value
+  | false, _ -> sprintf "%s { %s }" selector (String.concat ~sep:", " values)
+  | true, _ -> sprintf "%s != { %s }" selector (String.concat ~sep:", " values)
+
+let int_values values = Set.to_list values |> List.rev_map ~f:Int.to_string
 
 let gen_pred neg pred =
   let neg_str = match neg with
@@ -152,12 +161,7 @@ let gen_pred neg pred =
       | Ir.Direction.Source -> 0
       | Ir.Direction.Destination -> zone_bits
     in
-    let mask = Set.fold ~f:(fun acc zone ->
-      let zone_id = get_zone_id zone in
-      let zone_val = zone_id lsl shift in
-      acc + zone_val) zones ~init:0
-    in
-    let neg_str = match neg with true -> "==" | false -> "!=" in
+    let values = Set.to_list zones |> List.map ~f:(fun zone -> get_zone_id zone lsl shift) in
     let comment =
       let neg = match neg with true -> "not " | false -> "" in
       let dir = match dir with
@@ -167,7 +171,9 @@ let gen_pred neg pred =
       let zones = Set.to_list zones |> String.concat ~sep:"; " in
       sprintf "%s%s zone in [ %s ]" neg dir zones
     in
-    sprintf "meta mark & 0x%08x %s 0x0" mask neg_str, Some comment
+    let mask = List.fold values ~init:0 ~f:(lor) in
+    let op = match neg with true -> "==" | false -> "!=" in
+    sprintf "meta mark & 0x%08x %s 0x0" mask op, Some comment
   | Ir.State states ->
     let states =
       State.to_list states
@@ -184,20 +190,17 @@ let gen_pred neg pred =
       | Ir.Port_type.Tcp -> "tcp"
       | Ir.Port_type.Udp -> "udp"
     in
-    sprintf "%s %s %s{ %s }" classifier pred neg_str (string_of_int_set ports), None
+    membership neg (classifier ^ " " ^ pred) (int_values ports), None
   | Ir.Ip6Set (dir, ips) ->
     gen_ipset_filter (module Ip6Set) "ip6" dir ips neg, None
   | Ir.Ip4Set (dir, ips) ->
     gen_ipset_filter (module Ip4Set) "ip" dir ips neg, None
   | Ir.Protocol p ->
-    let set = Set.to_list p |> List.map ~f:Int.to_string |> String.concat ~sep:"," in
-    sprintf "meta l4proto %s{ %s }" neg_str set, None
+    membership neg "meta l4proto" (Set.to_list p |> List.map ~f:Int.to_string), None
   | Ir.Icmp6 types ->
-    let set = string_of_int_set types in
-    sprintf "icmpv6 type %s{ %s }" neg_str set, None
+    membership neg "icmpv6 type" (int_values types), None
   | Ir.Icmp4 types ->
-    let set = string_of_int_set types in
-    sprintf "icmp type %s{ %s }" neg_str set, None
+    membership neg "icmp type" (int_values types), None
   | Ir.Mark (value, mask) ->
     sprintf "meta mark and 0x%08x %s0x%08x" mask neg_str value, None
   | Ir.TcpFlags (flags, mask) ->
@@ -211,10 +214,7 @@ let gen_pred neg pred =
     let neg_str = match neg with true -> "!=" | false -> "==" in
     sprintf "tcp flags & (%s) %s %s" (flags_to_string mask) neg_str (flags_to_string flags), None
   | Ir.Hoplimit limits -> (* Hop limit implies ipv6 *)
-    let rule =
-      string_of_int_set limits
-      |> sprintf "ip6 hoplimit %s{ %s }" neg_str
-    in rule, None
+    membership neg "ip6 hoplimit" (int_values limits), None
   | Ir.Address_family a ->
     let proto_to_string = function
       | Ir.Ipv4 -> "ipv4"
@@ -223,10 +223,8 @@ let gen_pred neg pred =
     let set =
       Set.to_list a
       |> List.map ~f:proto_to_string
-      |> String.concat ~sep:","
-      |> sprintf "{ %s }"
     in
-    sprintf "meta nfproto %s%s" neg_str set, None
+    membership neg "meta nfproto" set, None
   | Ir.True when neg ->
     (* Any false statement *)
     "meta mark | 0x1 == 0x0", None
@@ -263,8 +261,53 @@ let gen_target = function
   | Ir.Reject rsp -> reject_to_string rsp
   | Ir.Pass -> ""
 
-let gen_rule = function
-  | ([], [], Ir.Pass) -> "# Empty rule"
+type zone_predicate = {
+  mask: int;
+  values: int list;
+  comments: string list;
+}
+
+let prepare_rules rules =
+  let rec extract = function
+    | (Ir.Zone (dir, zones) as pred, false) :: rest ->
+      let shift = match dir with Ir.Direction.Source -> 0 | Ir.Direction.Destination -> zone_bits in
+      let mask = zone_mask lsl shift in
+      let values = Set.to_list zones |> List.map ~f:(fun zone -> get_zone_id zone lsl shift) in
+      let _, comment = gen_pred false pred in
+      let zone, preds = extract rest in
+      (* Conjoin assignments, retaining only compatible overlapping fields. *)
+      let values = List.cartesian_product values zone.values
+        |> List.filter ~f:(fun (value, value') -> value land zone.mask = value' land mask)
+        |> List.map ~f:(fun (value, value') -> value lor value')
+      in
+      { mask = mask lor zone.mask; values; comments = Option.to_list comment @ zone.comments }, preds
+    | pred :: rest ->
+      let zone, preds = extract rest in
+      zone, pred :: preds
+    | [] -> { mask = 0; values = [0]; comments = [] }, []
+  in
+  let rec group = function
+    | (zone, [((preds, effects, ((Ir.Accept | Ir.Drop | Ir.Return | Ir.Reject _) as target)) as rule)]) ::
+      (zone', [(preds', effects', target')]) :: rest
+      when zone.mask <> 0 && zone.mask = zone'.mask &&
+        Predicate.equal_predicates preds preds' &&
+        Ir.equal_effects effects effects' && Ir.equal_target target target' ->
+      (* A matching terminal body executes once, even when the guards overlap. *)
+      let zone = { zone with
+        values = List.dedup_and_sort (zone.values @ zone'.values) ~compare:Int.compare;
+        comments = [];
+      } in
+      group ((zone, [rule]) :: rest)
+    | entry :: rest -> entry :: group rest
+    | [] -> []
+  in
+  List.map rules ~f:(fun (preds, effects, target) ->
+    let zone, preds = extract preds in
+    zone, [preds, effects, target])
+  |> group
+
+let gen_rule zone = function
+  | ([], [], Ir.Pass) when zone.mask = 0 -> "# Empty rule"
   | (preds, effects, target) ->
     let preds, comments =
       let preds, comments =
@@ -272,7 +315,12 @@ let gen_rule = function
         |> List.unzip
       in
       let comments = List.filter_opt comments in
-      preds, comments
+      let preds = match zone.mask with
+        | 0 -> preds
+        | mask -> membership false (sprintf "meta mark & 0x%08x" mask)
+            (List.map zone.values ~f:(sprintf "0x%08x")) :: preds
+      in
+      preds, zone.comments @ comments
     in
     let comments', effects = List.partition_map ~f:(function Ir.Comment c -> Either.First c | effect_ -> Either.Second effect_ ) effects in
     (* Need to filter out comments, and place them at the end *)
@@ -309,7 +357,8 @@ let expand_rule ((preds, _, _) as rule) =
 let emit_chain { Ir.id; rules; comment } =
   let rules =
     List.concat_map ~f:expand_rule rules
-    |> List.map ~f:gen_rule
+    |> prepare_rules
+    |> List.concat_map ~f:(fun (zone, rules) -> List.map rules ~f:(gen_rule zone))
   in
   let premable = chain_premable id comment in
   premable @ rules @ [ "}" ]
