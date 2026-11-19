@@ -835,22 +835,24 @@ let rec sort_rules ~chains = function
 let rec merge_rules ~chains rules =
   let rec merge ((preds, effects, target) as rule1) acc = function
     | [] -> None
-    | rule :: _ when has_sideeffects ~chains rule ->
-      None
     | ((preds', effects', target') as rule2) :: rules ->
-      match Ir.equal_target target target', union_rule_predicates preds preds' with
-      | true, Some merged_preds ->
+      match Ir.equal_target target target', union_rule_predicates preds preds', P.disjoint preds preds' with
+      | true, Some merged_preds, disjoint when
+          List.is_empty acc && Ir.equal_effects effects effects' &&
+          (is_terminal target' || (disjoint && List.for_all preds' ~f:(preserves_predicate ~chains rule1))) ->
+        Some ((merged_preds, effects, target) :: rules)
+      | _, _, _ when has_sideeffects ~chains rule1 || has_sideeffects ~chains rule2 ->
+        None
+      | true, Some merged_preds, _ ->
         let merged_effects = effects @ effects' in
         Some ((List.rev ((merged_preds, merged_effects, target) :: acc)) @ rules)
-      | _, _ when P.disjoint preds preds' ->
+      | _, _, true ->
         merge rule1 (rule2 :: acc) rules
       | _ ->
         None
   in
   match rules with
   | [] -> []
-  | rule :: rules when has_sideeffects ~chains rule ->
-    rule :: merge_rules ~chains rules
   | rule :: rules ->
     match merge rule [] rules with
     | Some rules -> merge_rules ~chains rules
