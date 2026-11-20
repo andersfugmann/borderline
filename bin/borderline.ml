@@ -34,9 +34,11 @@ let _ =
     Chain.add { Ir.id = Ir.Chain_id.Builtin Ir.Chain_type.Forward ; rules = forward_opers @ filter_ops; comment = "Builtin" };
     Chain.optimize (Optimize.optimize ~zones);
 
+    let zone_names = List.map ~f:fst zones in
+
     let lines =
-      Chain.emit Nftables.emit_filter_rules @
-      (Nftables.emit_nat_rules post_routing)
+      Chain.emit (Nftables.emit_filter_rules ~zones:zone_names) @
+      (Nftables.emit_nat_rules ~zones:zone_names post_routing)
       |> Nftables.emit
     in
 

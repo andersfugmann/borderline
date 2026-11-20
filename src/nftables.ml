@@ -142,10 +142,31 @@ module Mark = struct
     matches @ List.map inequalities ~f:(fun excluded -> emit (Different_from excluded))
 end
 
-let zone_bits = 8 (* Number of zones *)
-let zone_mask = 1 lsl zone_bits - 1
+type zone = {
+  bits: int;
+  mask: int;
+  (* ids_: int Map.M(String); *)
+  ids: (string, int, String.comparator_witness) Map.t;
+}
 
-let zones = Hashtbl.Poly.create ~size:100 ()
+let init_zones zones =
+  let zones = Zone.mars :: zones in
+  let zones = match List.mem zones Zone.self ~equal:String.equal with
+    | false -> Zone.self :: zones
+    | true -> zones
+  in
+  let bits = List.length zones in
+  assert (bits <= 16);
+  let mask = 1 lsl bits - 1 in
+  let ids =
+    zones
+    |> List.mapi ~f:(fun i zone -> zone, 1 lsl i)
+    |> Map.of_alist_exn (module String)
+  in
+  { bits;
+    mask;
+    ids
+  }
 
 let sets = ref []
 let create_set ipv4 ipv6 =
@@ -160,18 +181,8 @@ let create_set ipv4 ipv6 =
 (* create set is currently not in use *)
 let () = ignore create_set
 
-let get_zone_id zone =
-  match Hashtbl.find zones zone with
-  | Some id -> id
-  | None when Hashtbl.length zones >= zone_bits ->
-    failwith "Too many zones for the packet mark"
-  | None ->
-    let id = 1 lsl (Hashtbl.length zones) in
-    Hashtbl.add_exn ~key:zone ~data:id zones;
-    id
-
-(* Mars has zone id 1 *)
-let (_: int) = get_zone_id Zone.mars
+let get_zone_id t zone =
+  Map.find_exn t.ids zone
 
 let chain_name = function
   | Ir.Chain_id.Temporary n -> sprintf "temp_%d" n
@@ -348,14 +359,14 @@ let reject_to_string = function
   | Ir.Reject.PortUnreachable -> "reject with icmpx type port-unreachable"
   | Ir.Reject.TcpReset -> "reject with tcp reset"
 
-let gen_effect = function
+let gen_effect t = function
   | Ir.MarkZone (dir, id) ->
     let shift = match dir with
       | Ir.Direction.Source -> 0
-      | Ir.Direction.Destination -> zone_bits
+      | Ir.Direction.Destination -> t.bits
     in
-    let mask = zone_mask lsl (zone_bits - shift) in
-    sprintf "meta mark set mark & 0x%08x or 0x%08x" mask ((get_zone_id id) lsl shift)
+    let mask = t.mask lsl (t.bits - shift) in
+    sprintf "meta mark set mark & 0x%08x or 0x%08x" mask ((get_zone_id t id) lsl shift)
   | Ir.Counter -> "counter"
   | Ir.Comment _ -> failwith "Illegal comment at this point. Comments must be added to the end of the rule"
   | Ir.Notrack -> ""
@@ -378,15 +389,15 @@ type 'guard guarded_rule = {
 }
 
 (* Turn zone matches into alternative mark comparisons without duplicating the rule body. *)
-let lower_zones (preds, effects, target) =
+let lower_zones t (preds, effects, target) =
   (* Separate mark conditions from other predicates while expanding allowed zone choices. *)
   let rec lower = function
     | (Ir.Zone (dir, zones), neg) :: rest ->
-      let shift = match dir with Ir.Direction.Source -> 0 | Ir.Direction.Destination -> zone_bits in
-      let values = Set.to_list zones |> List.map ~f:(fun zone -> get_zone_id zone lsl shift) in
+      let shift = match dir with Ir.Direction.Source -> 0 | Ir.Direction.Destination -> t.bits in
+      let values = Set.to_list zones |> List.map ~f:(fun zone -> get_zone_id t zone lsl shift) in
       let guards = match neg with
         | false -> List.map values ~f:(fun value ->
-          [Mark.Equal_to { value; mask = zone_mask lsl shift }])
+          [Mark.Equal_to { value; mask = t.mask lsl shift }])
         | true -> [[Mark.Equal_to { value = 0; mask = List.fold values ~init:0 ~f:(lor) }]]
       in
       let direction = match dir with Ir.Direction.Source -> "src" | Ir.Direction.Destination -> "dest" in
@@ -430,7 +441,7 @@ let rec merge_adjacent_mark_rules = function
   | rule :: rest -> rule :: merge_adjacent_mark_rules rest
   | [] -> []
 
-let gen_rule marks annotations = function
+let gen_rule t marks annotations = function
   | ([], [], Ir.Pass) when Mark.is_unrestricted marks && List.is_empty annotations -> "# Empty rule"
   | (preds, effects, target) ->
     let preds, comments =
@@ -458,7 +469,7 @@ let gen_rule marks annotations = function
       | [] -> effects
     in
 
-    let effects = List.map ~f:gen_effect effects in
+    let effects = List.map ~f:(gen_effect t) effects in
     let target = gen_target target in
     let elements = preds @ effects @ [target] @ [comment_string] |> List.filter ~f:(fun s -> not (String.is_empty s)) in
     sprintf "%s;" (String.concat ~sep:" " elements)
@@ -473,34 +484,40 @@ let expand_rule ((preds, _, _) as rule) =
   in
   if has_ipv4 && has_ipv6 then [] else [rule]
 
-let emit_chain { Ir.id; rules; comment } =
+let emit_chain t { Ir.id; rules; comment } =
   let rules =
     List.concat_map ~f:expand_rule rules
-    |> List.map ~f:lower_zones
+    |> List.map ~f:(lower_zones t)
     |> List.concat_map ~f:(fun rule ->
       match Mark.normalize_alternatives rule.mark_predicates with
       | [] -> []
       | mark_predicates -> [{ rule with mark_predicates }])
     |> merge_adjacent_mark_rules
     |> List.map ~f:(fun rule ->
-      gen_rule (Mark.build_membership rule.mark_predicates) rule.comments rule.body)
+      gen_rule t (Mark.build_membership rule.mark_predicates) rule.comments rule.body)
   in
   let premable = chain_premable id comment in
   premable @ rules @ [ "}" ]
 
 
-let emit_filter_rules (chains : (Ir.Chain_id.t, Ir.chain, 'a) Map.t) : string list =
+let emit_filter_rules ~zones (chains : (Ir.Chain_id.t, Ir.chain, 'a) Map.t) : string list =
+  let zones = init_zones zones in
   let rules =
     Map.data chains
-    |> List.concat_map ~f:emit_chain
+    |> List.concat_map ~f:(emit_chain zones)
   in
   (* Dump zone mapping *)
-  Hashtbl.iteri ~f:(fun ~key:zone ~data:id -> printf "#zone %s -> 0x%04x\n" zone id) zones;
+  let () =
+    Map.to_alist zones.ids
+    |> List.sort ~compare:(fun (_, a) (_, b) -> Int.compare a b)
+    |> List.iter ~f:(fun (zone, id) -> printf "#zone 0x%04x : %s\n" id zone)
+  in
   rules
 
-let emit_nat_rules rules =
+let emit_nat_rules ~zones rules =
+  let zones = init_zones zones in
   { Ir.id = Ir.Chain_id.Builtin Ir.Chain_type.Post_routing; rules; comment = "Nat" }
-  |> emit_chain
+  |> emit_chain zones
 
 let rec pp_rules ?(acc = []) ?(indent = "") ?(indent_level = "    ")= function
   | [] -> List.rev acc

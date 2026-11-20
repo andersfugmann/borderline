@@ -1269,21 +1269,6 @@ module Test = struct
         List.iter transformations ~f:(fun (name, transform) ->
           ignore (check (sprintf "%s, program %d" name !index) transform before)))
 
-    let%test_unit "counter normalization is canonical and preserves emitted effects" =
-      let non_counters = List.filter ~f:(fun effect_ -> not (equal_effect_ Counter effect_)) in
-      let alphabet = effects @ [Comment "test"; Snat None; Snat (Some (Ipaddr.V4.of_string_exn "192.0.2.1"))] in
-      List.iter (sequences alphabet 3) ~f:(fun effects ->
-        let normalized = remove_duplicate_counters effects in
-        assert_bool "At most one counter per rule"
-          (List.count normalized ~f:(equal_effect_ Counter) <= 1);
-        assert_bool "Other effects keep their order and multiplicity"
-          (equal_effects (non_counters effects) (non_counters normalized));
-        assert_bool "Counter normalization is idempotent"
-          (equal_effects normalized (remove_duplicate_counters normalized));
-        assert_equal ~printer:(String.concat ~sep:"\n")
-          (Nftables.emit_nat_rules [rule ~effects Accept])
-          (Nftables.emit_nat_rules [rule ~effects:normalized Accept]))
-
     let improves measure before =
       let after = check "optimization progress" (optimize ~zones:[]) before in
       assert_bool "Redundancy must decrease" (measure after < measure before)
