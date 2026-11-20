@@ -8,6 +8,140 @@ open Printf
 module Ip6Set = Ipset.Ip6Set
 module Ip4Set = Ipset.Ip4Set
 
+(* Render a value match as a scalar comparison or a set lookup. *)
+let membership neg selector values =
+  match neg, values with
+  | false, [] -> "meta mark | 0x1 == 0x0"
+  | _, [value] ->
+    let op = match neg with true -> "!=" | false -> "==" in
+    sprintf "%s %s %s" selector op value
+  | false, _ -> sprintf "%s { %s }" selector (String.concat ~sep:", " values)
+  | true, _ -> sprintf "%s != { %s }" selector (String.concat ~sep:", " values)
+
+module Mark = struct
+  type t = { value: int; mask: int }
+  type pred = Equal_to of t | Different_from of t
+
+  (* Convert a masked value and its IR negation flag into a mark predicate. *)
+  let of_ir (value, mask) ~neg =
+    match neg with
+    | false -> Equal_to { value; mask }
+    | true -> Different_from { value; mask }
+
+  (* Render a masked packet-mark equality or inequality. *)
+  let emit pred =
+    let { value; mask }, op = match pred with
+      | Equal_to mark -> mark, "=="
+      | Different_from mark -> mark, "!="
+    in
+    sprintf "meta mark & 0x%08x %s 0x%08x" mask op value
+
+  (* Merge masked equalities, or return None when they cannot all match. *)
+  let rec merge = function
+    | [] -> Some { value = 0; mask = 0 }
+    | { value; mask } :: _ when value land mask <> value -> None
+    | [equality] -> Some equality
+    | { value; mask } :: { value = value'; mask = mask' } :: _
+      when value' land mask' <> value' ||
+          (value lxor value') land (mask land mask') <> 0 -> None
+    | { value; mask } :: { value = value'; mask = mask' } :: rest ->
+      merge ({ value = value lor value'; mask = mask lor mask' } :: rest)
+
+  (* Check whether all marks matching this equality also match of_. *)
+  let is_subset { value; mask } ~of_:{ value = value'; mask = mask' } =
+    mask' land mask = mask' && value land mask' = value'
+
+  type guard = {
+    equality: t;
+    inequalities: t list;
+  }
+
+  type normalized = Impossible | Guard of guard
+
+  (* Turn a single-bit inequality into an equality requiring the opposite bit. *)
+  let normalize_pred = function
+    | Different_from { value; mask }
+      when mask <> 0 && mask land (mask - 1) = 0 && value land mask = value ->
+      Equal_to { value = value lxor mask; mask }
+    | pred -> pred
+
+  (* Simplify a group of mark conditions that must all match. *)
+  let normalize_conjunction preds =
+    let equalities, inequalities =
+      List.map preds ~f:normalize_pred
+      |> List.partition_map ~f:(function
+          | Equal_to equality -> Either.First equality
+          | Different_from equality -> Either.Second equality
+        )
+    in
+    match merge equalities with
+    | None -> Impossible
+    | Some equality when List.exists inequalities
+        ~f:(fun excluded -> is_subset equality ~of_:excluded) -> Impossible
+    | Some equality ->
+      let inequalities = List.dedup_and_sort inequalities ~compare:Poly.compare in
+      Guard { equality; inequalities }
+
+  (* Remove impossible or duplicate alternatives and inequalities redundant in every alternative. *)
+  let normalize_alternatives alternatives =
+    let alternatives = List.concat_map alternatives ~f:(fun guard ->
+      match normalize_conjunction guard with
+      | Impossible -> []
+      | Guard guard -> [guard]) in
+    (* Remove an inequality only when every surviving assignment proves it.
+       Keeping common conditions shared makes the disjunction one guarded body. *)
+    List.map alternatives ~f:(fun guard ->
+      let inequalities = List.filter guard.inequalities ~f:(fun excluded ->
+        List.exists alternatives ~f:(fun alternative ->
+          Option.is_some (merge [alternative.equality; excluded]))) in
+      { guard with inequalities })
+      |> List.dedup_and_sort ~compare:Poly.compare
+
+  (* Check whether guards share a nonempty equality mask and the same inequality set. *)
+  let same_shape a b =
+    a.equality.mask <> 0 && a.equality.mask = b.equality.mask &&
+    List.for_all a.inequalities ~f:(fun inequality ->
+      List.mem b.inequalities inequality ~equal:Poly.equal) &&
+    List.for_all b.inequalities ~f:(fun inequality ->
+      List.mem a.inequalities inequality ~equal:Poly.equal)
+
+  type match_ =
+    | Comparisons of guard
+    | Membership of int * int list * t list
+
+  (* Check whether a mark match imposes no conditions on the packet. *)
+  let is_unrestricted = function
+    | Comparisons { equality = { mask = 0; _ }; inequalities = [] } -> true
+    | Comparisons _ | Membership _ -> false
+
+  (* Use a value set for multiple same-mask alternatives; keep a single guard as comparisons. *)
+  let build_membership = function
+    | [guard] -> Comparisons guard
+    | guard :: alternatives ->
+      let values = List.map (guard :: alternatives) ~f:(function
+        | alternative when same_shape guard alternative -> alternative.equality.value
+        | _ -> failwith "Mark alternatives must share a mask and remaining conditions")
+        |> List.dedup_and_sort ~compare:Int.compare
+      in
+      Membership (guard.equality.mask, values, guard.inequalities)
+    | [] -> failwith "Expected a nonempty normalized mark guard"
+
+  (* Render mark comparisons or a masked value-set lookup. *)
+  let gen_match marks =
+    let matches, inequalities = match marks with
+      | Comparisons { equality; inequalities } ->
+        let matches = match equality.mask with
+          | 0 -> []
+          | _ -> [emit (Equal_to equality)]
+        in
+        matches, inequalities
+      | Membership (mask, values, inequalities) ->
+        [membership false (sprintf "meta mark & 0x%08x" mask)
+          (List.map values ~f:(sprintf "0x%08x"))], inequalities
+    in
+    matches @ List.map inequalities ~f:(fun excluded -> emit (Different_from excluded))
+end
+
 let zone_bits = 8 (* Number of zones *)
 let zone_mask = 1 lsl zone_bits - 1
 
@@ -93,15 +227,7 @@ let string_or_int_set s =
     | `String s -> Printf.sprintf "\"%s\"" s :: acc) s
   |> String.concat ~sep:", "
 
-let membership neg selector values =
-  match neg, values with
-  | false, [] -> "meta mark | 0x1 == 0x0"
-  | _, [value] ->
-    let op = match neg with true -> "!=" | false -> "==" in
-    sprintf "%s %s %s" selector op value
-  | false, _ -> sprintf "%s { %s }" selector (String.concat ~sep:", " values)
-  | true, _ -> sprintf "%s != { %s }" selector (String.concat ~sep:", " values)
-
+(* Convert integer set members to strings for nftables output. *)
 let int_values values = Set.to_list values |> List.rev_map ~f:Int.to_string
 
 let gen_pred neg pred =
@@ -156,24 +282,8 @@ let gen_pred neg pred =
       | Ir.Direction.Destination -> "oifgroup"
     in
     sprintf "%s %s{ %s }" classifier neg_str if_groups, None
-  | Ir.Zone (dir, zones) ->
-    let shift = match dir with
-      | Ir.Direction.Source -> 0
-      | Ir.Direction.Destination -> zone_bits
-    in
-    let values = Set.to_list zones |> List.map ~f:(fun zone -> get_zone_id zone lsl shift) in
-    let comment =
-      let neg = match neg with true -> "not " | false -> "" in
-      let dir = match dir with
-        | Ir.Direction.Source  -> "src"
-        | Ir.Direction.Destination  -> "dest"
-      in
-      let zones = Set.to_list zones |> String.concat ~sep:"; " in
-      sprintf "%s%s zone in [ %s ]" neg dir zones
-    in
-    let mask = List.fold values ~init:0 ~f:(lor) in
-    let op = match neg with true -> "==" | false -> "!=" in
-    sprintf "meta mark & 0x%08x %s 0x0" mask op, Some comment
+  | Ir.Zone _ ->
+    failwith "Zone predicates must be lowered before rendering"
   | Ir.State states ->
     let states =
       State.to_list states
@@ -202,7 +312,7 @@ let gen_pred neg pred =
   | Ir.Icmp4 types ->
     membership neg "icmp type" (int_values types), None
   | Ir.Mark (value, mask) ->
-    sprintf "meta mark and 0x%08x %s0x%08x" mask neg_str value, None
+    Mark.emit (Mark.of_ir (value, mask) ~neg), None
   | Ir.TcpFlags (flags, mask) ->
     let flags_to_string flags =
       if Set.is_empty flags then "0"
@@ -261,53 +371,67 @@ let gen_target = function
   | Ir.Reject rsp -> reject_to_string rsp
   | Ir.Pass -> ""
 
-type zone_predicate = {
-  mask: int;
-  values: int list;
+type 'guard guarded_rule = {
+  mark_predicates: 'guard list;
+  body: Ir.rule;
   comments: string list;
 }
 
-let prepare_rules rules =
-  let rec extract = function
-    | (Ir.Zone (dir, zones) as pred, false) :: rest ->
+(* Turn zone matches into alternative mark comparisons without duplicating the rule body. *)
+let lower_zones (preds, effects, target) =
+  (* Separate mark conditions from other predicates while expanding allowed zone choices. *)
+  let rec lower = function
+    | (Ir.Zone (dir, zones), neg) :: rest ->
       let shift = match dir with Ir.Direction.Source -> 0 | Ir.Direction.Destination -> zone_bits in
-      let mask = zone_mask lsl shift in
       let values = Set.to_list zones |> List.map ~f:(fun zone -> get_zone_id zone lsl shift) in
-      let _, comment = gen_pred false pred in
-      let zone, preds = extract rest in
-      (* Conjoin assignments, retaining only compatible overlapping fields. *)
-      let values = List.cartesian_product values zone.values
-        |> List.filter ~f:(fun (value, value') -> value land zone.mask = value' land mask)
-        |> List.map ~f:(fun (value, value') -> value lor value')
+      let guards = match neg with
+        | false -> List.map values ~f:(fun value ->
+          [Mark.Equal_to { value; mask = zone_mask lsl shift }])
+        | true -> [[Mark.Equal_to { value = 0; mask = List.fold values ~init:0 ~f:(lor) }]]
       in
-      { mask = mask lor zone.mask; values; comments = Option.to_list comment @ zone.comments }, preds
+      let direction = match dir with Ir.Direction.Source -> "src" | Ir.Direction.Destination -> "dest" in
+      let prefix = match neg with true -> "not " | false -> "" in
+      let comment = sprintf "%s%s zone in [ %s ]" prefix direction
+          (String.concat ~sep:"; " (Set.to_list zones)) in
+      let mark_predicates, preds, comments = lower rest in
+      (* Enumerate only zone assignments, never independent packet predicates. *)
+      List.cartesian_product guards mark_predicates
+      |> List.map ~f:(fun (guard, alternative) -> guard @ alternative), preds, comment :: comments
+    | (Ir.Mark (value, mask), neg) :: rest ->
+      let mark_predicates, preds, comments = lower rest in
+      let pred = Mark.of_ir (value, mask) ~neg in
+      List.map mark_predicates ~f:(fun guard -> pred :: guard), preds, comments
     | pred :: rest ->
-      let zone, preds = extract rest in
-      zone, pred :: preds
-    | [] -> { mask = 0; values = [0]; comments = [] }, []
+      let mark_predicates, preds, comments = lower rest in
+      mark_predicates, pred :: preds, comments
+    | [] -> [[]], [], []
   in
-  let rec group = function
-    | (zone, [((preds, effects, ((Ir.Accept | Ir.Drop | Ir.Return | Ir.Reject _) as target)) as rule)]) ::
-      (zone', [(preds', effects', target')]) :: rest
-      when zone.mask <> 0 && zone.mask = zone'.mask &&
+  let mark_predicates, preds, comments = lower preds in
+  let effect_comments, effects = List.partition_map effects ~f:(function
+    | Ir.Comment comment -> Either.First comment
+    | effect_ -> Either.Second effect_) in
+  { mark_predicates; body = preds, effects, target; comments = comments @ effect_comments }
+
+(* Combine adjacent rules with the same terminal body by joining their mark alternatives. *)
+let rec merge_adjacent_mark_rules = function
+  | ({ mark_predicates = guard :: _; body = preds, effects,
+       ((Ir.Accept | Ir.Drop | Ir.Return | Ir.Reject _) as target); _ } as rule) ::
+    ({ mark_predicates = guard' :: _; body = preds', effects', target'; _ } as rule') :: rest
+    when Mark.same_shape guard guard' &&
         Predicate.equal_predicates preds preds' &&
         Ir.equal_effects effects effects' && Ir.equal_target target target' ->
-      (* A matching terminal body executes once, even when the guards overlap. *)
-      let zone = { zone with
-        values = List.dedup_and_sort (zone.values @ zone'.values) ~compare:Int.compare;
-        comments = [];
-      } in
-      group ((zone, [rule]) :: rest)
-    | entry :: rest -> entry :: group rest
-    | [] -> []
-  in
-  List.map rules ~f:(fun (preds, effects, target) ->
-    let zone, preds = extract preds in
-    zone, [preds, effects, target])
-  |> group
+    (* Terminal bodies cannot fall through to execute another alternative.
+       Only annotations true for both guards survive their disjunction. *)
+    let rule = { rule with
+      mark_predicates = rule.mark_predicates @ rule'.mark_predicates;
+      comments = List.filter rule.comments ~f:(fun comment -> List.mem rule'.comments comment ~equal:String.equal);
+    } in
+    merge_adjacent_mark_rules (rule :: rest)
+  | rule :: rest -> rule :: merge_adjacent_mark_rules rest
+  | [] -> []
 
-let gen_rule zone = function
-  | ([], [], Ir.Pass) when zone.mask = 0 -> "# Empty rule"
+let gen_rule marks annotations = function
+  | ([], [], Ir.Pass) when Mark.is_unrestricted marks && List.is_empty annotations -> "# Empty rule"
   | (preds, effects, target) ->
     let preds, comments =
       let preds, comments =
@@ -315,12 +439,7 @@ let gen_rule zone = function
         |> List.unzip
       in
       let comments = List.filter_opt comments in
-      let preds = match zone.mask with
-        | 0 -> preds
-        | mask -> membership false (sprintf "meta mark & 0x%08x" mask)
-            (List.map zone.values ~f:(sprintf "0x%08x")) :: preds
-      in
-      preds, zone.comments @ comments
+      Mark.gen_match marks @ preds, annotations @ comments
     in
     let comments', effects = List.partition_map ~f:(function Ir.Comment c -> Either.First c | effect_ -> Either.Second effect_ ) effects in
     (* Need to filter out comments, and place them at the end *)
@@ -357,8 +476,14 @@ let expand_rule ((preds, _, _) as rule) =
 let emit_chain { Ir.id; rules; comment } =
   let rules =
     List.concat_map ~f:expand_rule rules
-    |> prepare_rules
-    |> List.concat_map ~f:(fun (zone, rules) -> List.map rules ~f:(gen_rule zone))
+    |> List.map ~f:lower_zones
+    |> List.concat_map ~f:(fun rule ->
+      match Mark.normalize_alternatives rule.mark_predicates with
+      | [] -> []
+      | mark_predicates -> [{ rule with mark_predicates }])
+    |> merge_adjacent_mark_rules
+    |> List.map ~f:(fun rule ->
+      gen_rule (Mark.build_membership rule.mark_predicates) rule.comments rule.body)
   in
   let premable = chain_premable id comment in
   premable @ rules @ [ "}" ]
