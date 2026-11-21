@@ -1,3 +1,19 @@
+borderline (4.1.0) unstable; urgency=medium
+
+  * Combine zone matches into masked packet-mark set lookups directly in the
+    nftables emitter, preserving source/destination correlations.
+  * Simplify mark comparisons by merging compatible equalities, removing
+    impossible and redundant conditions, and rewriting single-bit inequalities.
+  * Improve merging of adjacent rules with identical effects without duplicating
+    those effects.
+  * Remove redundant terminal actions covered by later rules, including in
+    uniquely referenced temporary chains.
+  * Coalesce duplicate counter statements during rule optimization.
+  * Replace global zone-ID allocation with per-ruleset allocation and size
+    source/destination mark fields from the configured zones.
+
+ -- Anders Peter Fugmann <anders@fugmann.net>  Sat, 21 Nov 2026 12:11:46 +0100
+
 borderline (4.0.0) unstable; urgency=medium
 
   * Simplify rule sorting and merging, removing complex reordering machinery

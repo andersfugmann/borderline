@@ -1,4 +1,17 @@
 
+Version 4.1.0 (2026-11-21)
+* Combine zone matches into masked packet-mark set lookups directly in the
+  nftables emitter, preserving source/destination correlations.
+* Simplify mark comparisons by merging compatible equalities, removing
+  impossible and redundant conditions, and rewriting single-bit inequalities.
+* Improve merging of adjacent rules with identical effects without duplicating
+  those effects.
+* Remove redundant terminal actions covered by later rules, including in
+  uniquely referenced temporary chains.
+* Coalesce duplicate counter statements during rule optimization.
+* Replace global zone-ID allocation with per-ruleset allocation and size
+  source/destination mark fields from the configured zones.
+
 Version 4.0.0 (2026-11-17)
 * Simplify rule sorting and merging, removing complex reordering machinery
   and unused IP-set helpers.
